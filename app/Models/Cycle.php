@@ -20,6 +20,8 @@ class Cycle extends Model
         'solde_initial',
         'statut',
         'type_cycle',
+        'user_id',
+        'agent_nom',
     ];
 
     public function client()
@@ -35,6 +37,11 @@ class Cycle extends Model
     public function epargnes()
     {
         return $this->hasMany(Epargne::class);
+    }
+
+    public function agent()
+    {
+        return $this->belongsTo(User::class, 'user_id');
     }
 
     protected static function boot(): void
@@ -74,9 +81,6 @@ class Cycle extends Model
             $cycle->devise = $cycle->devise ?: 'CDF';
             $cycle->solde_initial = $cycle->solde_initial ?: 0;
         });
-
-        // SUPPRIMER l'ancien code qui créditait le compte spécial ici
-        // Le crédit du compte spécial se fera uniquement via le CycleService
     }
 
     // Fermer le cycle
@@ -98,7 +102,7 @@ class Cycle extends Model
         return $query->where('type_cycle', 'groupe_solidaire');
     }
 
-    // Méthode pour créditer le compte spécial (à appeler explicitement)
+    // Méthode pour créditer le compte spécial
     public function crediterCompteSpecial()
     {
         if ($this->solde_initial > 0) {

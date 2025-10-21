@@ -24,7 +24,10 @@ class CompteSpecialResource extends Resource
     protected static string|UnitEnum|null $navigationGroup = '💳 COMPTE SPECIAL TUMAINI';
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-document-currency-dollar';
 
-
+      public static function getNavigationBadge(): ?string
+    {
+        return static::getModel()::count();
+    } 
 
     public static function form(Schema $schema): Schema
     {

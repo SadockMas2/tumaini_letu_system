@@ -370,6 +370,50 @@ class ComptabilityService
         return $caisse;
     }
 
+    // Dans ComptabilityService.php - Ajouter cette méthode
+
+public function enregistrerRetourVersCoffre($mouvementCoffreId, $reference)
+{
+    return DB::transaction(function () use ($mouvementCoffreId, $reference) {
+        $mouvement = MouvementCoffre::findOrFail($mouvementCoffreId);
+        $journal = $this->getJournal('banque');
+
+        // Débit: Coffre fort
+        EcritureComptable::create([
+            'journal_comptable_id' => $journal->id,
+            'reference_operation' => $reference,
+            'type_operation' => 'retour_vers_coffre',
+            'compte_number' => self::COMPTE_COFFRE_FORT,
+            'libelle' => "Retour vers coffre - Ref: {$reference}",
+            'montant_debit' => $mouvement->montant,
+            'montant_credit' => 0,
+            'date_ecriture' => now(),
+            'date_valeur' => now(),
+            'devise' => $mouvement->devise,
+            'statut' => 'comptabilise',
+            'created_by' => auth::id(),
+        ]);
+
+        // Crédit: Compte de transit trésorerie
+        EcritureComptable::create([
+            'journal_comptable_id' => $journal->id,
+            'reference_operation' => $reference,
+            'type_operation' => 'retour_vers_coffre',
+            'compte_number' => self::COMPTE_TRANSIT_TRESORERIE,
+            'libelle' => "Retour vers coffre - Ref: {$reference}",
+            'montant_debit' => 0,
+            'montant_credit' => $mouvement->montant,
+            'date_ecriture' => now(),
+            'date_valeur' => now(),
+            'devise' => $mouvement->devise,
+            'statut' => 'comptabilise',
+            'created_by' => auth::id(),
+        ]);
+
+        return $mouvement;
+    });
+}
+
 
      private function getConfigCaisse(string $typeCaisse): array
     {

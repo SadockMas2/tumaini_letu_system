@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\DB;
 
 class Compte extends Model
 {
@@ -126,4 +127,22 @@ class Compte extends Model
     {
         return $this->hasMany(CreditGroupe::class, 'compte_id');
     }
+
+
+
+/**
+ * Mettre à jour le solde sans déclencher d'observers (méthode temporaire)
+ */
+public function updateSoldeSansObservers($nouveauSolde)
+{
+    // Utiliser DB raw pour éviter les observers
+    DB::table('comptes')
+        ->where('id', $this->id)
+        ->update(['solde' => $nouveauSolde]);
+    
+    // Recharger le modèle
+    $this->refresh();
+}
+
+
 }

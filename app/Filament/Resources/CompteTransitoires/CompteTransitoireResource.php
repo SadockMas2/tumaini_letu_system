@@ -26,6 +26,10 @@ class CompteTransitoireResource extends Resource
     protected static ?string $navigationLabel = 'Comptes Transitoires';
     protected static string|UnitEnum|null $navigationGroup = '💳 Gestion des comptes';
 
+      public static function getNavigationBadge(): ?string
+    {
+        return static::getModel()::count();
+    } 
     public static function form(Schema $schema): Schema
     {
         return CompteTransitoireForm::configure($schema);

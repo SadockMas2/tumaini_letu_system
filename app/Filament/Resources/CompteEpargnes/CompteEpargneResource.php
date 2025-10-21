@@ -25,7 +25,10 @@ class CompteEpargneResource extends Resource
 
      protected static string|UnitEnum|null $navigationGroup = '💰 EPARGNES';
 
-
+      public static function getNavigationBadge(): ?string
+    {
+        return static::getModel()::count();
+    } 
     public static function form(Schema $schema): Schema
     {
         return CompteEpargneForm::configure($schema);

@@ -5,13 +5,17 @@ namespace App\Filament\Resources\Cycles\Schemas;
 use App\Models\Client;
 use App\Models\GroupeSolidaire;
 use App\Models\Cycle;
+use App\Models\User;
+use App\Models\CompteTransitoire;
+
 use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
-
-use Filament\Forms\Components\Hidden;
+use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
+use Illuminate\Support\Facades\Auth;
 
 class CycleForm
 {
@@ -109,29 +113,113 @@ class CycleForm
                     ])
                     ->columns(2),
 
+                // AJOUT : Section pour la sélection de l'agent
+                Section::make('Agent Collecteur')
+                    ->schema([
+                        Select::make('user_id')
+                            ->label('Agent')
+                            ->options(User::whereHas('roles', function ($query) {
+                                $query->where('name', 'AgentCollecteur');
+                            })->get()->pluck('name', 'id'))
+                            ->required()
+                            ->searchable()
+                            ->reactive()
+                            ->afterStateUpdated(function ($state, $set) {
+                                if ($state) {
+                                    $user = User::find($state);
+                                    if ($user) {
+                                        $set('agent_nom', $user->name);
+                                    }
+                                }
+                            }),
+
+                        TextInput::make('agent_nom')
+                            ->label('Nom de l\'Agent')
+                            ->disabled()
+                            ->dehydrated(),
+
+                        // AJOUT : Affichage du solde du compte transitoire
+                        TextInput::make('solde_agent_display')
+                            ->label('Solde Compte Transitoire')
+                            ->disabled()
+                            ->dehydrated(false)
+                            ->default('Sélectionnez un agent')
+                            ->reactive()
+                            ->afterStateUpdated(function ($state, $set, $get) {
+                                $userId = $get('user_id');
+                                $devise = $get('devise') ?? 'CDF';
+                                
+                                if ($userId) {
+                                    $compteTransitoire = CompteTransitoire::where('user_id', $userId)
+                                        ->where('devise', $devise)
+                                        ->first();
+                                    
+                                    $solde = $compteTransitoire ? number_format($compteTransitoire->solde, 2) . ' ' . $devise : '0.00 ' . $devise;
+                                    $set('solde_agent_display', $solde);
+                                }
+                            }),
+                    ])
+                    ->columns(2),
+
                 Section::make('Paramètres du Cycle')
                     ->schema([
-                        TextInput::make('solde_initial')
-                            ->label('Solde Initial')
-                            ->numeric()
-                            ->required()
-                            ->default(0)
-                            ->minValue(0),
+                        Grid::make(2)
+                            ->schema([
+                                TextInput::make('solde_initial')
+                                    ->label('Solde Initial')
+                                    ->numeric()
+                                    ->required()
+                                    ->default(0)
+                                    ->minValue(0)
+                                    ->reactive()
+                                    ->afterStateUpdated(function ($state, $set, $get) {
+                                        // Vérifier si le solde est suffisant
+                                        $userId = $get('user_id');
+                                        $devise = $get('devise') ?? 'CDF';
+                                        $montant = (float) $state;
+                                        
+                                        if ($userId && $montant > 0) {
+                                            $compteTransitoire = CompteTransitoire::where('user_id', $userId)
+                                                ->where('devise', $devise)
+                                                ->first();
+                                            
+                                            if ($compteTransitoire && $montant > $compteTransitoire->solde) {
+                                                $set('solde_initial', $compteTransitoire->solde);
+                                            }
+                                        }
+                                    }),
 
-                        Select::make('devise')
-                            ->options([
-                                'USD' => 'USD', 
-                                'CDF' => 'CDF'
-                            ])
-                            ->required()
-                            ->default('CDF'),
+                                Select::make('devise')
+                                    ->options([
+                                        'USD' => 'USD', 
+                                        'CDF' => 'CDF'
+                                    ])
+                                    ->required()
+                                    ->default('CDF')
+                                    ->reactive()
+                                    ->afterStateUpdated(function ($state, $set, $get) {
+                                        // Mettre à jour l'affichage du solde
+                                        $userId = $get('user_id');
+                                        if ($userId) {
+                                            $compteTransitoire = CompteTransitoire::where('user_id', $userId)
+                                                ->where('devise', $state)
+                                                ->first();
+                                            
+                                            $solde = $compteTransitoire ? number_format($compteTransitoire->solde, 2) . ' ' . $state : '0.00 ' . $state;
+                                            $set('solde_agent_display', $solde);
+                                        }
+                                    }),
+                            ]),
 
-                        DatePicker::make('date_debut')
-                            ->required()
-                            ->default(now()),
+                        Grid::make(2)
+                            ->schema([
+                                DatePicker::make('date_debut')
+                                    ->required()
+                                    ->default(now()),
 
-                        DatePicker::make('date_fin')
-                            ->required(),
+                                DatePicker::make('date_fin')
+                                    ->required(),
+                            ]),
 
                         Select::make('statut')
                             ->options([
@@ -140,8 +228,7 @@ class CycleForm
                             ])
                             ->default('ouvert')
                             ->required(),
-                    ])
-                    ->columns(2),
+                    ]),
 
                 // Champs cachés pour la logique
                 Hidden::make('type_cycle')

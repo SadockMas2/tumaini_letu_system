@@ -9,6 +9,7 @@ use App\Models\JournalComptable;
 use App\Services\ComptabilityService;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ManageRecords;
@@ -21,6 +22,119 @@ class ManageComptabilite extends ManageRecords
     protected function getHeaderActions(): array
     {
         return [
+
+            // Dans ManageComptabilite.php - Ajouter dans getHeaderActions()
+
+Action::make('retour_coffres')
+    ->label('Retour aux Coffres')
+    ->icon('heroicon-o-arrow-left-circle')
+    ->color('primary')
+    ->schema([
+        Select::make('devise_retour')
+            ->label('Devise du Retour')
+            ->options(['USD' => 'USD', 'CDF' => 'CDF'])
+            ->required()
+            ->default('USD')
+            ->live()
+            ->afterStateUpdated(function ($set, $state) {
+                if ($state) {
+                    $soldeDisponible = app(ComptabilityService::class)
+                        ->getSoldeCompte('511100', $state); // Compte transit
+                    $set('solde_disponible_display', number_format($soldeDisponible, 2) . ' ' . $state);
+                }
+            }),
+        
+        TextInput::make('solde_disponible_display')
+            ->label('Solde Disponible en Comptabilité')
+            ->disabled()
+            ->dehydrated(false)
+            ->default('0.00 USD'),
+            
+        Select::make('coffre_destination_id')
+            ->label('Coffre Destination')
+            ->options(\App\Models\CashRegister::pluck('nom', 'id'))
+            ->required()
+            ->live()
+            ->afterStateUpdated(function ($set, $state) {
+                if ($state) {
+                    $coffre = \App\Models\CashRegister::find($state);
+                    if ($coffre) {
+                        $set('solde_coffre_display', number_format($coffre->solde_actuel, 2) . ' ' . $coffre->devise);
+                    }
+                }
+            }),
+            
+        TextInput::make('solde_coffre_display')
+            ->label('Solde Actuel du Coffre')
+            ->disabled()
+            ->dehydrated(false)
+            ->default('0.00 USD'),
+            
+        TextInput::make('montant_retour')
+            ->label('Montant à Retourner')
+            ->numeric()
+            ->required()
+            ->minValue(0.01)
+            ->suffix(function ($get) {
+                return $get('devise_retour');
+            })
+            ->rules([
+                function ($get) {
+                    return function ($attribute, $value, $fail) use ($get) {
+                        $soldeDisponible = app(ComptabilityService::class)
+                            ->getSoldeCompte('511100', $get('devise_retour'));
+                        
+                        if ($value > $soldeDisponible) {
+                            $fail("Solde insuffisant en comptabilité. Maximum: " . number_format($soldeDisponible, 2));
+                        }
+                    };
+                }
+            ]),
+            
+        Textarea::make('motif_retour')
+            ->label('Motif du Retour')
+            ->required()
+            ->placeholder('Ex: Retour aux coffres pour besoins opérationnels'),
+    ])
+    ->action(function (array $data) {
+        try {
+            DB::transaction(function () use ($data) {
+                $comptabilityService = app(ComptabilityService::class);
+                $coffreService = app(\App\Services\CoffreService::class);
+                
+                $reference = 'RETOUR-COFFRE-' . now()->format('Ymd-His');
+                
+                // 1. Créer le mouvement physique vers le coffre
+                $mouvement = $coffreService->alimenterCoffre(
+                    $data['coffre_destination_id'],
+                    $data['montant_retour'],
+                    'comptabilite',
+                    $reference,
+                    $data['devise_retour'],
+                    $data['motif_retour']
+                );
+                
+                // 2. Enregistrer l'écriture comptable
+                $comptabilityService->enregistrerRetourVersCoffre(
+                    $mouvement->id,
+                    $reference
+                );
+                
+                Notification::make()
+                    ->title('Retour aux coffres réussi')
+                    ->body("{$data['montant_retour']} {$data['devise_retour']} transférés vers le coffre")
+                    ->success()
+                    ->send();
+            });
+            
+        } catch (\Exception $e) {
+            Notification::make()
+                ->title('Erreur de retour')
+                ->body($e->getMessage())
+                ->danger()
+                ->send();
+        }
+    }),
 
             
             // 0. Initialiser les journaux (Action de débogage)

@@ -85,7 +85,7 @@ class ComptesTable
                      ->visible(function () {
                         /** @var User|null $user */
                         $user = Auth::user();
-                        return $user && $user->can('view_comptespecial');
+                        return $user && $user->can('view_compte');
                     })
                     ->url(fn ($record) => route('comptes.details', ['compte_id' => $record->id])),
 

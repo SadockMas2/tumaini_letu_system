@@ -43,8 +43,8 @@ class CoffresTable
             ])
 
             ->recordActions([
-                EditAction::make(),
-                DeleteAction::make(),
+                // EditAction::make(),
+               
             ])
             ->toolbarActions([]);
     }

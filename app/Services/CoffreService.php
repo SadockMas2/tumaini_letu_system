@@ -6,6 +6,7 @@ namespace App\Services;
 use App\Models\CashRegister;
 use App\Models\RapportCoffre;
 use App\Models\MouvementCoffre;
+use Illuminate\Support\Facades\Auth;
 
 class CoffreService
 {
@@ -28,7 +29,7 @@ class CoffreService
             'reference' => $reference,
             'description' => $description ?? "Alimentation depuis {$source}",
             'date_mouvement' => now(),
-            'operateur_id' => auth()->id()
+            'operateur_id' => Auth::id()
         ]);
 
         // Mettre à jour le solde du coffre
@@ -56,7 +57,7 @@ class CoffreService
             'reference' => 'TRANSF-COMPT-' . now()->format('YmdHis'),
             'description' => "Transfert vers comptable - {$motif}",
             'date_mouvement' => now(),
-            'operateur_id' => auth()->id()
+            'operateur_id' => Auth::id()
         ]);
 
         // Mettre à jour le solde du coffre

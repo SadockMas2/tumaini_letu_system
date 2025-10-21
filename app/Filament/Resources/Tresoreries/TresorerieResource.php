@@ -15,6 +15,7 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use Illuminate\Support\Facades\Auth;
 use UnitEnum;
 
 class TresorerieResource extends Resource
@@ -25,6 +26,10 @@ class TresorerieResource extends Resource
     protected static string |UnitEnum|null $navigationGroup = 'Trésorerie';
     protected static ?string $slug = 'tresorerie';
 
+      public static function getNavigationBadge(): ?string
+    {
+        return static::getModel()::count();
+    } 
     public static function form(Schema $schema): Schema
     {
         return TresorerieForm::configure($schema);
@@ -49,5 +54,11 @@ class TresorerieResource extends Resource
             'create' => CreateTresorerie::route('/create'),
             'edit' => EditTresorerie::route('/{record}/edit'),
         ];
+    }
+       public static function canViewAny(): bool
+    {
+        /** @var \App\Models\User|null $user */
+        $user = Auth::user();
+        return $user && $user->can('create_compte');
     }
 }

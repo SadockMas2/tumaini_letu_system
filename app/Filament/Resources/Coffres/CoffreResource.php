@@ -30,6 +30,11 @@ class CoffreResource extends Resource
         return CoffreForm::configure($schema);
     }
 
+      public static function getNavigationBadge(): ?string
+    {
+        return static::getModel()::count();
+    } 
+
     public static function table(Table $table): Table
     {
         return CoffresTable::configure($table);
@@ -50,12 +55,11 @@ class CoffreResource extends Resource
             'edit' => EditCoffre::route('/{record}/edit'),
         ];
     }
-
-      public static function canViewAny(): bool
+        public static function canViewAny(): bool
     {
         /** @var \App\Models\User|null $user */
         $user = Auth::user();
-        return $user && $user->can('view_compte');
+        return $user && $user->can('view_comptespecial');
     }
 
 }

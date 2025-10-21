@@ -15,6 +15,7 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use Illuminate\Support\Facades\Auth;
 use UnitEnum;
 
 class ComptabiliteResource extends Resource
@@ -25,7 +26,11 @@ protected static ?string $model = EcritureComptable::class;
     protected static string |UnitEnum|null $navigationGroup = 'Comptabilité';
     protected static ?string $slug = 'comptabilite';
 
-
+      public static function getNavigationBadge(): ?string
+    {
+        return static::getModel()::count();
+    } 
+    
     public static function form(Schema $schema): Schema
     {
         return ComptabiliteForm::configure($schema);
@@ -51,4 +56,12 @@ protected static ?string $model = EcritureComptable::class;
             'edit' => EditComptabilite::route('/{record}/edit'),
         ];
     }
+    
+          public static function canViewAny(): bool
+    {
+        /** @var \App\Models\User|null $user */
+        $user = Auth::user();
+        return $user && $user->can('create_compte');
+    }
+
 }

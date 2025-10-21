@@ -27,6 +27,10 @@ class HistoriqueCompteSpecialResource extends Resource
 
     protected static string|UnitEnum|null $navigationGroup = '💳 COMPTE SPECIAL TUMAINI';
 
+      public static function getNavigationBadge(): ?string
+    {
+        return static::getModel()::count();
+    } 
     public static function form(Schema $schema): Schema
     {
         return HistoriqueCompteSpecialForm::configure($schema);

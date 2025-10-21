@@ -22,21 +22,23 @@ class CompteTransitoire extends Model
 
     public function user()
     {
-        return $this->belongsTo(\App\Models\User::class);
+        return $this->belongsTo(User::class);
     }
 
     public function agent()
     {
-        return $this->belongsTo(\App\Models\User::class, 'user_id');
+        return $this->belongsTo(User::class, 'user_id');
     }
 
     // Méthode statique pour obtenir ou créer le compte transitoire
     public static function getOrCreateForAgent($userId, $devise = 'USD')
     {
-        $compte = self::where('user_id', $userId)->first();
+        $compte = self::where('user_id', $userId)
+            ->where('devise', $devise)
+            ->first();
         
         if (!$compte) {
-            $user = \App\Models\User::find($userId);
+            $user = User::find($userId);
             $compte = self::create([
                 'user_id' => $userId,
                 'agent_nom' => $user->name,
@@ -50,20 +52,29 @@ class CompteTransitoire extends Model
     }
 
     // créditer le compte transitoire
-    public function credit(float $amount)
+    public function credit(float $amount): bool
     {
+        if ($amount <= 0) {
+            return false;
+        }
+        
         $this->solde = $this->solde + $amount;
-        $this->save();
-        return $this;
+        return $this->save();
     }
 
     // débiter le compte transitoire (retourne false si solde insuffisant)
     public function debit(float $amount): bool
     {
-        if ($this->solde < $amount) return false;
+        if ($amount <= 0) {
+            return false;
+        }
+        
+        if ($this->solde < $amount) {
+            return false;
+        }
+        
         $this->solde = $this->solde - $amount;
-        $this->save();
-        return true;
+        return $this->save();
     }
 
     // Vérifier si le solde est suffisant

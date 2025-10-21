@@ -4,6 +4,8 @@ use App\Http\Controllers\CompteController;
 use App\Http\Controllers\CreditController;
 use App\Http\Controllers\MouvementController;
 use App\Http\Controllers\PaiementController;
+use App\Services\CycleService;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\DB;
 use App\Models\Mouvement;
@@ -179,3 +181,81 @@ Route::get('/credits/{credit}/historique-paiements', [CreditController::class, '
 Route::get('/test-approval-groupe/{id}', [App\Http\Controllers\CreditController::class, 'testApprovalGroupe']);
 
 Route::get('/credits/{credit_id}/echeancier', [CreditController::class, 'showEcheancier'])->name('credits.echeancier');
+
+
+// Dans routes/web.php
+Route::get('/test-debit-direct/{userId}/{devise}/{montant}', function ($userId, $devise, $montant) {
+    try {
+        Log::info('=== TEST DÉBIT DIRECT ===');
+        
+        // 1. Vérifier le compte transitoire
+        $compte = \App\Models\CompteTransitoire::where('user_id', $userId)
+            ->where('devise', $devise)
+            ->first();
+            
+        if (!$compte) {
+            return response()->json(['error' => 'Compte transitoire introuvable'], 404);
+        }
+        
+        Log::info('Compte trouvé', [
+            'compte_id' => $compte->id,
+            'solde_avant' => $compte->solde,
+            'user_id' => $compte->user_id,
+            'devise' => $compte->devise
+        ]);
+        
+        // 2. Tester le débit directement
+        $ancienSolde = $compte->solde;
+        $montant = (float)$montant;
+        
+        Log::info('Tentative de débit', [
+            'ancien_solde' => $ancienSolde,
+            'montant' => $montant
+        ]);
+        
+        // Méthode 1: Utiliser la méthode debit()
+        $resultat = $compte->debit($montant);
+        
+        Log::info('Résultat méthode debit()', ['resultat' => $resultat]);
+        
+        // Recharger le compte
+        $compte->refresh();
+        
+        Log::info('Après débit', [
+            'nouveau_solde' => $compte->solde,
+            'difference' => $ancienSolde - $compte->solde
+        ]);
+        
+        // Méthode 2: Débit manuel
+        $compte2 = \App\Models\CompteTransitoire::find($compte->id);
+        $compte2->solde = $compte2->solde - $montant;
+        $resultat2 = $compte2->save();
+        
+        Log::info('Résultat débit manuel', [
+            'resultat_save' => $resultat2,
+            'solde_apres_manuel' => $compte2->solde
+        ]);
+        
+        return response()->json([
+            'success' => true,
+            'compte_id' => $compte->id,
+            'debit_method_result' => $resultat,
+            'manual_debit_result' => $resultat2,
+            'solde_avant' => $ancienSolde,
+            'solde_apres' => $compte->solde,
+            'solde_apres_manuel' => $compte2->solde,
+            'devise' => $devise
+        ]);
+        
+    } catch (\Exception $e) {
+        Log::error('Erreur test débit direct', [
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+        
+        return response()->json([
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ], 500);
+    }
+});

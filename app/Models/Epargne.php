@@ -108,12 +108,12 @@ class Epargne extends Model
                 );
             }
 
-            // Mettre à jour le solde du compte
-            $compte->solde += $epargne->montant;
-            $compte->save();
+            // // Mettre à jour le solde du compte
+            // $compte->solde += $epargne->montant;
+            // $compte->save();
 
-            $epargne->numero_compte_membre = $compte->numero_compte;
-            $epargne->solde_apres_membre = $compte->solde;
+            // $epargne->numero_compte_membre = $compte->numero_compte;
+            // $epargne->solde_apres_membre = $compte->solde;
 
             // SUPPRIMER la logique de premiere_mise
         });

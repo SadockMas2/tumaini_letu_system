@@ -65,16 +65,16 @@ class DispatchEpargnesTable
                 TextColumn::make('solde_transitoire')
                     ->label('Solde Agent')
                     ->getStateUsing(function ($record) {
-                        // CORRECTION : Prendre le compte transitoire selon la devise de l'épargne
+                        // CORRECTION : Prendre le solde existant du compte transitoire selon la devise
                         $compteTransitoire = CompteTransitoire::where('user_id', $record->user_id)
-                            ->where('devise', $record->devise) // Filtrer par la devise de l'épargne
+                            ->where('devise', $record->devise)
                             ->first();
                         return $compteTransitoire ? number_format($compteTransitoire->solde, 2) . ' ' . $record->devise : '0.00 ' . $record->devise;
                     })
                     ->color(function ($record) {
-                        // CORRECTION : Vérifier le solde dans la bonne devise
+                        // CORRECTION : Vérifier le solde existant dans la bonne devise
                         $compteTransitoire = CompteTransitoire::where('user_id', $record->user_id)
-                            ->where('devise', $record->devise) // Filtrer par la devise de l'épargne
+                            ->where('devise', $record->devise)
                             ->first();
                         $solde = $compteTransitoire ? $compteTransitoire->solde : 0;
                         return $solde >= $record->montant ? 'success' : 'danger';
@@ -115,9 +115,9 @@ class DispatchEpargnesTable
                     ->icon('heroicon-o-arrow-right-circle')
                     ->color('success')
                     ->visible(function ($record) {
-                        // CORRECTION : Vérifier le solde dans la bonne devise
+                        // CORRECTION : Vérifier le solde existant dans la bonne devise
                         $compteTransitoire = CompteTransitoire::where('user_id', $record->user_id)
-                            ->where('devise', $record->devise) // Filtrer par la devise de l'épargne
+                            ->where('devise', $record->devise)
                             ->first();
                         $solde = $compteTransitoire ? $compteTransitoire->solde : 0;
                         return $solde >= $record->montant;
@@ -125,9 +125,9 @@ class DispatchEpargnesTable
                     ->schema(function (Epargne $record) {
                         $isGroupe = $record->type_epargne === 'groupe_solidaire';
                         
-                        // CORRECTION : Prendre le compte transitoire selon la devise de l'épargne
+                        // CORRECTION : Prendre le solde existant du compte transitoire selon la devise
                         $compteTransitoire = CompteTransitoire::where('user_id', $record->user_id)
-                            ->where('devise', $record->devise) // Filtrer par la devise de l'épargne
+                            ->where('devise', $record->devise)
                             ->first();
                         $soldeAgent = $compteTransitoire ? $compteTransitoire->solde : 0;
                         
@@ -250,9 +250,9 @@ class DispatchEpargnesTable
                     ->requiresConfirmation()
                     ->modalHeading('Dispatcher l\'Épargne')
                     ->modalDescription(function ($record) {
-                        // CORRECTION : Prendre le compte transitoire selon la devise de l'épargne
+                        // CORRECTION : Prendre le solde existant du compte transitoire selon la devise
                         $compteTransitoire = CompteTransitoire::where('user_id', $record->user_id)
-                            ->where('devise', $record->devise) // Filtrer par la devise de l'épargne
+                            ->where('devise', $record->devise)
                             ->first();
                         $soldeAgent = $compteTransitoire ? $compteTransitoire->solde : 0;
                         
@@ -293,9 +293,9 @@ class DispatchEpargnesTable
                 $montantTotal = $epargne->montant;
                 $isGroupe = $epargne->type_epargne === 'groupe_solidaire';
                 
-                // CORRECTION : Vérification finale du solde dans la bonne devise
+                // CORRECTION : Vérification finale du solde existant dans la bonne devise
                 $compteTransitoire = CompteTransitoire::where('user_id', $epargne->user_id)
-                    ->where('devise', $epargne->devise) // Filtrer par la devise de l'épargne
+                    ->where('devise', $epargne->devise)
                     ->first();
                     
                 if (!$compteTransitoire || $compteTransitoire->solde < $montantTotal) {
@@ -320,7 +320,7 @@ class DispatchEpargnesTable
                     throw new \Exception("Le total réparti ({$totalReparti}) ne correspond pas au montant collecté ({$montantTotal}).");
                 }
                 
-                // CORRECTION : Débiter le compte transitoire de l'agent dans la bonne devise
+                // CORRECTION : Débiter le compte transitoire existant de l'agent dans la bonne devise
                 $compteTransitoire->solde -= $montantTotal;
                 $compteTransitoire->save();
                 
@@ -333,14 +333,14 @@ class DispatchEpargnesTable
                     
                     // Vérifier si le compte épargne existe déjà
                     $compteEpargne = CompteEpargne::where('client_id', $membreId)
-                        ->where('devise', $epargne->devise) // CORRECTION : Utiliser la devise de l'épargne
+                        ->where('devise', $epargne->devise)
                         ->first();
                     
                     if (!$compteEpargne) {
                         // Créer un nouveau compte épargne
                         $compteEpargne = new CompteEpargne();
                         $compteEpargne->client_id = $membreId;
-                        $compteEpargne->devise = $epargne->devise; // CORRECTION : Utiliser la devise de l'épargne
+                        $compteEpargne->devise = $epargne->devise;
                         $compteEpargne->solde = 0;
                         $compteEpargne->numero_compte = CompteEpargne::genererNumeroCompte('individuel');
                         $compteEpargne->type_compte = 'individuel';
@@ -356,23 +356,6 @@ class DispatchEpargnesTable
                     $ancienSolde = $compteEpargne->solde;
                     $compteEpargne->solde += $montantMembre;
                     $compteEpargne->save();
-                    
-                    // // Créer un mouvement pour le compte épargne
-                    // Mouvement::create([
-                    //     'compte_id' => $compteEpargne->id,
-                    //     'numero_compte' => $compteEpargne->numero_compte,
-                    //     'client_nom' => $compteEpargne->client->nom_complet ?? 'Inconnu',
-                    //     'nom_deposant' => $epargne->agent_nom,
-                    //     'type_mouvement' => 'depot_epargne',
-                    //     'montant' => $montantMembre,
-                    //     'solde_avant' => $ancienSolde,
-                    //     'solde_apres' => $compteEpargne->solde,
-                    //     'description' => $isGroupe 
-                    //         ? "Dispatch épargne groupe: " . ($epargne->groupeSolidaire->nom_groupe ?? '')
-                    //         : "Dispatch épargne individuelle",
-                    //     'reference' => 'DISPATCH-' . $epargne->id,
-                    //     'date_mouvement' => now(),
-                    // ]);
                 }
                 
                 // Marquer l'épargne comme validée

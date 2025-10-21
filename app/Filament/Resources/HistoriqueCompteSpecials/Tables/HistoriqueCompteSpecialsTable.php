@@ -23,6 +23,7 @@ class HistoriqueCompteSpecialsTable
 
                  TextColumn::make('devise')->label('Devise')->sortable(),
 
+                  TextColumn::make('description')->label('Description')->sortable(),
 
                 TextColumn::make('created_at')
                     ->label('Date')
