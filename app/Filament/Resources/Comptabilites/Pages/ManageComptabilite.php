@@ -74,7 +74,8 @@ Action::make('retour_coffres')
             ->label('Montant à Retourner')
             ->numeric()
             ->required()
-            ->minValue(0.01)
+            ->minValue(0.0)
+            ->step(0.01)
             ->suffix(function ($get) {
                 return $get('devise_retour');
             })
@@ -84,9 +85,9 @@ Action::make('retour_coffres')
                         $soldeDisponible = app(ComptabilityService::class)
                             ->getSoldeCompte('511100', $get('devise_retour'));
                         
-                        if ($value > $soldeDisponible) {
-                            $fail("Solde insuffisant en comptabilité. Maximum: " . number_format($soldeDisponible, 2));
-                        }
+                        // if ($value > $soldeDisponible) {
+                        //     $fail("Solde insuffisant en comptabilité. Maximum: " . number_format($soldeDisponible, 2));
+                        // }
                     };
                 }
             ]),

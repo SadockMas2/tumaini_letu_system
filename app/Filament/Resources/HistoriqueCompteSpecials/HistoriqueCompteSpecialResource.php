@@ -53,7 +53,7 @@ class HistoriqueCompteSpecialResource extends Resource
         return [
             'index' => ListHistoriqueCompteSpecials::route('/'),
             'create' => CreateHistoriqueCompteSpecial::route('/create'),
-            'edit' => EditHistoriqueCompteSpecial::route('/{record}/edit'),
+            // 'edit' => EditHistoriqueCompteSpecial::route('/{record}/edit'),
         ];
     }
 

@@ -189,14 +189,14 @@
                                     </span>
                                 </div>
                             </div>
-                            <div class="frais-item border-l-orange-400 bg-orange-50 rounded-r-lg p-4">
+                            {{-- <div class="frais-item border-l-orange-400 bg-orange-50 rounded-r-lg p-4">
                                 <div class="flex justify-between items-center mb-2">
                                     <span class="font-semibold text-gray-800">Frais d'Adhésion</span>
                                     <span class="text-lg font-bold text-orange-600">
                                         {{ number_format($frais['adhesion'], 2, ',', ' ') }} {{ $credit->compte->devise }}
                                     </span>
                                 </div>
-                            </div>
+                            </div> --}}
                             <div class="frais-item border-l-red-400 bg-red-50 rounded-r-lg p-4">
                                 <div class="flex justify-between items-center mb-2">
                                     <span class="font-semibold text-gray-800">Caution (Bloquée)</span>
@@ -223,14 +223,14 @@
                                     </span>
                                 </div>
                             </div>
-                            <div class="frais-item border-l-orange-400 bg-orange-50 rounded-r-lg p-4">
+                            {{-- <div class="frais-item border-l-orange-400 bg-orange-50 rounded-r-lg p-4">
                                 <div class="flex justify-between items-center mb-2">
                                     <span class="font-semibold text-gray-800">Frais d'Adhésion</span>
                                     <span class="text-lg font-bold text-orange-600">
                                         {{ number_format($frais['adhesion'], 2, ',', ' ') }} {{ $credit->compte->devise }}
                                     </span>
                                 </div>
-                            </div>
+                            </div> --}}
                             <div class="frais-item border-l-red-400 bg-red-50 rounded-r-lg p-4">
                                 <div class="flex justify-between items-center mb-2">
                                     <span class="font-semibold text-gray-800">Caution (Bloquée)</span>
@@ -247,7 +247,7 @@
                                 <span class="font-bold text-gray-800 text-lg">Total des Frais à Payer</span>
                                 <span class="text-xl font-bold text-gray-800">
                                     @php
-                                        $totalFrais = $frais['dossier'] + $frais['alerte'] + ($frais['carnet'] ?? 0) + $frais['adhesion'];
+                                        $totalFrais = $frais['dossier'] + $frais['alerte'] + ($frais['carnet'] ?? 0) ;
                                     @endphp
                                     {{ number_format($totalFrais, 2, ',', ' ') }} {{ $credit->compte->devise }}
                                 </span>

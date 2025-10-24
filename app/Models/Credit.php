@@ -56,61 +56,61 @@ class Credit extends Model
     }
 
     // Calcul des frais pour crédit groupe
-    public static function calculerFraisGroupe($montant)
-    {
-        $frais = [
-            50 => ['dossier' => 2, 'alerte' => 4.5, 'carnet' => 2.5, 'adhesion' => 5, 'caution' => 10],
-            100 => ['dossier' => 4, 'alerte' => 4.5, 'carnet' => 2.5, 'adhesion' => 5, 'caution' => 20],
-            150 => ['dossier' => 6, 'alerte' => 4.5, 'carnet' => 2.5, 'adhesion' => 5, 'caution' => 30],
-            200 => ['dossier' => 8, 'alerte' => 4.5, 'carnet' => 2.5, 'adhesion' => 5, 'caution' => 40],
-            250 => ['dossier' => 10, 'alerte' => 4.5, 'carnet' => 2.5, 'adhesion' => 5, 'caution' => 50],
-            300 => ['dossier' => 12, 'alerte' => 4.5, 'carnet' => 2.5, 'adhesion' => 5, 'caution' => 60],
-            350 => ['dossier' => 14, 'alerte' => 4.5, 'carnet' => 2.5, 'adhesion' => 5, 'caution' => 70],
-            400 => ['dossier' => 16, 'alerte' => 4.5, 'carnet' => 2.5, 'adhesion' => 5, 'caution' => 80],
-            450 => ['dossier' => 18, 'alerte' => 4.5, 'carnet' => 2.5, 'adhesion' => 5, 'caution' => 90],
-            500 => ['dossier' => 20, 'alerte' => 4.5, 'carnet' => 2.5, 'adhesion' => 5, 'caution' => 100],
-        ];
+public static function calculerFraisGroupe($montant)
+{
+    $frais = [
+        50 => ['dossier' => 2, 'alerte' => 4.5, 'carnet' => 2.5, 'caution' => 10],
+        100 => ['dossier' => 4, 'alerte' => 4.5, 'carnet' => 2.5, 'caution' => 20],
+        150 => ['dossier' => 6, 'alerte' => 4.5, 'carnet' => 2.5, 'caution' => 30],
+        200 => ['dossier' => 8, 'alerte' => 4.5, 'carnet' => 2.5, 'caution' => 40],
+        250 => ['dossier' => 10, 'alerte' => 4.5, 'carnet' => 2.5, 'caution' => 50],
+        300 => ['dossier' => 12, 'alerte' => 4.5, 'carnet' => 2.5, 'caution' => 60],
+        350 => ['dossier' => 14, 'alerte' => 4.5, 'carnet' => 2.5, 'caution' => 70],
+        400 => ['dossier' => 16, 'alerte' => 4.5, 'carnet' => 2.5, 'caution' => 80],
+        450 => ['dossier' => 18, 'alerte' => 4.5, 'carnet' => 2.5, 'caution' => 90],
+        500 => ['dossier' => 20, 'alerte' => 4.5, 'carnet' => 2.5, 'caution' => 100],
+    ];
 
-        $montantArrondi = floor($montant / 50) * 50;
-        return $frais[$montantArrondi] ?? $frais[500];
-    }
+    $montantArrondi = floor($montant / 50) * 50;
+    return $frais[$montantArrondi] ?? $frais[500];
+}
 
-    // Calcul des frais pour crédit individuel
-    public static function calculerFraisIndividuel($montant)
-    {
-        $frais = [
-            100 => ['dossier' => 4, 'alerte' => 4, 'adhesion' => 5, 'caution' => 20],
-            200 => ['dossier' => 8, 'alerte' => 4, 'adhesion' => 5, 'caution' => 40],
-            300 => ['dossier' => 12, 'alerte' => 4, 'adhesion' => 5, 'caution' => 60],
-            400 => ['dossier' => 16, 'alerte' => 4, 'adhesion' => 5, 'caution' => 80],
-            500 => ['dossier' => 20, 'alerte' => 4, 'adhesion' => 5, 'caution' => 100],
-            600 => ['dossier' => 24, 'alerte' => 4, 'adhesion' => 5, 'caution' => 120],
-            700 => ['dossier' => 28, 'alerte' => 4, 'adhesion' => 5, 'caution' => 140],
-            800 => ['dossier' => 32, 'alerte' => 4, 'adhesion' => 5, 'caution' => 160],
-            900 => ['dossier' => 36, 'alerte' => 4, 'adhesion' => 5, 'caution' => 180],
-            1000 => ['dossier' => 40, 'alerte' => 4, 'adhesion' => 5, 'caution' => 200],
-            1500 => ['dossier' => 60, 'alerte' => 4, 'adhesion' => 5, 'caution' => 300],
-            2000 => ['dossier' => 80, 'alerte' => 4, 'adhesion' => 5, 'caution' => 400],
-            2500 => ['dossier' => 100, 'alerte' => 4, 'adhesion' => 5, 'caution' => 500],
-            3000 => ['dossier' => 120, 'alerte' => 4, 'adhesion' => 5, 'caution' => 600],
-            3500 => ['dossier' => 140, 'alerte' => 4, 'adhesion' => 5, 'caution' => 700],
-            4000 => ['dossier' => 160, 'alerte' => 4, 'adhesion' => 5, 'caution' => 800],
-            4500 => ['dossier' => 180, 'alerte' => 4, 'adhesion' => 5, 'caution' => 900],
-            5000 => ['dossier' => 200, 'alerte' => 4, 'adhesion' => 5, 'caution' => 1000],
-        ];
-        
-        $montantArrondi = floor($montant / 100) * 100;
-        if ($montantArrondi > 5000) $montantArrondi = 5000;
-        
-        $fraisCalcules = $frais[$montantArrondi] ?? $frais[100];
-        
-        // S'assurer que 'carnet' existe (toujours 0 pour individuel)
-        if (!array_key_exists('carnet', $fraisCalcules)) {
-            $fraisCalcules['carnet'] = 0;
-        }
-        
-        return $fraisCalcules;
+// Dans la méthode calculerFraisIndividuel
+public static function calculerFraisIndividuel($montant)
+{
+    $frais = [
+        100 => ['dossier' => 4, 'alerte' => 4, 'caution' => 20],
+        200 => ['dossier' => 8, 'alerte' => 4, 'caution' => 40],
+        300 => ['dossier' => 12, 'alerte' => 4, 'caution' => 60],
+        400 => ['dossier' => 16, 'alerte' => 4, 'caution' => 80],
+        500 => ['dossier' => 20, 'alerte' => 4, 'caution' => 100],
+        600 => ['dossier' => 24, 'alerte' => 4, 'caution' => 120],
+        700 => ['dossier' => 28, 'alerte' => 4, 'caution' => 140],
+        800 => ['dossier' => 32, 'alerte' => 4, 'caution' => 160],
+        900 => ['dossier' => 36, 'alerte' => 4, 'caution' => 180],
+        1000 => ['dossier' => 40, 'alerte' => 4, 'caution' => 200],
+        1500 => ['dossier' => 60, 'alerte' => 4, 'caution' => 300],
+        2000 => ['dossier' => 80, 'alerte' => 4, 'caution' => 400],
+        2500 => ['dossier' => 100, 'alerte' => 4, 'caution' => 500],
+        3000 => ['dossier' => 120, 'alerte' => 4, 'caution' => 600],
+        3500 => ['dossier' => 140, 'alerte' => 4, 'caution' => 700],
+        4000 => ['dossier' => 160, 'alerte' => 4, 'caution' => 800],
+        4500 => ['dossier' => 180, 'alerte' => 4, 'caution' => 900],
+        5000 => ['dossier' => 200, 'alerte' => 4, 'caution' => 1000],
+    ];
+    
+    $montantArrondi = floor($montant / 100) * 100;
+    if ($montantArrondi > 5000) $montantArrondi = 5000;
+    
+    $fraisCalcules = $frais[$montantArrondi] ?? $frais[100];
+    
+    // S'assurer que 'carnet' existe (toujours 0 pour individuel)
+    if (!array_key_exists('carnet', $fraisCalcules)) {
+        $fraisCalcules['carnet'] = 0;
     }
+    
+    return $fraisCalcules;
+}
 
     // Calcul du montant total pour crédit groupe
     public static function calculerMontantTotalGroupe($montant)
@@ -146,7 +146,7 @@ class Credit extends Model
     // Calcul du total des frais
     public function getTotalFraisAttribute()
     {
-        return $this->frais_dossier + $this->frais_alerte + $this->frais_carnet + $this->frais_adhesion;
+        return $this->frais_dossier + $this->frais_alerte + $this->frais_carnet ;
     }
 
     // Dans App\Models\Credit.php

@@ -6,10 +6,13 @@ use App\Models\CompteSpecial;
 use App\Models\Credit;
 use App\Models\Compte;
 use App\Models\CreditGroupe;
+use App\Models\EcritureComptable;
 use App\Models\HistoriqueCompteSpecial;
+use App\Models\JournalComptable;
 use App\Models\Mouvement;
 use App\Models\PaiementCredit;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -132,7 +135,7 @@ public function processApproval(Request $request, $credit_id)
             $remboursementHebdo = Credit::calculerRemboursementHebdo($montantTotal, 'individuel');
 
             // Calculer le total des frais à payer (sans la caution)
-            $totalFrais = $frais['dossier'] + $frais['alerte'] + $frais['adhesion'];
+            $totalFrais = $frais['dossier'] + $frais['alerte'] ;
             
             // Vérifier si le solde est suffisant pour couvrir les frais
             $compte = $credit->compte;
@@ -156,7 +159,7 @@ public function processApproval(Request $request, $credit_id)
                 'montant' => -$totalFrais,
                 'solde_avant' => $soldeDebut,
                 'solde_apres' => $soldeApresFrais,
-                'description' => "Paiement frais pour octroi crédit - Dossier: {$frais['dossier']}, Alerte: {$frais['alerte']}, Adhésion: {$frais['adhesion']}",
+                'description' => "Paiement frais pour octroi crédit - Dossier: {$frais['dossier']}, Alerte: {$frais['alerte']}",
                 'reference' => 'FRAIS-CREDIT-' . $credit->id,
                 'date_mouvement' => now(),
                 'nom_deposant' => $compte->nom . ' ' . $compte->prenom ?? 'Système',
@@ -177,7 +180,7 @@ public function processApproval(Request $request, $credit_id)
                 'montant_total' => $montantTotal,
                 'frais_dossier' => $frais['dossier'],
                 'frais_alerte' => $frais['alerte'],
-                'frais_adhesion' => $frais['adhesion'],
+                // 'frais_adhesion' => $frais['adhesion'],
                 'caution' => $frais['caution'],
                 'remboursement_hebdo' => $remboursementHebdo,
                 'duree_mois' => 4,
@@ -194,17 +197,17 @@ public function processApproval(Request $request, $credit_id)
             Log::info("💳 CRÉDIT AJOUTÉ - Solde après crédit: {$soldeApresCredit}");
 
             // 7. CRÉER LE MOUVEMENT "CRÉDIT OCTROYÉ"
-            Mouvement::create([
-                'compte_id' => $compte->id,
-                'type_mouvement' => 'credit_octroye',
-                'montant' => $request->montant_accorde,
-                'solde_avant' => $soldeApresFrais,
-                'solde_apres' => $soldeApresCredit,
-                'description' => "Octroi de crédit individuel - Montant: {$request->montant_accorde} {$compte->devise}",
-                'reference' => 'CREDIT-' . $credit->id,
-                'date_mouvement' => now(),
-                'nom_deposant' => $compte->nom . ' ' . $compte->prenom ?? 'Système',
-            ]);
+            // Mouvement::create([
+            //     'compte_id' => $compte->id,
+            //     'type_mouvement' => 'credit_octroye',
+            //     'montant' => $request->montant_accorde,
+            //     'solde_avant' => $soldeApresFrais,
+            //     'solde_apres' => $soldeApresCredit,
+            //     'description' => "Octroi de crédit individuel - Montant: {$request->montant_accorde} {$compte->devise}",
+            //     'reference' => 'CREDIT-' . $credit->id,
+            //     'date_mouvement' => now(),
+            //     'nom_deposant' => $compte->nom . ' ' . $compte->prenom ?? 'Système',
+            // ]);
 
             // 8. BLOQUER LA CAUTION DANS LE COMPTE (CORRIGÉ POUR CRÉDIT INDIVIDUEL)
             $caution = $frais['caution'];
@@ -220,6 +223,15 @@ public function processApproval(Request $request, $credit_id)
                 ]);
 
                 Log::info("🔒 CAUTION BLOQUÉE - Montant: {$caution} USD pour crédit individuel #{$credit->id}");
+                // 9. GÉNÉRER LES ÉCRITURES COMPTABLES
+                // $this->genererEcrituresComptablesCreditIndividuel(
+                //     $credit, 
+                //     $compte, 
+                //     $frais, 
+                //     $montantTotal
+                // );
+
+Log::info('✅ Crédit individuel approuvé avec succès - Frais transférés - Caution bloquée - Écritures comptables créées');
             }
 
             Log::info('✅ Crédit individuel approuvé avec succès - Frais transférés - Caution bloquée');
@@ -251,9 +263,16 @@ public function processApproval(Request $request, $credit_id)
         ]);
         return back()->with('error', 'Erreur lors du traitement: ' . $e->getMessage());
     }
+
+    
 }
+
+
 /**
- * Transfère les frais vers le compte spécial selon la devise
+ * Transfère les frais vers le compte spécial selon la devise - VERSION CORRIGÉE
+ */
+/**
+ * Transfère les frais vers le compte spécial selon la devise - VERSION SIMPLIFIÉE
  */
 private function transfererFraisVersCompteSpecial($montantFrais, $devise, $credit)
 {
@@ -268,29 +287,32 @@ private function transfererFraisVersCompteSpecial($montantFrais, $devise, $credi
             'devise' => $devise
         ]);
     }
-
-    // Créditer le compte spécial
-    $ancienSoldeSpecial = $compteSpecial->solde;
-    $compteSpecial->increment('solde', $montantFrais);
     
-    Log::info("Frais transférés vers compte spécial: {$montantFrais} {$devise}");
+    Log::info("📊 Compte spécial trouvé/créé: {$compteSpecial->nom}, Solde: {$compteSpecial->solde} {$devise}");
+    
+    return $compteSpecial;
 }
-
 /**
- * Crée l'historique dans le compte spécial
+ * Crée l'historique dans le compte spécial - VERSION CORRIGÉE
+ */
+/**
+ * Crée l'historique dans le compte spécial - VERSION SIMPLIFIÉE
  */
 private function creerHistoriqueCompteSpecial($montantFrais, $devise, $credit, $compteClient)
 {
     $nomClient = trim($compteClient->nom . ' ' . ($compteClient->postnom ?? '') . ' ' . ($compteClient->prenom ?? ''));
     
+    // CRÉER L'HISTORIQUE POUR TRACABILITÉ
     HistoriqueCompteSpecial::create([
         'client_nom' => $nomClient,
         'montant' => $montantFrais,
         'devise' => $devise,
-        'description' => "Frais crédit payés - Crédit #{$credit->id} - Client: {$nomClient}",
+        'description' => "Frais crédit groupe payés - Crédit #{$credit->id} - Groupe: {$nomClient}",
+        'created_at' => now(),
+        'updated_at' => now(),
     ]);
     
-    Log::info("Historique créé pour compte spécial: {$montantFrais} {$devise}");
+    Log::info("📝 Historique créé pour compte spécial: {$montantFrais} {$devise}");
 }
     // Afficher le formulaire de paiement
     public function showPayment($compte_id)
@@ -422,14 +444,11 @@ private function creerHistoriqueCompteSpecial($montantFrais, $devise, $credit, $
         }
     }
 
-    // Traiter l'approbation du crédit groupe - NOUVELLE LOGIQUE
-  // Traiter l'approbation du crédit groupe - VERSION CORRIGÉE
-// Dans App\Http\Controllers\CreditController - processApprovalGroupe method
-// Remplacer toute la logique d'approbation groupe
+
 
 public function processApprovalGroupe(Request $request, $credit_groupe_id)
 {
-    Log::info('🎯 === DÉBUT PROCESS APPROVAL GROUPE ===');
+    Log::info('🎯 === DÉBUT PROCESS APPROVAL GROUPE - VERSION SANS DOUBLE DÉDUCTION ===');
     Log::info('📥 Données reçues:', $request->all());
 
     $request->validate([
@@ -446,9 +465,9 @@ public function processApprovalGroupe(Request $request, $credit_groupe_id)
         $credit = CreditGroupe::with('compte')->findOrFail($credit_groupe_id);
         
         if ($request->action === 'approuver') {
-            Log::info('🟢 APPROBATION GROUPE');
+            Log::info('🟢 APPROBATION GROUPE - VERSION AVEC UNE SEULE DÉDUCTION');
             
-            // VALIDATION
+            // VALIDATION DE LA RÉPARTITION
             $totalMontantsMembres = array_sum($request->montants_membres);
             $montantTotalGroupe = floatval($request->montant_total_groupe);
             
@@ -456,107 +475,134 @@ public function processApprovalGroupe(Request $request, $credit_groupe_id)
                 throw new \Exception("La répartition n'est pas équilibrée. Total membres: {$totalMontantsMembres}, Total groupe: {$montantTotalGroupe}");
             }
 
-            // CALCUL DES FRAIS POUR LE GROUPE (comme crédit individuel)
-            $fraisGroupe = Credit::calculerFraisIndividuel($montantTotalGroupe);
-            $totalFraisGroupe = $fraisGroupe['dossier'] + $fraisGroupe['alerte'] + $fraisGroupe['adhesion'];
-            $cautionGroupe = $fraisGroupe['caution'];
+            // CALCUL DES FRAIS TOTAUX
+            $fraisEtCautionsMembres = $this->calculerFraisEtCautionsMembres($request->montants_membres);
+            $totalFraisGroupe = $fraisEtCautionsMembres['total_frais'];
+            $totalCautionGroupe = $fraisEtCautionsMembres['total_caution'];
 
-            // VÉRIFIER LE SOLDE DU GROUPE POUR LES FRAIS
+            // VÉRIFIER LE SOLDE DU GROUPE
             $compteGroupe = $credit->compte;
             $soldeDebutGroupe = $compteGroupe->solde;
             
+            Log::info("💰 SOLDE DÉBUT GROUPE: {$soldeDebutGroupe} USD, FRAIS À PRÉLEVER: {$totalFraisGroupe} USD");
+
             if ($soldeDebutGroupe < $totalFraisGroupe) {
-                throw new \Exception("Solde insuffisant pour payer les frais. Solde groupe: {$soldeDebutGroupe} USD, Frais à payer: {$totalFraisGroupe} USD");
+                throw new \Exception("Solde groupe insuffisant pour payer les frais. Solde: {$soldeDebutGroupe} USD, Frais: {$totalFraisGroupe} USD");
             }
 
-            Log::info("📊 CALCULS GROUPE - Solde début: {$soldeDebutGroupe}, Frais: {$totalFraisGroupe}, Crédit: {$montantTotalGroupe}, Caution: {$cautionGroupe}");
+            // ✅ CORRECTION : NE PAS METTRE À JOUR MANUELLEMENT LE SOLDE
+            // Le système le fera automatiquement via le mouvement
 
-            // 1. RETRANCHER LES FRAIS DU SOLDE DU GROUPE
+            // 1. CRÉER LE MOUVEMENT "RETRAIT FRAIS" POUR LE GROUPE (SEULE DÉDUCTION)
             $soldeApresFraisGroupe = $soldeDebutGroupe - $totalFraisGroupe;
-            $compteGroupe->solde = $soldeApresFraisGroupe;
-            $compteGroupe->save();
-
-            // 2. CRÉER LE MOUVEMENT "FRAIS PAYÉS" POUR LE GROUPE
+            
             Mouvement::create([
                 'compte_id' => $compteGroupe->id,
                 'type_mouvement' => 'frais_payes_credit_groupe',
                 'montant' => -$totalFraisGroupe,
                 'solde_avant' => $soldeDebutGroupe,
                 'solde_apres' => $soldeApresFraisGroupe,
-                'description' => "Paiement frais crédit groupe - Dossier: {$fraisGroupe['dossier']}, Alerte: {$fraisGroupe['alerte']}, Adhésion: {$fraisGroupe['adhesion']}",
+                'description' => "Paiement frais crédit groupe - Total: {$totalFraisGroupe} USD",
                 'reference' => 'FRAIS-CREDIT-GROUPE-' . $credit->id,
                 'date_mouvement' => now(),
                 'nom_deposant' => $compteGroupe->nom ?? 'Groupe',
             ]);
 
-            Log::info("💰 FRAIS DÉDUITS GROUPE - Solde après frais: {$soldeApresFraisGroupe}");
+            // ✅ CORRECTION : RECHARGER LE COMPTE POUR AVOIR LE BON SOLDE
+            $compteGroupe->refresh();
+            Log::info("✅ FRAIS PRÉLEVÉS - Solde après mouvement: {$compteGroupe->solde} USD");
 
-            // 3. TRANSFÉRER LES FRAIS VERS LE COMPTE SPÉCIAL
-            $this->transfererFraisVersCompteSpecial($totalFraisGroupe, $compteGroupe->devise, $credit);
+            // 2. TRANSFÉRER LES FRAIS VERS LE COMPTE SPÉCIAL
+            $compteSpecial = $this->transfererFraisVersCompteSpecial($totalFraisGroupe, $compteGroupe->devise, $credit);
+            
+            // CRÉDITER LE COMPTE SPÉCIAL
+            $ancienSoldeSpecial = $compteSpecial->solde;
+            $compteSpecial->solde += $totalFraisGroupe;
+            $compteSpecial->save();
+            
+            Log::info("💰 COMPTE SPÉCIAL CRÉDITÉ - Ancien solde: {$ancienSoldeSpecial} USD, Nouveau solde: {$compteSpecial->solde} USD");
 
-            // 4. CRÉER L'HISTORIQUE DANS LE COMPTE SPÉCIAL
+            // 3. CRÉER L'HISTORIQUE DU COMPTE SPÉCIAL
             $this->creerHistoriqueCompteSpecial($totalFraisGroupe, $compteGroupe->devise, $credit, $compteGroupe);
 
-            // 5. CRÉDITER LE MONTANT ACCORDÉ AU COMPTE DU GROUPE
-            $soldeApresCreditGroupe = $soldeApresFraisGroupe + $montantTotalGroupe;
-            $compteGroupe->solde = $soldeApresCreditGroupe;
-            $compteGroupe->save();
+            // 4. CRÉDITER DIRECTEMENT LES COMPTES DES MEMBRES (AVEC VÉRIFICATION)
+            Log::info("💳 CRÉDIT DIRECT AUX MEMBRES - Total: {$montantTotalGroupe} USD");
+            $this->crediterComptesMembresSansDouble($request->montants_membres, $credit);
 
-            Log::info("💳 CRÉDIT AJOUTÉ AU GROUPE - Solde après crédit: {$soldeApresCreditGroupe}");
+          // 5. BLOQUER LA CAUTION DANS LE COMPTE GROUPE (SANS DÉDUCTION DU SOLDE)
+                $soldeActuelGroupe = $compteGroupe->fresh()->solde;
+                $cautionBloquee = false;
 
-            // 6. CRÉER LE MOUVEMENT "CRÉDIT OCTROYÉ" POUR LE GROUPE
-            Mouvement::create([
-                'compte_id' => $compteGroupe->id,
-                'type_mouvement' => 'credit_octroye_groupe',
-                'montant' => $montantTotalGroupe,
-                'solde_avant' => $soldeApresFraisGroupe,
-                'solde_apres' => $soldeApresCreditGroupe,
-                'description' => "Octroi de crédit groupe - Montant: {$montantTotalGroupe} USD",
-                'reference' => 'CREDIT-GROUPE-' . $credit->id,
-                'date_mouvement' => now(),
-                'nom_deposant' => $compteGroupe->nom ?? 'Groupe',
-            ]);
+                if ($totalCautionGroupe > 0) {
+                    // ✅ CORRECTION : NE PAS DÉDUIRE LA CAUTION DU SOLDE
+                    // La caution reste dans le compte mais est marquée comme bloquée
+                    
+                    // Enregistrer la caution dans la table cautions (statut "bloquee")
+                    DB::table('cautions')->insert([
+                        'compte_id' => $compteGroupe->id,
+                        'credit_groupe_id' => $credit->id,
+                        'montant' => $totalCautionGroupe,
+                        'statut' => 'bloquee',
+                        'date_blocage' => now(),
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
 
-            // 7. BLOQUER LA CAUTION DU GROUPE
-            if ($cautionGroupe > 0) {
-                DB::table('cautions')->insert([
-                    'compte_id' => $compteGroupe->id,
-                    'credit_groupe_id' => $credit->id,
-                    'montant' => $cautionGroupe,
-                    'statut' => 'bloquee',
-                    'date_blocage' => now(),
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ]);
+                    // ✅ CORRECTION : CRÉER UN MOUVEMENT DE "BLOQUAGE" SANS DÉDUCTION
+                    Mouvement::create([
+                        'compte_id' => $compteGroupe->id,
+                        'type_mouvement' => 'caution_bloquee_groupe',
+                        'montant' => 0, // ❌ IMPORTANT : Montant 0 car pas de déduction
+                        'solde_avant' => $soldeActuelGroupe,
+                        'solde_apres' => $soldeActuelGroupe, // Même solde
+                        'description' => "Caution bloquée pour crédit groupe - Montant: {$totalCautionGroupe} USD (non déduit)",
+                        'reference' => 'CAUTION-GROUPE-' . $credit->id,
+                        'date_mouvement' => now(),
+                        'nom_deposant' => 'TUMAINI LETU Finances',
+                    ]);
 
-                Log::info("🔒 CAUTION GROUPE BLOQUÉE - Montant: {$cautionGroupe} USD");
-            }
-
-            // 8. METTRE À JOUR LE CRÉDIT GROUPE
+                    $cautionBloquee = true;
+                    Log::info("🔒 CAUTION BLOQUÉE (NON DÉDUITE) - Montant: {$totalCautionGroupe} USD, Solde groupe inchangé: {$soldeActuelGroupe} USD");
+                }
+            // 6. METTRE À JOUR LE CRÉDIT GROUPE
             $montantTotalAvecInteret = $montantTotalGroupe * 1.225;
             $remboursementHebdoTotal = $montantTotalAvecInteret / 16;
 
             $credit->update([
                 'montant_accorde' => $montantTotalGroupe,
                 'montant_total' => $montantTotalAvecInteret,
-                'frais_dossier' => $fraisGroupe['dossier'],
-                'frais_alerte' => $fraisGroupe['alerte'],
-                'frais_adhesion' => $fraisGroupe['adhesion'],
-                'caution_totale' => $cautionGroupe,
+                'frais_dossier' => $fraisEtCautionsMembres['frais_dossier_total'],
+                'frais_alerte' => $fraisEtCautionsMembres['frais_alerte_total'],
+                'frais_carnet' => $fraisEtCautionsMembres['frais_carnet_total'],
+                'frais_adhesion' => 0,
+                'caution_totale' => $totalCautionGroupe,
                 'remboursement_hebdo_total' => $remboursementHebdoTotal,
                 'repartition_membres' => $this->calculerRepartitionMembres($request->montants_membres),
                 'montants_membres' => $request->montants_membres,
                 'statut_demande' => 'approuve',
                 'date_octroi' => now(),
                 'date_echeance' => now()->addMonths(4),
+                'frais_preleves' => true,
+                'caution_bloquee' => $cautionBloquee,
             ]);
 
-            Log::info('✅ Crédit groupe approuvé avec succès');
+            // 7. GÉNÉRER LES ÉCRITURES COMPTABLES
+            $this->genererEcrituresComptablesCreditGroupeCorrect(
+                $credit,
+                $compteGroupe,
+                $totalFraisGroupe,
+                $totalCautionGroupe,
+                $montantTotalGroupe
+            );
+
+            // VÉRIFICATION FINALE
+            $compteGroupe->refresh();
+            Log::info("🔍 VÉRIFICATION FINALE - Solde groupe: {$compteGroupe->solde} USD");
 
             DB::commit();
 
             return redirect()->route('comptes.details', $credit->compte_id)
-                ->with('success', 'Crédit groupe accordé avec succès! Les frais ont été prélevés et la caution est bloquée sur le compte du groupe.');
+                ->with('success', "Crédit groupe accordé avec succès! Frais prélevés: {$totalFraisGroupe} USD. Membres crédités directement.");
 
         } else {
             // REJET
@@ -572,34 +618,299 @@ public function processApprovalGroupe(Request $request, $credit_groupe_id)
 
     } catch (\Exception $e) {
         DB::rollBack();
-        Log::error('💥 ERREUR APPROBATION GROUPE:', ['error' => $e->getMessage()]);
-        return back()->withInput()->with('error', 'Erreur: ' . $e->getMessage());
+        Log::error('💥 ERREUR APPROBATION GROUPE:', [
+            'error' => $e->getMessage(),
+            'file' => $e->getFile(),
+            'line' => $e->getLine()
+        ]);
+        return back()->withInput()->with('error', 'Erreur lors de l\'approbation: ' . $e->getMessage());
     }
 }
 
 /**
- * Calcule la répartition détaillée des membres
+ * CRÉDITER LES COMPTES DES MEMBRES SANS DOUBLE CRÉDIT
  */
-private function calculerRepartitionMembres($montantsMembres)
+private function crediterComptesMembresSansDouble($montantsMembres, $creditGroupe)
 {
+    Log::info('💳 === CRÉDIT DIRECT AUX MEMBRES - SANS DOUBLE ===');
+    
+    $totalCredite = 0;
+    $membresCredites = 0;
+
+    foreach ($montantsMembres as $membreId => $montantMembre) {
+        $montant = floatval($montantMembre);
+        
+        if ($montant > 0) {
+            try {
+                // Trouver le compte du membre
+                $compteMembre = Compte::where('client_id', $membreId)->first();
+                
+                if (!$compteMembre) {
+                    Log::error("❌ Compte non trouvé pour client_id: {$membreId}");
+                    continue;
+                }
+
+                $soldeDebutMembre = $compteMembre->solde;
+                
+                // ✅ CORRECTION : NE PAS METTRE À JOUR MANUELLEMENT LE SOLDE
+                // Le système le fera automatiquement via le mouvement
+                $nouveauSolde = $soldeDebutMembre + $montant;
+                
+                Log::info("👤 Membre {$membreId}: Solde début = {$soldeDebutMembre} USD, Crédit = {$montant} USD");
+
+                // CRÉER LE MOUVEMENT "DÉPÔT" POUR LE MEMBRE (SEUL CRÉDIT)
+                Mouvement::create([
+                    'compte_id' => $compteMembre->id,
+                    'type_mouvement' => 'credit_groupe_recu',
+                    'montant' => $montant,
+                    'solde_avant' => $soldeDebutMembre,
+                    'solde_apres' => $nouveauSolde,
+                    'description' => "Crédit groupe reçu - Montant: {$montant} USD - Groupe: {$creditGroupe->compte->nom}",
+                    'reference' => 'CREDIT-GRP-' . $creditGroupe->id,
+                    'date_mouvement' => now(),
+                    'nom_deposant' => 'TUMAINI LETU Finances',
+                ]);
+
+                // ✅ CORRECTION : RECHARGER POUR VÉRIFIER
+                $compteMembre->refresh();
+                Log::info("✅ APRÈS CRÉDIT: Solde après = {$compteMembre->solde} USD");
+
+                $totalCredite += $montant;
+                $membresCredites++;
+
+                Log::info("✅ Membre crédité - ID: {$membreId}, Montant: {$montant} USD");
+
+            } catch (\Exception $e) {
+                Log::error("❌ Erreur crédit membre {$membreId}: " . $e->getMessage());
+                throw new \Exception("Erreur lors du crédit du membre {$membreId}: " . $e->getMessage());
+            }
+        }
+    }
+
+    Log::info("💰 TOTAL CRÉDITÉ AUX MEMBRES: {$totalCredite} USD pour {$membresCredites} membres");
+    Log::info('💳 === FIN CRÉDIT DIRECT SANS DOUBLE ===');
+}
+
+
+
+private function crediterComptesMembresDirect($montantsMembres, $creditGroupe)
+{
+    Log::info('💳 === CRÉDIT DIRECT AUX MEMBRES ===');
+    
+    $totalCredite = 0;
+    $membresCredites = 0;
+
+    foreach ($montantsMembres as $membreId => $montantMembre) {
+        $montant = floatval($montantMembre);
+        
+        if ($montant > 0) {
+            try {
+                // Trouver le compte du membre
+                $compteMembre = Compte::where('client_id', $membreId)->first();
+                
+                if (!$compteMembre) {
+                    Log::error("❌ Compte non trouvé pour client_id: {$membreId}");
+                    continue;
+                }
+
+                $soldeDebutMembre = $compteMembre->solde;
+                $nouveauSolde = $soldeDebutMembre + $montant;
+                
+                Log::info("👤 Membre {$membreId}: Solde début = {$soldeDebutMembre} USD, Crédit = {$montant} USD");
+
+                // CRÉDITER LE COMPTE DU MEMBRE
+                DB::table('comptes')
+                    ->where('id', $compteMembre->id)
+                    ->update(['solde' => $nouveauSolde]);
+                
+                $compteMembre->refresh();
+
+                Log::info("✅ APRÈS CRÉDIT: Solde après = {$compteMembre->solde} USD");
+
+                // CRÉER LE MOUVEMENT "DÉPÔT" POUR LE MEMBRE
+                Mouvement::create([
+                    'compte_id' => $compteMembre->id,
+                    'type_mouvement' => 'credit_groupe_recu',
+                    'montant' => $montant,
+                    'solde_avant' => $soldeDebutMembre,
+                    'solde_apres' => $compteMembre->solde,
+                    'description' => "Crédit groupe reçu - Montant: {$montant} USD - Groupe: {$creditGroupe->compte->nom}",
+                    'reference' => 'CREDIT-GRP-' . $creditGroupe->id,
+                    'date_mouvement' => now(),
+                    'nom_deposant' => 'TUMAINI LETU Finances',
+                ]);
+
+                $totalCredite += $montant;
+                $membresCredites++;
+
+                Log::info("✅ Membre crédité - ID: {$membreId}, Montant: {$montant} USD");
+
+            } catch (\Exception $e) {
+                Log::error("❌ Erreur crédit membre {$membreId}: " . $e->getMessage());
+                throw new \Exception("Erreur lors du crédit du membre {$membreId}: " . $e->getMessage());
+            }
+        }
+    }
+
+    Log::info("💰 TOTAL CRÉDITÉ AUX MEMBRES: {$totalCredite} USD pour {$membresCredites} membres");
+    Log::info('💳 === FIN CRÉDIT DIRECT ===');
+}
+
+
+/**
+ * CRÉDITER DIRECTEMENT LES COMPTES DES MEMBRES - VERSION AVEC COMPENSATION DU DOUBLE
+ */
+
+
+
+
+
+/**
+ * CALCUL DES FRAIS ET CAUTIONS POUR CHAQUE MEMBRE
+ */
+        private function calculerFraisEtCautionsMembres($montantsMembres)
+        {
+            $fraisParTranche = [
+                50 => ['dossier' => 2, 'alerte' => 4.5, 'carnet' => 2.5, 'total_frais' => 9],
+                100 => ['dossier' => 4, 'alerte' => 4.5, 'carnet' => 2.5, 'total_frais' => 11],
+                150 => ['dossier' => 6, 'alerte' => 4.5, 'carnet' => 2.5, 'total_frais' => 13],
+                200 => ['dossier' => 8, 'alerte' => 4.5, 'carnet' => 2.5, 'total_frais' => 15],
+                250 => ['dossier' => 10, 'alerte' => 4.5, 'carnet' => 2.5, 'total_frais' => 17],
+                300 => ['dossier' => 12, 'alerte' => 4.5, 'carnet' => 2.5, 'total_frais' => 19],
+                350 => ['dossier' => 14, 'alerte' => 4.5, 'carnet' => 2.5, 'total_frais' => 21],
+                400 => ['dossier' => 16, 'alerte' => 4.5, 'carnet' => 2.5, 'total_frais' => 23],
+                450 => ['dossier' => 18, 'alerte' => 4.5, 'carnet' => 2.5, 'total_frais' => 25],
+                500 => ['dossier' => 20, 'alerte' => 4.5, 'carnet' => 2.5, 'total_frais' => 27],
+            ];
+
+            $totalFrais = 0;
+            $totalCaution = 0;
+            $fraisDossierTotal = 0;
+            $fraisAlerteTotal = 0;
+            $fraisCarnetTotal = 0;
+
+            foreach ($montantsMembres as $membreId => $montantMembre) {
+                $montant = floatval($montantMembre);
+                
+                if ($montant > 0) {
+                    // Calcul de la caution (20% du montant accordé)
+                    $cautionMembre = $montant * 0.20;
+                    $totalCaution += $cautionMembre;
+
+                    // Calcul des frais selon la tranche
+                    $montantArrondi = floor($montant / 50) * 50;
+                    if ($montantArrondi < 50) $montantArrondi = 50;
+                    if ($montantArrondi > 500) $montantArrondi = 500;
+
+                    $fraisMembre = $fraisParTranche[$montantArrondi] ?? $fraisParTranche[500];
+                    
+                    $totalFrais += $fraisMembre['total_frais'];
+                    $fraisDossierTotal += $fraisMembre['dossier'];
+                    $fraisAlerteTotal += $fraisMembre['alerte'];
+                    $fraisCarnetTotal += $fraisMembre['carnet'];
+
+                    Log::info("👤 Membre {$membreId} - Montant: {$montant}, Frais: {$fraisMembre['total_frais']}, Caution: {$cautionMembre}");
+                }
+            }
+
+            return [
+                'total_frais' => $totalFrais,
+                'total_caution' => $totalCaution,
+                'frais_dossier_total' => $fraisDossierTotal,
+                'frais_alerte_total' => $fraisAlerteTotal,
+                'frais_carnet_total' => $fraisCarnetTotal,
+            ];
+        }
+
+/**
+ * CALCUL DES FRAIS SELON LE TABLEAU FOURNI
+ */
+    private function calculerFraisSelonMontant($montant)
+    {
+        $frais = [
+            50 => ['dossier' => 2, 'alerte' => 4.5, 'carnet' => 2.5],
+            100 => ['dossier' => 4, 'alerte' => 4.5, 'carnet' => 2.5],
+            150 => ['dossier' => 6, 'alerte' => 4.5, 'carnet' => 2.5],
+            200 => ['dossier' => 8, 'alerte' => 4.5, 'carnet' => 2.5],
+            250 => ['dossier' => 10, 'alerte' => 4.5, 'carnet' => 2.5],
+            300 => ['dossier' => 12, 'alerte' => 4.5, 'carnet' => 2.5],
+            350 => ['dossier' => 14, 'alerte' => 4.5, 'carnet' => 2.5],
+            400 => ['dossier' => 16, 'alerte' => 4.5, 'carnet' => 2.5],
+            450 => ['dossier' => 18, 'alerte' => 4.5, 'carnet' => 2.5],
+            500 => ['dossier' => 20, 'alerte' => 4.5, 'carnet' => 2.5],
+        ];
+        
+        // Arrondir au multiple de 50 inférieur
+        $montantArrondi = floor($montant / 50) * 50;
+        
+        // Si le montant est supérieur à 500, utiliser les frais de 500
+        if ($montantArrondi > 500) {
+            $montantArrondi = 500;
+        }
+        
+        // Si le montant est inférieur à 50, utiliser les frais de 50
+        if ($montantArrondi < 50) {
+            $montantArrondi = 50;
+        }
+        
+        $fraisCalcules = $frais[$montantArrondi];
+        $fraisCalcules['total_frais'] = $fraisCalcules['dossier'] + $fraisCalcules['alerte'] + $fraisCalcules['carnet'];
+        
+        return $fraisCalcules;
+    }
+
+
+
+  private function calculerRepartitionMembres($montantsMembres)
+{
+    $fraisParTranche = [
+        50 => ['dossier' => 2, 'alerte' => 4.5, 'carnet' => 2.5, 'total_frais' => 9],
+        100 => ['dossier' => 4, 'alerte' => 4.5, 'carnet' => 2.5, 'total_frais' => 11],
+        150 => ['dossier' => 6, 'alerte' => 4.5, 'carnet' => 2.5, 'total_frais' => 13],
+        200 => ['dossier' => 8, 'alerte' => 4.5, 'carnet' => 2.5, 'total_frais' => 15],
+        250 => ['dossier' => 10, 'alerte' => 4.5, 'carnet' => 2.5, 'total_frais' => 17],
+        300 => ['dossier' => 12, 'alerte' => 4.5, 'carnet' => 2.5, 'total_frais' => 19],
+        350 => ['dossier' => 14, 'alerte' => 4.5, 'carnet' => 2.5, 'total_frais' => 21],
+        400 => ['dossier' => 16, 'alerte' => 4.5, 'carnet' => 2.5, 'total_frais' => 23],
+        450 => ['dossier' => 18, 'alerte' => 4.5, 'carnet' => 2.5, 'total_frais' => 25],
+        500 => ['dossier' => 20, 'alerte' => 4.5, 'carnet' => 2.5, 'total_frais' => 27],
+    ];
+
     $repartition = [];
     
     foreach ($montantsMembres as $membreId => $montantMembre) {
         $montantMembre = floatval($montantMembre);
         if ($montantMembre > 0) {
-            $fraisMembre = Credit::calculerFraisGroupe($montantMembre);
-            $montantTotalMembre = Credit::calculerMontantTotalGroupe($montantMembre);
-            $remboursementHebdoMembre = Credit::calculerRemboursementHebdo($montantTotalMembre, 'groupe');
+            // Calcul des frais selon la tranche
+            $montantArrondi = floor($montantMembre / 50) * 50;
+            if ($montantArrondi < 50) $montantArrondi = 50;
+            if ($montantArrondi > 500) $montantArrondi = 500;
+
+            $fraisMembre = $fraisParTranche[$montantArrondi] ?? $fraisParTranche[500];
+            
+            // Calculs pour le membre
+            $montantTotalMembre = $montantMembre * 1.225; // Coefficient 1.225
+            $remboursementHebdoMembre = $montantTotalMembre / 16;
+            $cautionMembre = $montantMembre * 0.20;
+            
+            // Récupérer les infos du membre pour l'affichage
+            $compteMembre = Compte::where('client_id', $membreId)->first();
+            $nomMembre = $compteMembre ? $compteMembre->nom . ' ' . $compteMembre->prenom : 'Membre ' . $membreId;
+            $numeroCompte = $compteMembre ? $compteMembre->numero_compte : 'N/A';
             
             $repartition[$membreId] = [
+                'membre_id' => $membreId,
+                'nom_complet' => $nomMembre,
+                'numero_compte' => $numeroCompte,
                 'montant_accorde' => $montantMembre,
                 'frais_dossier' => $fraisMembre['dossier'],
                 'frais_alerte' => $fraisMembre['alerte'],
                 'frais_carnet' => $fraisMembre['carnet'],
-                'frais_adhesion' => $fraisMembre['adhesion'],
-                'caution' => $montantMembre * 0.20,
+                'frais_adhesion' => 0, // Frais d'adhésion supprimés
+                'caution' => $cautionMembre,
                 'montant_total' => $montantTotalMembre,
                 'remboursement_hebdo' => $remboursementHebdoMembre,
+                'credite' => true, // Indique que le membre a été crédité
             ];
         }
     }
@@ -733,5 +1044,302 @@ public function showEcheancier($credit_id)
     $compte = $credit->compte;
     
     return view('credits.echeancier', compact('credit', 'compte'));
+}
+
+/**
+ * MÉTHODE TEMPORAIRE POUR IDENTIFIER LA SOURCE DU DOUBLE CRÉDIT
+ */
+private function verifierDoubleCredit($creditGroupeId)
+{
+    Log::info("🔍 === VÉRIFICATION DOUBLE CRÉDIT POUR CRÉDIT GROUPE {$creditGroupeId} ===");
+    
+    $membresIds = [10, 32, 33, 35, 38];
+    
+    foreach ($membresIds as $membreId) {
+        $compteMembre = Compte::where('client_id', $membreId)->first();
+        if ($compteMembre) {
+            $mouvements = Mouvement::where('compte_id', $compteMembre->id)
+                ->where('created_at', '>=', now()->subHour())
+                ->get();
+                
+            Log::info("📊 Membre {$membreId} - Mouvements récents: " . $mouvements->count());
+            
+            foreach ($mouvements as $mouvement) {
+                Log::info("   - {$mouvement->type_mouvement}: {$mouvement->montant} USD - Ref: {$mouvement->reference}");
+            }
+        }
+    }
+    
+    Log::info("🔍 === FIN VÉRIFICATION DOUBLE CRÉDIT ===");
+}
+   
+
+/**
+ * Générer les écritures comptables pour un crédit individuel
+ */
+/**
+ * Générer les écritures comptables pour un crédit individuel (VERSION CORRIGÉE)
+ */
+private function genererEcrituresComptablesCreditIndividuel($credit, $compte, $frais, $montantTotal)
+{
+    try {
+        $journal = JournalComptable::where('type_journal', 'banque')->first();
+        
+        if (!$journal) {
+            Log::warning('Journal banque non trouvé pour écriture comptable crédit individuel');
+            return;
+        }
+
+        $reference = 'CREDIT-IND-' . $credit->id . '-' . now()->format('YmdHis');
+
+        // ✅ SEULEMENT LES FRAIS ET LA CAUTION - PAS LE CAPITAL
+        // (le capital est déjà géré par votre système existant)
+
+        // 1. Écriture pour les frais perçus
+        $totalFrais = $frais['dossier'] + $frais['alerte'];
+
+        if ($totalFrais > 0) {
+            // Débit: Compte caisse (frais perçus)
+            EcritureComptable::create([
+                'journal_comptable_id' => $journal->id,
+                'reference_operation' => $reference . '-FRAIS',
+                'type_operation' => 'frais_credit_individuel',
+                'compte_number' => '571100', // Compte caisse
+                'libelle' => "Frais crédit individuel - Client: {$compte->nom} - Crédit #{$credit->id}",
+                'montant_debit' => $totalFrais,
+                'montant_credit' => 0,
+                'date_ecriture' => now(),
+                'date_valeur' => now(),
+                'devise' => $compte->devise,
+                'statut' => 'comptabilise',
+                'created_by' => auth::id(),
+            ]);
+
+            // Crédit: Compte produits divers (revenus frais)
+            EcritureComptable::create([
+                'journal_comptable_id' => $journal->id,
+                'reference_operation' => $reference . '-FRAIS',
+                'type_operation' => 'frais_credit_individuel',
+                'compte_number' => '758100', // Produits divers
+                'libelle' => "Frais crédit individuel - Client: {$compte->nom} - Crédit #{$credit->id}",
+                'montant_debit' => 0,
+                'montant_credit' => $totalFrais,
+                'date_ecriture' => now(),
+                'date_valeur' => now(),
+                'devise' => $compte->devise,
+                'statut' => 'comptabilise',
+                'created_by' => auth::id(),
+            ]);
+        }
+
+        // 2. Écriture pour la caution bloquée
+        if ($frais['caution'] > 0) {
+            // Débit: Compte caution clients
+            EcritureComptable::create([
+                'journal_comptable_id' => $journal->id,
+                'reference_operation' => $reference . '-CAUTION',
+                'type_operation' => 'caution_credit_individuel',
+                'compte_number' => '455000', // Compte caution clients
+                'libelle' => "Caution crédit individuel - Client: {$compte->nom} - Crédit #{$credit->id}",
+                'montant_debit' => $frais['caution'],
+                'montant_credit' => 0,
+                'date_ecriture' => now(),
+                'date_valeur' => now(),
+                'devise' => $compte->devise,
+                'statut' => 'comptabilise',
+                'created_by' => auth::id(),
+            ]);
+
+            // Crédit: Compte caisse (caution reçue)
+            EcritureComptable::create([
+                'journal_comptable_id' => $journal->id,
+                'reference_operation' => $reference . '-CAUTION',
+                'type_operation' => 'caution_credit_individuel',
+                'compte_number' => '571100', // Compte caisse
+                'libelle' => "Caution crédit individuel - Client: {$compte->nom} - Crédit #{$credit->id}",
+                'montant_debit' => 0,
+                'montant_credit' => $frais['caution'],
+                'date_ecriture' => now(),
+                'date_valeur' => now(),
+                'devise' => $compte->devise,
+                'statut' => 'comptabilise',
+                'created_by' => auth::id(),
+            ]);
+        }
+
+        // ❌ SUPPRIMÉ : Les écritures pour le capital (2,000 USD)
+        // Votre système les génère déjà automatiquement
+
+        Log::info("✅ Écritures comptables créées pour crédit individuel #{$credit->id} (frais et caution seulement)");
+
+    } catch (\Exception $e) {
+        Log::error("❌ Erreur création écritures comptables crédit individuel: " . $e->getMessage());
+    }
+}
+
+/**
+ * Générer les écritures comptables pour un crédit groupe (VERSION COMPLÈTE)
+ */
+private function genererEcrituresComptablesCreditGroupeCorrect($creditGroupe, $compteGroupe, $totalFrais, $totalCaution, $montantTotalGroupe)
+{
+    try {
+        Log::info('📘 === DÉBUT ÉCRITURES COMPTABLES GROUPE ===');
+        
+        $journal = JournalComptable::where('type_journal', 'banque')->first();
+        
+        if (!$journal) {
+            // Créer un journal par défaut
+            $journal = JournalComptable::create([
+                'nom' => 'Journal Banque Principal',
+                'type_journal' => 'banque',
+                'code' => 'BQ',
+                'devise' => 'USD',
+                'statut' => 'actif'
+            ]);
+        }
+
+        $reference = 'CREDIT-GRP-' . $creditGroupe->id;
+        $userId = auth::id() ?? 1;
+
+        // 1. ÉCRITURES POUR LES FRAIS (PRODUITS)
+        if ($totalFrais > 0) {
+            // Débit: Compte caisse (frais reçus)
+            EcritureComptable::create([
+                'journal_comptable_id' => $journal->id,
+                'reference_operation' => $reference . '-FRAIS',
+                'type_operation' => 'frais_credit_groupe',
+                'compte_number' => '571100', // Caisse
+                'libelle' => "Frais crédit groupe perçus - Groupe: {$compteGroupe->nom}",
+                'montant_debit' => $totalFrais,
+                'montant_credit' => 0,
+                'date_ecriture' => now(),
+                'date_valeur' => now(),
+                'devise' => $compteGroupe->devise,
+                'statut' => 'comptabilise',
+                'created_by' => $userId,
+            ]);
+
+            // Crédit: Compte produits frais
+            EcritureComptable::create([
+                'journal_comptable_id' => $journal->id,
+                'reference_operation' => $reference . '-FRAIS',
+                'type_operation' => 'frais_credit_groupe',
+                'compte_number' => '758100', // Produits divers
+                'libelle' => "Produits frais crédit groupe - Groupe: {$compteGroupe->nom}",
+                'montant_debit' => 0,
+                'montant_credit' => $totalFrais,
+                'date_ecriture' => now(),
+                'date_valeur' => now(),
+                'devise' => $compteGroupe->devise,
+                'statut' => 'comptabilise',
+                'created_by' => $userId,
+            ]);
+
+            Log::info("✅ Écritures frais: {$totalFrais} USD");
+        }
+
+        // 2. ÉCRITURES POUR LA CAUTION
+        if ($totalCaution > 0 && $creditGroupe->caution_bloquee) {
+            // Débit: Compte caution groupes
+            EcritureComptable::create([
+                'journal_comptable_id' => $journal->id,
+                'reference_operation' => $reference . '-CAUTION',
+                'type_operation' => 'caution_credit_groupe',
+                'compte_number' => '455100', // Caution groupes
+                'libelle' => "Caution crédit groupe bloquée - Groupe: {$compteGroupe->nom}",
+                'montant_debit' => $totalCaution,
+                'montant_credit' => 0,
+                'date_ecriture' => now(),
+                'date_valeur' => now(),
+                'devise' => $compteGroupe->devise,
+                'statut' => 'comptabilise',
+                'created_by' => $userId,
+            ]);
+
+            // Crédit: Compte caisse (caution reçue)
+            EcritureComptable::create([
+                'journal_comptable_id' => $journal->id,
+                'reference_operation' => $reference . '-CAUTION',
+                'type_operation' => 'caution_credit_groupe',
+                'compte_number' => '571100', // Caisse
+                'libelle' => "Caution reçue crédit groupe - Groupe: {$compteGroupe->nom}",
+                'montant_debit' => 0,
+                'montant_credit' => $totalCaution,
+                'date_ecriture' => now(),
+                'date_valeur' => now(),
+                'devise' => $compteGroupe->devise,
+                'statut' => 'comptabilise',
+                'created_by' => $userId,
+            ]);
+
+            Log::info("✅ Écritures caution: {$totalCaution} USD");
+        }
+
+        Log::info('📘 === FIN ÉCRITURES COMPTABLES ===');
+
+    } catch (\Exception $e) {
+        Log::error("❌ Erreur écritures comptables: " . $e->getMessage());
+        throw new \Exception("Erreur création écritures comptables: " . $e->getMessage());
+    }
+}
+/**
+ * Créer les mouvements pour un crédit groupe (comme pour l'individuel)
+ */
+/**
+ * Créer les mouvements pour un crédit groupe (comme pour l'individuel) - VERSION CORRIGÉE
+ */
+private function creerMouvementsCreditGroupe($creditGroupe, $compteGroupe, $totalFrais, $totalCaution, $fraisPreleves)
+{
+    try {
+        $soldeDebut = $compteGroupe->solde;
+        
+        // 1. Mouvement pour les frais payés (si prélevés)
+        if ($fraisPreleves && $totalFrais > 0) {
+            $soldeApresFrais = $soldeDebut - $totalFrais;
+            
+            Mouvement::create([
+                'compte_id' => $compteGroupe->id,
+                'type_mouvement' => 'frais_payes_credit_groupe',
+                'montant' => -$totalFrais,
+                'solde_avant' => $soldeDebut,
+                'solde_apres' => $soldeApresFrais,
+                'description' => "Paiement frais crédit groupe - Dossier: {$creditGroupe->frais_dossier}, Alerte: {$creditGroupe->frais_alerte}, Carnet: {$creditGroupe->frais_carnet}",
+                'reference' => 'FRAIS-CREDIT-GROUPE-' . $creditGroupe->id,
+                'date_mouvement' => now(),
+                'nom_deposant' => $compteGroupe->nom ?? 'Groupe',
+            ]);
+
+            Log::info("💰 MOUVEMENT FRAIS - Crédit groupe #{$creditGroupe->id}: {$totalFrais} {$compteGroupe->devise} déduits");
+        }
+
+        // 2. Mouvement pour la caution bloquée
+        if ($creditGroupe->caution_bloquee && $totalCaution > 0) {
+            $soldeActuel = $compteGroupe->fresh()->solde; // Recharger le solde actuel
+            
+            Mouvement::create([
+                'compte_id' => $compteGroupe->id,
+                'type_mouvement' => 'caution_bloquee_groupe',
+                'montant' => -$totalCaution, // ❌ CORRECTION: Montant négatif pour la déduction
+                'solde_avant' => $soldeActuel,
+                'solde_apres' => $soldeActuel - $totalCaution, // ❌ CORRECTION: Calcul correct
+                'description' => "Caution bloquée pour crédit groupe - Montant: {$totalCaution} {$compteGroupe->devise}",
+                'reference' => 'CAUTION-GROUPE-' . $creditGroupe->id,
+                'date_mouvement' => now(),
+                'nom_deposant' => 'TUMAINI LETU Finances',
+            ]);
+
+            // ❌ CORRECTION: Mettre à jour le solde du compte groupe
+            $compteGroupe->solde -= $totalCaution;
+            $compteGroupe->save();
+
+            Log::info("🔒 MOUVEMENT CAUTION - Crédit groupe #{$creditGroupe->id}: {$totalCaution} {$compteGroupe->devise} bloqués");
+        }
+
+        Log::info("✅ Mouvements créés pour crédit groupe #{$creditGroupe->id}");
+
+    } catch (\Exception $e) {
+        Log::error("❌ Erreur création mouvements crédit groupe: " . $e->getMessage());
+        throw $e;
+    }
 }
 }

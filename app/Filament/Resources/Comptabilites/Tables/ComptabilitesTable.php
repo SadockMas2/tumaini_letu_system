@@ -5,15 +5,28 @@ namespace App\Filament\Resources\Comptabilites\Tables;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
+use Filament\Actions\ExportBulkAction;
+use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\TextInput\Actions\CopyAction;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\Filter;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 class ComptabilitesTable
 {
     public static function configure(Table $table): Table
     {
         return $table
+                ->defaultSort('created_at', 'desc')
+                
+
             ->columns([
+                TextColumn::make('created_at')
+                    ->dateTime()
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('date_ecriture')
                     ->date()
                     ->sortable(),
@@ -25,30 +38,65 @@ class ComptabilitesTable
                     ->searchable()
                     ->limit(50),
                 TextColumn::make('montant_debit')
-                    ->money(function ($record) {
-                        // Détermine la devise basée sur le compte ou autre logique métier
-                        return self::getDeviseFromCompte($record->compte_number);
-                    })
-                    ->label('Débit'),
+                        ->numeric(
+                            decimalPlaces: 2,
+                            decimalSeparator: ',',
+                            thousandsSeparator: ' '
+                        )
+                        ->label('Débit'),
+
                 TextColumn::make('montant_credit')
-                    ->money(function ($record) {
-                        return self::getDeviseFromCompte($record->compte_number);
-                    })
-                    ->label('Crédit'),
+                        ->numeric(
+                            decimalPlaces: 2,
+                            decimalSeparator: ',',
+                            thousandsSeparator: ' '
+                        )
+                        ->label('Crédit'),
                 TextColumn::make('devise')
                     ->label('Devise')
                     ->badge()
                     ->color(fn ($state) => $state === 'USD' ? 'success' : 'warning'),
+
+                TextColumn::make('created_at')
+                    ->dateTime()
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('updated_at')
+                    ->dateTime()
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
-                //
+                    Filter::make('created_at')
+
+            ->schema([
+                        DatePicker::make('created_from')
+                            ->label('Du'),
+                        DatePicker::make('created_until')
+                            ->label('Au'),
+                        TextInput::make('compte_number')
+                    ->label('Compte'),
+                    ])
+                    ->query(function (Builder $query, array $data): Builder {
+                        return $query
+                            ->when(
+                                $data['created_from'],
+                                fn (Builder $query, $date): Builder => $query->whereDate('created_at', '>=', $date),
+                            )
+                            ->when(
+                                $data['created_until'],
+                                fn (Builder $query, $date): Builder => $query->whereDate('created_at', '<=', $date),
+                            );
+                    }),
             ])
             ->recordActions([
-                EditAction::make(),
+                // EditAction::make(),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([
-                    DeleteBulkAction::make(),
+                    // DeleteBulkAction::make(),
+                    ExportBulkAction::make(),
+                    
                 ]),
             ]);
     }

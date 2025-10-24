@@ -68,7 +68,7 @@ return [
     |
     */
 
-//    'timezone' => 'Africa/Lubumbashi',
+   'timezone' => 'Africa/Lubumbashi',
 
     /*
     |--------------------------------------------------------------------------

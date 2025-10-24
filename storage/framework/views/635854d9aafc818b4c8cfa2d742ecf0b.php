@@ -1,9 +1,9 @@
-    <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Échéancier du Crédit Groupe - {{ $credit->compte->nom }}</title>
+    <title>Échéancier du Crédit Groupe - <?php echo e($credit->compte->nom); ?></title>
     <style>
         @page { size: A4; margin: 1cm; }
         body {
@@ -70,23 +70,24 @@
     <div class="screen-header no-print" style="text-align:center; margin-bottom:20px; padding:20px; background:linear-gradient(135deg,#667eea 0%,#764ba2 100%); color:white; border-radius:10px;">
         <h1 style="margin:0; font-size:28px;">Échéancier du Crédit Groupe</h1>
         <p style="margin:5px 0; font-size:16px; opacity:0.9;">
-            Groupe: {{ $credit->compte->nom }} - {{ $credit->compte->numero_compte }}
+            Groupe: <?php echo e($credit->compte->nom); ?> - <?php echo e($credit->compte->numero_compte); ?>
+
         </p>
     </div>
 
     <div class="screen-actions no-print" style="text-align:center; margin:20px 0;">
         <button onclick="window.print()" class="btn btn-primary"><i class="fas fa-print"></i> Imprimer</button>
-        <a href="{{ route('credits.details-groupe', $credit->id) }}" class="btn btn-success"><i class="fas fa-arrow-left"></i> Retour</a>
+        <a href="<?php echo e(route('credits.details-groupe', $credit->id)); ?>" class="btn btn-success"><i class="fas fa-arrow-left"></i> Retour</a>
     </div>
 
     <div>
         <div class="header">
             <div class="logo">
-                @if(file_exists(public_path('images/logo-tumaini1.png')))
-                    <img src="{{ asset('images/logo-tumaini1.png') }}" alt="TUMAINI LETU asbl">
-                @else
+                <?php if(file_exists(public_path('images/logo-tumaini1.png'))): ?>
+                    <img src="<?php echo e(asset('images/logo-tumaini1.png')); ?>" alt="TUMAINI LETU asbl">
+                <?php else: ?>
                     <div style="height:65px;width:120px;background:#f0f0f0;display:flex;align-items:center;justify-content:center;border:1px dashed #ccc;font-size:9px;">TUMAINI LETU</div>
-                @endif
+                <?php endif; ?>
             </div>
             <div class="header-info">
                 <div><strong>Tumaini Letu asbl</strong></div>
@@ -100,8 +101,8 @@
         <div class="separator"></div>
 
         <div class="ref-date">
-            <div>RÉFÉRENCE : ÉCH-G{{ $credit->id }}-{{ date('Ymd') }}</div>
-            <div>DATE : {{ now()->format('d/m/Y') }}</div>
+            <div>RÉFÉRENCE : ÉCH-G<?php echo e($credit->id); ?>-<?php echo e(date('Ymd')); ?></div>
+            <div>DATE : <?php echo e(now()->format('d/m/Y')); ?></div>
             <div>PÉRIODE : 16 SEMAINES</div>
         </div>
 
@@ -110,18 +111,18 @@
         <div class="client-info">
             <div style="text-align:center; font-weight:bold; margin-bottom:8px; font-size:13px;">ÉCHÉANCIER DE REMBOURSEMENT - CRÉDIT GROUPE</div>
             <div class="info-grid">
-                <div class="info-item"><span class="info-label">Numéro Compte :</span><span>{{ $credit->compte->numero_compte }}</span></div>
-                <div class="info-item"><span class="info-label">Nom du Groupe :</span><span>{{ $credit->compte->nom }}</span></div>
+                <div class="info-item"><span class="info-label">Numéro Compte :</span><span><?php echo e($credit->compte->numero_compte); ?></span></div>
+                <div class="info-item"><span class="info-label">Nom du Groupe :</span><span><?php echo e($credit->compte->nom); ?></span></div>
                 <div class="info-item"><span class="info-label">Type Crédit :</span><span>Groupe Solidaire</span></div>
-                <div class="info-item"><span class="info-label">Date Octroi :</span><span>{{ $credit->date_octroi->format('d/m/Y') }}</span></div>
-                <div class="info-item"><span class="info-label">Montant Accordé :</span><span>{{ number_format($credit->montant_accorde, 2, ',', ' ') }} USD</span></div>
-                <div class="info-item"><span class="info-label">Montant Total :</span><span>{{ number_format($credit->montant_total, 2, ',', ' ') }} USD</span></div>
-                <div class="info-item"><span class="info-label">Remb. Hebdo Total :</span><span>{{ number_format($credit->remboursement_hebdo_total, 2, ',', ' ') }} USD</span></div>
-                <div class="info-item"><span class="info-label">Date Fin :</span><span>{{ $credit->date_echeance->format('d/m/Y') }}</span></div>
+                <div class="info-item"><span class="info-label">Date Octroi :</span><span><?php echo e($credit->date_octroi->format('d/m/Y')); ?></span></div>
+                <div class="info-item"><span class="info-label">Montant Accordé :</span><span><?php echo e(number_format($credit->montant_accorde, 2, ',', ' ')); ?> USD</span></div>
+                <div class="info-item"><span class="info-label">Montant Total :</span><span><?php echo e(number_format($credit->montant_total, 2, ',', ' ')); ?> USD</span></div>
+                <div class="info-item"><span class="info-label">Remb. Hebdo Total :</span><span><?php echo e(number_format($credit->remboursement_hebdo_total, 2, ',', ' ')); ?> USD</span></div>
+                <div class="info-item"><span class="info-label">Date Fin :</span><span><?php echo e($credit->date_echeance->format('d/m/Y')); ?></span></div>
             </div>
         </div>
 
-        @php
+        <?php
             $dateDebut = $credit->date_octroi->copy()->addWeeks(2);
             $capitalHebdo = $credit->montant_accorde / 16;
             $interetHebdo = ($credit->montant_total - $credit->montant_accorde) / 16;
@@ -152,7 +153,7 @@
             $echeances[15]['capital_hebdo'] = $credit->montant_accorde - ($capitalHebdo * 15);
             $echeances[15]['montant_total'] = $echeances[15]['capital_hebdo'] + $interetHebdo;
             $echeances[15]['capital_restant'] = 0;
-        @endphp
+        ?>
 
         <table class="echeancier-table">
             <thead>
@@ -167,25 +168,25 @@
                 </tr>
             </thead>
             <tbody>
-                @foreach($echeances as $echeance)
+                <?php $__currentLoopData = $echeances; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $echeance): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
                 <tr>
-                    <td>{{ $echeance['semaine'] }}</td>
-                    <td>{{ $echeance['date']->format('d/m/Y') }}</td>
-                    <td>{{ number_format($echeance['capital_hebdo'], 2, ',', ' ') }} USD</td>
-                    <td>{{ number_format($echeance['interet_hebdo'], 2, ',', ' ') }} USD</td>
-                    <td>{{ number_format($echeance['montant_total'], 2, ',', ' ') }} USD</td>
-                    <td>{{ number_format($echeance['capital_restant'], 2, ',', ' ') }} USD</td>
+                    <td><?php echo e($echeance['semaine']); ?></td>
+                    <td><?php echo e($echeance['date']->format('d/m/Y')); ?></td>
+                    <td><?php echo e(number_format($echeance['capital_hebdo'], 2, ',', ' ')); ?> USD</td>
+                    <td><?php echo e(number_format($echeance['interet_hebdo'], 2, ',', ' ')); ?> USD</td>
+                    <td><?php echo e(number_format($echeance['montant_total'], 2, ',', ' ')); ?> USD</td>
+                    <td><?php echo e(number_format($echeance['capital_restant'], 2, ',', ' ')); ?> USD</td>
                     <td>À venir</td>
                 </tr>
-                @endforeach
+                <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
             </tbody>
         </table>
 
         <div class="total-section">
             <div class="total-grid">
-                <div class="total-item"><div>Montant Accordé</div><div class="total-value">{{ number_format($credit->montant_accorde, 2, ',', ' ') }} USD</div></div>
-                <div class="total-item"><div>Total Intérêts</div><div class="total-value">{{ number_format($credit->montant_total - $credit->montant_accorde, 2, ',', ' ') }} USD</div></div>
-                <div class="total-item"><div>Montant Total</div><div class="total-value">{{ number_format($credit->montant_total, 2, ',', ' ') }} USD</div></div>
+                <div class="total-item"><div>Montant Accordé</div><div class="total-value"><?php echo e(number_format($credit->montant_accorde, 2, ',', ' ')); ?> USD</div></div>
+                <div class="total-item"><div>Total Intérêts</div><div class="total-value"><?php echo e(number_format($credit->montant_total - $credit->montant_accorde, 2, ',', ' ')); ?> USD</div></div>
+                <div class="total-item"><div>Montant Total</div><div class="total-value"><?php echo e(number_format($credit->montant_total, 2, ',', ' ')); ?> USD</div></div>
                 <div class="total-item"><div>Durée Totale</div><div class="total-value">16 Semaines</div></div>
             </div>
         </div>
@@ -193,20 +194,20 @@
         <div style="margin-top:12px;padding:8px;background-color:#fff3cd;border:1px solid #ffeaa7;border-radius:4px;font-size:9px;">
             <strong>Notes importantes :</strong><br>
             • Le remboursement commence 2 semaines après la date d'octroi du crédit<br>
-            • Paiement hebdomadaire obligatoire chaque {{ $dateDebut->locale('fr')->translatedFormat('l') }}<br>
+            • Paiement hebdomadaire obligatoire chaque <?php echo e($dateDebut->locale('fr')->translatedFormat('l')); ?><br>
             • En cas de retard, des pénalités de 5% seront appliquées<br>
-            • La caution totale de {{ number_format($credit->caution_totale, 2, ',', ' ') }} USD sera débloquée après remboursement complet<br>
+            • La caution totale de <?php echo e(number_format($credit->caution_totale, 2, ',', ' ')); ?> USD sera débloquée après remboursement complet<br>
             • Solidarité groupe : tout retard affecte l'ensemble des membres
         </div>
 
         <div class="signature-section">
-            <div class="signature">Signature du Responsable Groupe<br><div style="margin-top:35px;">{{ $credit->compte->nom }}</div></div>
+            <div class="signature">Signature du Responsable Groupe<br><div style="margin-top:35px;"><?php echo e($credit->compte->nom); ?></div></div>
             <div class="signature">Signature du Responsable<br><div style="margin-top:35px;">Tumaini Letu asbl</div></div>
         </div>
 
         <div class="footer">
             <div class="separator"></div>
-            Document généré le {{ now()->format('d/m/Y à H:i') }} | Tumaini Letu asbl
+            Document généré le <?php echo e(now()->format('d/m/Y à H:i')); ?> | Tumaini Letu asbl
         </div>
     </div>
 
@@ -218,3 +219,4 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/js/all.min.js"></script>
 </body>
 </html>
+<?php /**PATH D:\APP\TUMAINI LETU\tumainiletusystem2.0\resources\views/credits/echeanciers-groupe.blade.php ENDPATH**/ ?>

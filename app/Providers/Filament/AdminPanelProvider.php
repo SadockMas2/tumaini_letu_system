@@ -2,6 +2,7 @@
 
 namespace App\Providers\Filament;
 
+use App\Filament\Widgets\DateTimeWidget;
 use App\Filament\Widgets\HeaderThemeSwitcher;
 use Filament\Navigation\MenuItem;
 use Filament\Actions\Action;
@@ -14,6 +15,7 @@ use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
 use Filament\Widgets;
 use Filament\Http\Middleware\Authenticate;
+use Filament\Widgets\FilamentInfoWidget;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
@@ -59,8 +61,9 @@ class AdminPanelProvider extends PanelProvider
                 Pages\Dashboard::class,
             ])
             ->widgets([
-                Widgets\AccountWidget::class,
-                Widgets\FilamentInfoWidget::class,
+                DateTimeWidget::class,
+                // AccountWidget::class,
+                // FilamentInfoWidget::class,
                 HeaderThemeSwitcher::class,
 ])
             // ✅ APPROCHE SIMPLIFIÉE - SUPPRIMEZ LE USER MENU ITEM POUR L'INSTANT

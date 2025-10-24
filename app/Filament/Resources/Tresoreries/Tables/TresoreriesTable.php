@@ -49,12 +49,18 @@ class TresoreriesTable
                     ->falseIcon('heroicon-o-x-circle')
                     ->trueColor('success')
                     ->falseColor('danger'),
+
+                    TextColumn::make('created_at')
+                    ->label('Date')
+                    ->dateTime('d/m/Y H:i')
+                    ->sortable(),
+
             ])
             ->filters([
                 //
             ])
             ->recordActions([
-                EditAction::make(),
+                
                 Action::make('historique_mouvements')
                     ->label('Historique')
                     ->icon('heroicon-o-list-bullet')
@@ -62,7 +68,7 @@ class TresoreriesTable
             ])
             ->toolbarActions([
                 BulkActionGroup::make([
-                    DeleteBulkAction::make(),
+                   
                 ]),
             ])
             ->emptyStateActions([

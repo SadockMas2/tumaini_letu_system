@@ -51,7 +51,7 @@ class CompteSpecialResource extends Resource
         return [
             'index' => ListCompteSpecials::route('/'),
             'create' => CreateCompteSpecial::route('/create'),
-            'edit' => EditCompteSpecial::route('/{record}/edit'),
+            // 'edit' => EditCompteSpecial::route('/{record}/edit'),
         ];
     }
 

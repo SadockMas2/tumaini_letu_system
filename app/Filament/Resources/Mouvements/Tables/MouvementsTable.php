@@ -9,8 +9,11 @@ use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
+use Filament\Forms\Components\DatePicker;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\Filter;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
@@ -42,7 +45,12 @@ class MouvementsTable
         $totalsLabel = count($totalsDisplay) > 0 ? implode(' | ', $totalsDisplay) : 'Aucun mouvement aujourd\'hui';
 
         return $table
+        ->defaultSort('created_at', 'desc')
             ->columns([
+                 TextColumn::make('created_at')
+                    ->dateTime()
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('numero_compte')->label('Compte')->sortable(),
                 TextColumn::make('client_nom')->label('Client')->sortable(),
                 TextColumn::make('nom_deposant')->label('Nom du déposant/retirant')->sortable(),
@@ -125,7 +133,25 @@ class MouvementsTable
                     }),
             ])
             ->filters([
-                //
+                   Filter::make('created_at')
+
+            ->schema([
+                        DatePicker::make('created_from')
+                            ->label('Du'),
+                        DatePicker::make('created_until')
+                            ->label('Au'),
+                    ])
+                    ->query(function (Builder $query, array $data): Builder {
+                        return $query
+                            ->when(
+                                $data['created_from'],
+                                fn (Builder $query, $date): Builder => $query->whereDate('created_at', '>=', $date),
+                            )
+                            ->when(
+                                $data['created_until'],
+                                fn (Builder $query, $date): Builder => $query->whereDate('created_at', '<=', $date),
+                            );
+                    }),
             ])
             ->recordActions([
                 EditAction::make(),

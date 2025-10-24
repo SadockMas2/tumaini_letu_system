@@ -54,7 +54,7 @@ class EpargneResource extends Resource
         return [
             'index' => ListEpargnes::route('/'),
             'create' => CreateEpargne::route('/create'),
-            'edit' => EditEpargne::route('/{record}/edit'),
+            // 'edit' => EditEpargne::route('/{record}/edit'),
         ];
     }
 

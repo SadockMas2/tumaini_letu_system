@@ -270,19 +270,40 @@ public function creerEcheanciersMembres()
     public static function calculerFraisGroupe($montantTotalGroupe)
     {
         $frais = [
-            50 => ['dossier' => 2, 'alerte' => 4.5, 'carnet' => 2.5, 'adhesion' => 5, 'caution' => 10],
-            100 => ['dossier' => 4, 'alerte' => 4.5, 'carnet' => 2.5, 'adhesion' => 5, 'caution' => 20],
-            150 => ['dossier' => 6, 'alerte' => 4.5, 'carnet' => 2.5, 'adhesion' => 5, 'caution' => 30],
-            200 => ['dossier' => 8, 'alerte' => 4.5, 'carnet' => 2.5, 'adhesion' => 5, 'caution' => 40],
-            250 => ['dossier' => 10, 'alerte' => 4.5, 'carnet' => 2.5, 'adhesion' => 5, 'caution' => 50],
-            300 => ['dossier' => 12, 'alerte' => 4.5, 'carnet' => 2.5, 'adhesion' => 5, 'caution' => 60],
-            350 => ['dossier' => 14, 'alerte' => 4.5, 'carnet' => 2.5, 'adhesion' => 5, 'caution' => 70],
-            400 => ['dossier' => 16, 'alerte' => 4.5, 'carnet' => 2.5, 'adhesion' => 5, 'caution' => 80],
-            450 => ['dossier' => 18, 'alerte' => 4.5, 'carnet' => 2.5, 'adhesion' => 5, 'caution' => 90],
-            500 => ['dossier' => 20, 'alerte' => 4.5, 'carnet' => 2.5, 'adhesion' => 5, 'caution' => 100],
+            50 => ['dossier' => 2, 'alerte' => 4.5, 'carnet' => 2.5,  'caution' => 10],
+            100 => ['dossier' => 4, 'alerte' => 4.5, 'carnet' => 2.5, 'caution' => 20],
+            150 => ['dossier' => 6, 'alerte' => 4.5, 'carnet' => 2.5, 'caution' => 30],
+            200 => ['dossier' => 8, 'alerte' => 4.5, 'carnet' => 2.5, 'caution' => 40],
+            250 => ['dossier' => 10, 'alerte' => 4.5, 'carnet' => 2.5, 'caution' => 50],
+            300 => ['dossier' => 12, 'alerte' => 4.5, 'carnet' => 2.5,'caution' => 60],
+            350 => ['dossier' => 14, 'alerte' => 4.5, 'carnet' => 2.5, 'caution' => 70],
+            400 => ['dossier' => 16, 'alerte' => 4.5, 'carnet' => 2.5, 'caution' => 80],
+            450 => ['dossier' => 18, 'alerte' => 4.5, 'carnet' => 2.5, 'caution' => 90],
+            500 => ['dossier' => 20, 'alerte' => 4.5, 'carnet' => 2.5, 'caution' => 100],
         ];
 
         $montantArrondi = floor($montantTotalGroupe / 50) * 50;
-        return $frais[$montantArrondi] ?? $frais[500] ?? ['dossier' => 20, 'alerte' => 4.5, 'carnet' => 2.5, 'adhesion' => 1, 'caution' => 100];
+        return $frais[$montantArrondi] ?? $frais[500] ?? ['dossier' => 20, 'alerte' => 4.5, 'carnet' => 2.5, 'caution' => 100];
     }
+
+    // Dans App\Models\CreditGroupe
+        public function getMembresCreditesAttribute()
+        {
+            $repartition = $this->repartition_membres ?? [];
+            $membresCredites = [];
+
+            foreach ($repartition as $membreId => $details) {
+                if (isset($details['credite']) && $details['credite']) {
+                    $membresCredites[] = [
+                        'membre_id' => $membreId,
+                        'nom_complet' => $details['nom_complet'] ?? 'Membre ' . $membreId,
+                        'numero_compte' => $details['numero_compte'] ?? 'N/A',
+                        'montant_accorde' => $details['montant_accorde'] ?? 0,
+                        'montant_credite' => $details['montant_accorde'] ?? 0, // Montant effectivement crédité
+                    ];
+                }
+            }
+
+            return $membresCredites;
+        }
 }

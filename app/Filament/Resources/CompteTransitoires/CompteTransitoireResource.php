@@ -52,7 +52,7 @@ class CompteTransitoireResource extends Resource
         return [
             'index' => ListCompteTransitoires::route('/'),
             'create' => CreateCompteTransitoire::route('/create'),
-            'edit' => EditCompteTransitoire::route('/{record}/edit'),
+            // 'edit' => EditCompteTransitoire::route('/{record}/edit'),
         ];
     }
 

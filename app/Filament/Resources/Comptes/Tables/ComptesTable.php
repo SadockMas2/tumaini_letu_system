@@ -37,6 +37,7 @@ class ComptesTable
                 
                 TextColumn::make('numero_membre')->label('Numéro Membre')->searchable()->sortable(),
                 TextColumn::make('nom')->label('Nom')->searchable()->sortable(),
+                TextColumn::make('postnom')->label('Post-nom')->searchable()->sortable(),
                 TextColumn::make('prenom')->label('Prénom')->searchable()->sortable(),
                 
                 TextColumn::make('devise')

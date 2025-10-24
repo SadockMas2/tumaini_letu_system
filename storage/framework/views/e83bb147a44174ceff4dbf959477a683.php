@@ -68,7 +68,8 @@
                             <i class="fas fa-money-bill-wave text-blue-600 text-xl"></i>
                         </div>
                         <span class="text-2xl font-bold text-blue-600">
-                            {{ number_format(floatval($credit->montant_demande ?? 0), 2, ',', ' ') }}
+                            <?php echo e(number_format(floatval($credit->montant_demande ?? 0), 2, ',', ' ')); ?>
+
                         </span>
                     </div>
                     <p class="text-sm text-gray-600 font-medium">Montant Demandé</p>
@@ -120,22 +121,23 @@
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                     <div>
                         <p class="text-sm text-gray-600">Nom du Groupe</p>
-                        <p class="font-semibold text-gray-800">{{ $compte->nom ?? 'Groupe Solidaire' }}</p>
+                        <p class="font-semibold text-gray-800"><?php echo e($compte->nom ?? 'Groupe Solidaire'); ?></p>
                     </div>
                     <div>
                         <p class="text-sm text-gray-600">Numéro de Compte</p>
-                        <p class="font-semibold text-gray-800">{{ $compte->numero_compte }}</p>
+                        <p class="font-semibold text-gray-800"><?php echo e($compte->numero_compte); ?></p>
                     </div>
                     <div>
                         <p class="text-sm text-gray-600">Solde Actuel</p>
                         <p class="font-semibold text-gray-800">
-                            {{ number_format(floatval($compte->solde ?? 0), 2, ',', ' ') }} USD
+                            <?php echo e(number_format(floatval($compte->solde ?? 0), 2, ',', ' ')); ?> USD
                         </p>
                     </div>
                     <div>
                         <p class="text-sm text-gray-600">Date de Demande</p>
                         <p class="font-semibold text-gray-800">
-                            {{ $credit->date_demande->format('d/m/Y H:i') }}
+                            <?php echo e($credit->date_demande->format('d/m/Y H:i')); ?>
+
                         </p>
                     </div>
                 </div>
@@ -156,8 +158,8 @@
             </div>
 
             <!-- Formulaire de répartition -->
-            <form action="{{ route('credits.process-approval-groupe', $credit->id) }}" method="POST" class="mb-8" id="approval-form">
-                @csrf
+            <form action="<?php echo e(route('credits.process-approval-groupe', $credit->id)); ?>" method="POST" class="mb-8" id="approval-form">
+                <?php echo csrf_field(); ?>
                 
                 <!-- Section Montant Total -->
                 <div class="bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl p-6 border border-gray-200 mb-6">
@@ -179,7 +181,7 @@
                                 name="montant_total_groupe" 
                                 step="0.01"
                                 min="0.01"
-                                value="{{ number_format(floatval($credit->montant_demande ?? 0), 2, '.', '') }}"
+                                value="<?php echo e(number_format(floatval($credit->montant_demande ?? 0), 2, '.', '')); ?>"
                                 class="block w-full pl-16 pr-4 py-4 text-lg border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
                                 placeholder="0.00"
                                 required
@@ -234,10 +236,10 @@
                     
                     <div class="space-y-4">
                         <h4 class="text-md font-semibold text-gray-800 mb-3">
-                            Répartissez le montant total entre les membres ({{ $membres->count() }} membres):
+                            Répartissez le montant total entre les membres (<?php echo e($membres->count()); ?> membres):
                         </h4>
                         
-                        @foreach($membres as $membre)
+                        <?php $__currentLoopData = $membres; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $membre): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
                         <div class="repartition-card bg-white rounded-xl p-4 border-l-blue-400 shadow-sm">
                             <div class="flex items-center justify-between mb-3">
                                 <div class="flex items-center">
@@ -246,15 +248,17 @@
                                     </div>
                                     <div>
                                         <p class="text-sm font-semibold text-gray-800">
-                                            {{ $membre->nom }} {{ $membre->prenom }}
+                                            <?php echo e($membre->nom); ?> <?php echo e($membre->prenom); ?>
+
                                         </p>
                                         <p class="text-xs text-gray-600">
-                                            {{ $membre->numero_compte }}
+                                            <?php echo e($membre->numero_compte); ?>
+
                                         </p>
                                     </div>
                                 </div>
                                 <div class="text-right">
-                                    <p class="text-sm text-gray-600">Solde: {{ number_format(floatval($membre->solde ?? 0), 2, ',', ' ') }} USD</p>
+                                    <p class="text-sm text-gray-600">Solde: <?php echo e(number_format(floatval($membre->solde ?? 0), 2, ',', ' ')); ?> USD</p>
                                 </div>
                             </div>
                             
@@ -269,13 +273,13 @@
                                         </div>
                                         <input 
                                             type="number" 
-                                            name="montants_membres[{{ $membre->id }}]"
+                                            name="montants_membres[<?php echo e($membre->id); ?>]"
                                             step="0.01"
                                             min="0"
                                             value="0"
                                             class="montant-membre block w-full pl-16 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
                                             placeholder="0.00"
-                                            data-membre-id="{{ $membre->id }}"
+                                            data-membre-id="<?php echo e($membre->id); ?>"
                                         >
                                     </div>
                                 </div>
@@ -285,29 +289,29 @@
                                     <div class="space-y-1 text-xs">
                                         <div class="flex justify-between">
                                             <span>Frais dossier:</span>
-                                            <span class="font-semibold" id="frais-dossier-{{ $membre->id }}">0.00 USD</span>
+                                            <span class="font-semibold" id="frais-dossier-<?php echo e($membre->id); ?>">0.00 USD</span>
                                         </div>
                                         <div class="flex justify-between">
                                             <span>Frais alerte:</span>
-                                            <span class="font-semibold" id="frais-alerte-{{ $membre->id }}">0.00 USD</span>
+                                            <span class="font-semibold" id="frais-alerte-<?php echo e($membre->id); ?>">0.00 USD</span>
                                         </div>
                                         <div class="flex justify-between">
                                             <span>Frais carnet:</span>
-                                            <span class="font-semibold" id="frais-carnet-{{ $membre->id }}">0.00 USD</span>
+                                            <span class="font-semibold" id="frais-carnet-<?php echo e($membre->id); ?>">0.00 USD</span>
                                         </div>
                                         <div class="flex justify-between">
                                             <span>Caution (20%):</span>
-                                            <span class="font-semibold" id="caution-{{ $membre->id }}">0.00 USD</span>
+                                            <span class="font-semibold" id="caution-<?php echo e($membre->id); ?>">0.00 USD</span>
                                         </div>
                                         <div class="flex justify-between">
                                             <span>Total frais:</span>
-                                            <span class="font-semibold" id="total-frais-{{ $membre->id }}">0.00 USD</span>
+                                            <span class="font-semibold" id="total-frais-<?php echo e($membre->id); ?>">0.00 USD</span>
                                         </div>
                                     </div>
                                 </div>
                             </div>
                         </div>
-                        @endforeach
+                        <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
                     </div>
                     
                     <!-- Total et équilibre -->
@@ -386,7 +390,7 @@
             <!-- Action Buttons -->
             <div class="flex flex-col sm:flex-row gap-4 mt-8 pt-6 border-t border-gray-200">
                 <a 
-                    href="{{ route('comptes.details', $credit->compte_id) }}" 
+                    href="<?php echo e(route('comptes.details', $credit->compte_id)); ?>" 
                     class="flex-1 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-semibold py-3 px-6 rounded-xl transition-all duration-200 transform hover:scale-105 shadow-lg flex items-center justify-center"
                 >
                     <i class="fas fa-eye mr-3"></i>
@@ -394,7 +398,7 @@
                 </a>
                 
                 <a 
-                    href="{{ url('/admin/comptes') }}" 
+                    href="<?php echo e(url('/admin/comptes')); ?>" 
                     class="flex-1 bg-gradient-to-r from-gray-500 to-gray-600 hover:from-gray-600 hover:to-gray-700 text-white font-semibold py-3 px-6 rounded-xl transition-all duration-200 transform hover:scale-105 shadow-lg flex items-center justify-center"
                 >
                     <i class="fas fa-arrow-left mr-3"></i>
@@ -438,7 +442,7 @@
     // Fonction pour calculer les totaux en temps réel
     function calculerFraisEtAlerte() {
         const montantTotalGroupe = parseFloat(document.getElementById('montant_total_groupe').value) || 0;
-        const soldeGroupe = {{ floatval($compte->solde ?? 0) }};
+        const soldeGroupe = <?php echo e(floatval($compte->solde ?? 0)); ?>;
         
         let totalFrais = 0;
         let totalCaution = 0;
@@ -509,7 +513,7 @@
         console.log('🟢 Validation crédit groupe...');
         
         const montantTotalGroupe = parseFloat(document.getElementById('montant_total_groupe').value) || 0;
-        const soldeGroupe = {{ floatval($compte->solde ?? 0) }};
+        const soldeGroupe = <?php echo e(floatval($compte->solde ?? 0)); ?>;
         
         let totalSaisiMembres = 0;
         let membresAvecMontant = 0;
@@ -683,4 +687,4 @@
     });
 </script>
 </body>
-</html>
+</html><?php /**PATH D:\APP\TUMAINI LETU\tumainiletusystem2.0\resources\views/credits/approval-groupe-final.blade.php ENDPATH**/ ?>

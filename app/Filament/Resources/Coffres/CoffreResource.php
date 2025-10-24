@@ -52,7 +52,7 @@ class CoffreResource extends Resource
         return [
             'index' => ManageCoffre::route('/'),
             'create' => CreateCoffre::route('/create'),
-            'edit' => EditCoffre::route('/{record}/edit'),
+            // 'edit' => EditCoffre::route('/{record}/edit'),
         ];
     }
         public static function canViewAny(): bool

@@ -30,7 +30,7 @@ protected static ?string $model = EcritureComptable::class;
     {
         return static::getModel()::count();
     } 
-    
+
     public static function form(Schema $schema): Schema
     {
         return ComptabiliteForm::configure($schema);
@@ -53,7 +53,7 @@ protected static ?string $model = EcritureComptable::class;
         return [
              'index' => ManageComptabilite::route('/'),
             'create' => CreateComptabilite::route('/create'),
-            'edit' => EditComptabilite::route('/{record}/edit'),
+            // 'edit' => EditComptabilite::route('/{record}/edit'),
         ];
     }
     

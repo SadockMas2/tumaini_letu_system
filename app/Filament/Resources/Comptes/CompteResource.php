@@ -51,7 +51,7 @@ class CompteResource extends Resource
         return [
             'index' => ListComptes::route('/'),
             'create' => CreateCompte::route('/create'),
-            'edit' => EditCompte::route('/{record}/edit'),
+            // 'edit' => EditCompte::route('/{record}/edit'),
         ];
     }
 

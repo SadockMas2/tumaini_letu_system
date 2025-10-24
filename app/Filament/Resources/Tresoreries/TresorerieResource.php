@@ -52,7 +52,7 @@ class TresorerieResource extends Resource
         return [
             'index' => ManageTresorerie::route('/'),
             'create' => CreateTresorerie::route('/create'),
-            'edit' => EditTresorerie::route('/{record}/edit'),
+            // 'edit' => EditTresorerie::route('/{record}/edit'),
         ];
     }
        public static function canViewAny(): bool

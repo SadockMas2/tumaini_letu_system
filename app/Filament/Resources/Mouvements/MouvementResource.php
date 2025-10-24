@@ -84,7 +84,7 @@ class MouvementResource extends Resource
         return [
             'index' => ListMouvements::route('/'),
             'create' => CreateMouvement::route('/create'),
-            'edit' => EditMouvement::route('/{record}/edit'),
+            // 'edit' => EditMouvement::route('/{record}/edit'),
         ];
     }
 }
