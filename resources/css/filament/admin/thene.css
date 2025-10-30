@@ -1,0 +1,23 @@
+/* Afficher le logo ET le nom côte à côte */
+.fi-header .fi-logo {
+    display: flex !important;
+    align-items: center !important;
+    gap: 1rem !important;
+}
+
+.fi-header .fi-logo img {
+    height: 3rem !important;
+}
+
+.fi-header .fi-logo::after {
+    content: "TUMAINI LETU SYSTEM" !important;
+    color: #059669 !important; /* Couleur Emerald */
+    font-weight: 700 !important;
+    font-size: 1.5rem !important;
+    white-space: nowrap !important;
+}
+
+/* Cacher le brandName par défaut de Filament */
+.fi-brand-name {
+    display: none !important;
+}
