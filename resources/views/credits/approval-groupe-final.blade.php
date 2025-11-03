@@ -390,14 +390,13 @@
             </div>
         </div>
     </div>
-
- <script>
+<script>
     // Configuration
     const coefficientGroupe = 1.225;
     const dureeSemaines = 16;
     const devise = "USD";
 
-    // FONCTION SIMPLIFIÉE - JUSTE LA VALIDATION
+    // FONCTION AMÉLIORÉE AVEC SUGGESTION AUTOMATIQUE
     function validateApprovalGroupe() {
         console.log('🟢 Validation crédit groupe...');
         
@@ -412,16 +411,22 @@
             if (montant > 0) membresAvecMontant++;
         });
         
-        const difference = Math.abs(totalSaisiMembres - montantTotalGroupe);
+        const difference = totalSaisiMembres - montantTotalGroupe;
         
-        // VALIDATION
+        // VALIDATION AMÉLIORÉE
         if (montantTotalGroupe <= 0) {
             alert('❌ Veuillez saisir un montant total valide.');
             return false;
         }
         
-        if (difference > 0.01) {
-            alert(`❌ La répartition n'est pas équilibrée. Différence: ${difference.toFixed(2)} USD`);
+        if (Math.abs(difference) > 0.01) {
+            // SUGGESTION AUTOMATIQUE
+            const suggestion = Math.abs(difference).toFixed(2);
+            const message = difference > 0 
+                ? `❌ Trop alloué aux membres! Retirez ${suggestion} USD de la répartition.`
+                : `❌ Montant insuffisant! Ajoutez ${suggestion} USD à la répartition.`;
+            
+            alert(message);
             return false;
         }
         
@@ -430,10 +435,96 @@
             return false;
         }
         
-        // SIMPLE CONFIRMATION
-        const confirmation = confirm(`Êtes-vous sûr de vouloir approuver ce crédit groupe de ${montantTotalGroupe.toFixed(2)} USD ?`);
+        // CONFIRMATION DÉTAILLÉE
+        const confirmation = confirm(
+            `Êtes-vous sûr de vouloir approuver ce crédit groupe ?\n\n` +
+            `📊 Montant total: ${montantTotalGroupe.toFixed(2)} USD\n` +
+            `👥 Réparti entre: ${membresAvecMontant} membre(s)\n` +
+            `✅ Équilibre parfait`
+        );
         
-        return confirmation; // Retourne true si confirmé, false si annulé
+        return confirmation;
+    }
+
+    // GESTION AMÉLIORÉE DE L'ÉQUILIBRE EN TEMPS RÉEL
+    function calculerTotaux() {
+        const montantTotalGroupe = parseFloat(document.getElementById('montant_total_groupe').value) || 0;
+        let totalSaisiMembres = 0;
+        let membresAvecMontant = 0;
+        
+        document.querySelectorAll('.montant-membre').forEach(input => {
+            const montant = parseFloat(input.value) || 0;
+            totalSaisiMembres += montant;
+            if (montant > 0) membresAvecMontant++;
+        });
+        
+        const difference = totalSaisiMembres - montantTotalGroupe;
+        const alerteEquilibre = document.getElementById('alerte-equilibre');
+        const messageEquilibre = document.getElementById('message-equilibre');
+        
+        // Affichage des totaux
+        document.getElementById('total-saisi-membres').textContent = `${totalSaisiMembres.toFixed(2)} ${devise}`;
+        
+        // Gestion de l'alerte d'équilibre
+        if (Math.abs(difference) < 0.01) {
+            document.getElementById('difference-text').innerHTML = '✅ <span class="text-green-600">Équilibre parfait</span>';
+            document.getElementById('difference-montant').innerHTML = '<span class="text-green-600 font-bold">0.00 USD</span>';
+            alerteEquilibre.classList.add('hidden');
+            
+            // Activer le bouton d'approbation
+            document.getElementById('approve-btn').disabled = false;
+            
+        } else {
+            const absDifference = Math.abs(difference).toFixed(2);
+            if (difference > 0) {
+                document.getElementById('difference-text').innerHTML = '❌ <span class="text-red-600">Trop alloué</span>';
+                document.getElementById('difference-montant').innerHTML = `<span class="text-red-600 font-bold">+${absDifference} USD</span>`;
+                messageEquilibre.textContent = `Vous avez alloué ${absDifference} USD de trop. Réduisez les montants des membres.`;
+            } else {
+                document.getElementById('difference-text').innerHTML = '❌ <span class="text-orange-600">Montant manquant</span>';
+                document.getElementById('difference-montant').innerHTML = `<span class="text-orange-600 font-bold">-${absDifference} USD</span>`;
+                messageEquilibre.textContent = `Il manque ${absDifference} USD dans la répartition. Augmentez les montants des membres.`;
+            }
+            
+            alerteEquilibre.classList.remove('hidden');
+            
+            // Désactiver le bouton d'approbation
+            document.getElementById('approve-btn').disabled = true;
+        }
+    }
+
+    // FONCTION POUR ÉQUILIBRER AUTOMATIQUEMENT
+    function equilibrerRepartition() {
+        const montantTotalGroupe = parseFloat(document.getElementById('montant_total_groupe').value) || 0;
+        let totalSaisiMembres = 0;
+        const inputsMembres = document.querySelectorAll('.montant-membre');
+        const membresAvecMontant = [];
+        
+        // Calculer le total actuel et identifier les membres avec montant
+        inputsMembres.forEach(input => {
+            const montant = parseFloat(input.value) || 0;
+            totalSaisiMembres += montant;
+            if (montant > 0) {
+                membresAvecMontant.push(input);
+            }
+        });
+        
+        const difference = montantTotalGroupe - totalSaisiMembres;
+        
+        if (Math.abs(difference) > 0.01 && membresAvecMontant.length > 0) {
+            // Répartir équitablement la différence
+            const ajustementParMembre = difference / membresAvecMontant.length;
+            
+            membresAvecMontant.forEach(input => {
+                const nouveauMontant = (parseFloat(input.value) || 0) + ajustementParMembre;
+                input.value = Math.max(0, nouveauMontant).toFixed(2);
+            });
+            
+            // Recalculer
+            calculerTotaux();
+            
+            alert(`✅ Répartition équilibrée automatiquement!`);
+        }
     }
 
     // GESTION SIMPLE DU REJET
@@ -448,29 +539,6 @@
         document.querySelector('textarea[name="motif_rejet"]').value = '';
     }
 
-    // CALCULS SIMPLES EN TEMPS RÉEL
-    function calculerTotaux() {
-        const montantTotalGroupe = parseFloat(document.getElementById('montant_total_groupe').value) || 0;
-        let totalSaisiMembres = 0;
-        
-        document.querySelectorAll('.montant-membre').forEach(input => {
-            totalSaisiMembres += parseFloat(input.value) || 0;
-        });
-        
-        const difference = totalSaisiMembres - montantTotalGroupe;
-        
-        // Affichage simple
-        document.getElementById('total-saisi-membres').textContent = `${totalSaisiMembres.toFixed(2)} ${devise}`;
-        
-        if (Math.abs(difference) < 0.01) {
-            document.getElementById('difference-text').innerHTML = '✓ Équilibre parfait';
-            document.getElementById('difference-montant').textContent = '0.00 USD';
-        } else {
-            document.getElementById('difference-text').innerHTML = 'Équilibre:';
-            document.getElementById('difference-montant').textContent = `${difference.toFixed(2)} USD`;
-        }
-    }
-
     // INITIALISATION
     document.addEventListener('DOMContentLoaded', function() {
         // Événements basiques
@@ -481,6 +549,16 @@
 
         document.getElementById('rejectBtn')?.addEventListener('click', showRejection);
         document.getElementById('cancelReject')?.addEventListener('click', hideRejection);
+
+        // Ajouter le bouton d'équilibrage automatique
+        const boutonEquilibrage = document.createElement('button');
+        boutonEquilibrage.type = 'button';
+        boutonEquilibrage.innerHTML = '<i class="fas fa-balance-scale mr-2"></i>Équilibrer Automatiquement';
+        boutonEquilibrage.className = 'bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg transition-all duration-200 mt-2';
+        boutonEquilibrage.onclick = equilibrerRepartition;
+        
+        const sectionEquilibre = document.querySelector('.mt-6.p-4.bg-blue-50');
+        sectionEquilibre.appendChild(boutonEquilibrage);
 
         // Calcul initial
         calculerTotaux();

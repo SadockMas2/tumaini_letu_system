@@ -27,9 +27,18 @@
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
             <div class="bg-blue-50 p-4 rounded-lg">
                 <h3 class="font-semibold text-blue-800 mb-2">Informations Client</h3>
-                <p class="text-sm"><strong>Nom:</strong> {{ $paiement->credit->compte->nom }} {{ $paiement->credit->compte->prenom }}</p>
+                <p class="text-sm"><strong>Nom:</strong> 
+                    @if($paiement->credit->compte->type_compte === 'groupe_solidaire')
+                        {{ $paiement->credit->compte->nom }} (Groupe)
+                    @else
+                        {{ $paiement->credit->compte->nom }} 
+                        {{ $paiement->credit->compte->postnom ?? '' }} 
+                        {{ $paiement->credit->compte->prenom ?? '' }}
+                    @endif
+                </p>
                 <p class="text-sm"><strong>Compte:</strong> {{ $paiement->credit->compte->numero_compte }}</p>
-                <p class="text-sm"><strong>Membre:</strong> {{ $paiement->credit->compte->numero_membre }}</p>
+                <p class="text-sm"><strong>Membre:</strong> {{ $paiement->credit->compte->numero_membre ?? 'N/A' }}</p>
+                <p class="text-sm"><strong>Devise:</strong> <span class="font-bold {{ $paiement->devise === 'USD' ? 'text-green-600' : 'text-orange-600' }}">{{ $paiement->devise }}</span></p>
             </div>
             
             <div class="bg-green-50 p-4 rounded-lg">
@@ -37,6 +46,7 @@
                 <p class="text-sm"><strong>Date:</strong> {{ $paiement->date_paiement->format('d/m/Y H:i') }}</p>
                 <p class="text-sm"><strong>Méthode:</strong> {{ ucfirst($paiement->methode_paiement) }}</p>
                 <p class="text-sm"><strong>Statut:</strong> <span class="font-bold text-green-600">{{ ucfirst($paiement->statut) }}</span></p>
+                <p class="text-sm"><strong>Devise:</strong> <span class="font-bold {{ $paiement->devise === 'USD' ? 'text-green-600' : 'text-orange-600' }}">{{ $paiement->devise }}</span></p>
             </div>
         </div>
 
@@ -63,18 +73,55 @@
             </div>
         </div>
 
-        <!-- Montant du Paiement -->
+        <!-- Montant du Paiement avec devise -->
         <div class="text-center py-6 border-2 border-green-200 bg-green-50 rounded-lg mb-6">
             <p class="text-lg text-gray-600 mb-2">Montant Payé</p>
             <p class="text-4xl font-bold text-green-600">
-                {{ number_format($paiement->montant_paye, 2, ',', ' ') }} {{ $paiement->credit->compte->devise }}
+                {{ number_format($paiement->montant_paye, 2, ',', ' ') }} 
+                <span class="{{ $paiement->devise === 'USD' ? 'text-green-700' : 'text-orange-600' }}">
+                    {{ $paiement->devise }}
+                </span>
+            </p>
+            @if($paiement->devise !== $paiement->credit->compte->devise)
+            <p class="text-sm text-gray-500 mt-2">
+                Conversion: {{ number_format($paiement->montant_paye, 2, ',', ' ') }} {{ $paiement->devise }} 
+                = {{ number_format($paiement->montant_paye, 2, ',', ' ') }} {{ $paiement->credit->compte->devise }}
+            </p>
+            @endif
+        </div>
+
+        <!-- Informations de conversion si devise différente -->
+        @if($paiement->devise !== $paiement->credit->compte->devise)
+        <div class="bg-yellow-50 p-4 rounded-lg border border-yellow-200 mb-6">
+            <h4 class="font-semibold text-yellow-800 mb-2">
+                <i class="fas fa-exchange-alt mr-2"></i>Information Conversion
+            </h4>
+            <div class="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                    <p class="text-gray-600">Devise Paiement</p>
+                    <p class="font-semibold {{ $paiement->devise === 'USD' ? 'text-green-600' : 'text-orange-600' }}">
+                        {{ $paiement->devise }}
+                    </p>
+                </div>
+                <div>
+                    <p class="text-gray-600">Devise Compte</p>
+                    <p class="font-semibold {{ $paiement->credit->compte->devise === 'USD' ? 'text-green-600' : 'text-orange-600' }}">
+                        {{ $paiement->credit->compte->devise }}
+                    </p>
+                </div>
+            </div>
+            <p class="text-xs text-yellow-700 mt-2">
+                Le paiement a été effectué en {{ $paiement->devise }} mais crédité sur le compte en {{ $paiement->credit->compte->devise }}
             </p>
         </div>
+        @endif
 
         <!-- Notes -->
         @if($paiement->notes)
         <div class="bg-yellow-50 p-4 rounded-lg border border-yellow-200 mb-6">
-            <h4 class="font-semibold text-yellow-800 mb-2">Notes</h4>
+            <h4 class="font-semibold text-yellow-800 mb-2">
+                <i class="fas fa-sticky-note mr-2"></i>Notes
+            </h4>
             <p class="text-sm text-yellow-700">{{ $paiement->notes }}</p>
         </div>
         @endif
@@ -84,10 +131,30 @@
             <div class="text-center">
                 <p class="font-semibold text-gray-700 mb-4">Signature du Client</p>
                 <div class="border-b border-gray-400 pb-8"></div>
+                <p class="text-xs text-gray-500 mt-2">Nom: {{ $paiement->credit->compte->nom }}</p>
             </div>
             <div class="text-center">
                 <p class="font-semibold text-gray-700 mb-4">Signature du Caissier</p>
                 <div class="border-b border-gray-400 pb-8"></div>
+                <p class="text-xs text-gray-500 mt-2">Nom: {{ $paiement->operateur->name ?? 'Système' }}</p>
+            </div>
+        </div>
+
+        <!-- Informations système -->
+        <div class="bg-gray-100 p-4 rounded-lg mt-6">
+            <div class="grid grid-cols-3 gap-4 text-xs text-gray-600">
+                <div>
+                    <p><strong>ID Paiement:</strong> {{ $paiement->id }}</p>
+                    <p><strong>ID Crédit:</strong> {{ $paiement->credit->id }}</p>
+                </div>
+                <div>
+                    <p><strong>Devise Paiement:</strong> {{ $paiement->devise }}</p>
+                    <p><strong>Devise Compte:</strong> {{ $paiement->credit->compte->devise }}</p>
+                </div>
+                <div>
+                    <p><strong>Opérateur:</strong> {{ $paiement->operateur->name ?? 'Système' }}</p>
+                    <p><strong>Généré le:</strong> {{ now()->format('d/m/Y H:i') }}</p>
+                </div>
             </div>
         </div>
 
@@ -109,5 +176,30 @@
             </a>
         </div>
     </div>
+
+    <style>
+        @media print {
+            body {
+                background: white !important;
+            }
+            .bg-gray-100 {
+                background: white !important;
+            }
+            .bg-blue-50, .bg-green-50, .bg-gray-50, .bg-yellow-50 {
+                background: #f8fafc !important;
+                border: 1px solid #e2e8f0 !important;
+            }
+            .shadow-lg {
+                box-shadow: none !important;
+            }
+            button, a {
+                display: none !important;
+            }
+        }
+        
+        .text-green-600 { color: #059669; }
+        .text-orange-600 { color: #ea580c; }
+        .text-green-700 { color: #047857; }
+    </style>
 </body>
 </html>

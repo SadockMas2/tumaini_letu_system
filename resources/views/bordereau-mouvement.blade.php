@@ -60,7 +60,7 @@
             margin-left: auto;
         }
 
-          .signature1 {
+        .signature1 {
             margin-top: -8px;
             text-align: left;
             border-top: 1px solid #000;
@@ -74,6 +74,10 @@
             margin: 15px 0;
             border-radius: 5px;
         }
+        
+        /* Styles pour les devises */
+        .devise-usd { color: #059669; font-weight: bold; }
+        .devise-cdf { color: #ea580c; font-weight: bold; }
         
         /* Contrôles de zoom */
         .zoom-controls {
@@ -127,7 +131,7 @@
         <button onclick="resetZoom()" style="margin-left: 10px;">Reset</button>
     </div> --}}
 
-    <div class ="header">
+    <div class="header">
         <div class style="height: 80px; ="logo">
             <!-- Correction du chemin du logo -->
             @if(file_exists(public_path('images/logo-tumaini1.png')))
@@ -169,10 +173,13 @@
             <span>{{ ucfirst($mouvement->type) }}</span>
         </div>
         
+        <!-- Section montant avec devise -->
         <div class="montant-section">
             <div class="content-line">
                 <strong>{{ $mouvement->type === 'depot' ? 'Entrée' : 'Sortie' }} :</strong>
-                <span>{{ number_format($mouvement->montant, 2, ',', ' ') }} USD</span>
+                <span class="{{ $mouvement->devise === 'USD' ? 'devise-usd' : 'devise-cdf' }}">
+                    {{ number_format($mouvement->montant, 2, ',', ' ') }} {{ $mouvement->devise }}
+                </span>
             </div>
         </div>
 
@@ -191,9 +198,20 @@
             <span>{{ $mouvement->client_nom }}</span>
         </div>
         
+        <!-- Solde avec devise -->
         <div class="content-line">
             <strong>Solde après opération :</strong>
-            <span>{{ number_format($mouvement->solde_apres, 2, ',', ' ') }} USD</span>
+            <span class="{{ $mouvement->devise === 'USD' ? 'devise-usd' : 'devise-cdf' }}">
+                {{ number_format($mouvement->solde_apres, 2, ',', ' ') }} {{ $mouvement->devise }}
+            </span>
+        </div>
+
+        <!-- Information devise -->
+        <div class="content-line">
+            <strong>Devise :</strong>
+            <span class="{{ $mouvement->devise === 'USD' ? 'devise-usd' : 'devise-cdf' }}">
+                {{ $mouvement->devise }}
+            </span>
         </div>
     </div>
 
@@ -209,6 +227,34 @@
             <strong>ID du Membre :</strong>
             <span>{{ $mouvement->compte->id_client ?? 'N/A' }}</span>
         </div>
+
+        <!-- Type de mouvement spécifique -->
+        @if($mouvement->type_mouvement)
+        <div class="content-line">
+            <strong>Type d'opération :</strong>
+            <span>
+                @switch($mouvement->type_mouvement)
+                    @case('versement_agent')
+                        Versement Agent
+                        @break
+                    @case('paiement_credit')
+                        Paiement Crédit
+                        @break
+                    @case('depense_diverse')
+                        Dépense Diverse
+                        @break
+                    @case('transfert_sortant')
+                        Transfert Sortant
+                        @break
+                    @case('transfert_entrant')
+                        Transfert Entrant
+                        @break
+                    @default
+                        {{ ucfirst(str_replace('_', ' ', $mouvement->type_mouvement)) }}
+                @endswitch
+            </span>
+        </div>
+        @endif
     </div>
 
     <div class="separator"></div>
@@ -218,14 +264,54 @@
             <strong>Nom du {{ $mouvement->type === 'depot' ? 'déposant' : 'retirant' }} :</strong>
             <span>{{ $mouvement->nom_deposant }}</span>
         </div>
+
+        <!-- Description si disponible -->
+        @if($mouvement->description)
+        <div class="content-line">
+            <strong>Description :</strong>
+            <span>{{ $mouvement->description }}</span>
+        </div>
+        @endif
     </div>
+
+    <!-- Informations supplémentaires pour les mouvements spéciaux -->
+    @if(in_array($mouvement->type_mouvement, ['versement_agent', 'paiement_credit', 'depense_diverse']))
+    <div class="separator"></div>
+    <div class="content">
+        <div class="content-line">
+            <strong>Type d'opération :</strong>
+            <span class="{{ $mouvement->devise === 'USD' ? 'devise-usd' : 'devise-cdf' }}">
+                @switch($mouvement->type_mouvement)
+                    @case('versement_agent')
+                        Versement Agent Collecteur
+                        @break
+                    @case('paiement_credit')
+                        Paiement de Crédit
+                        @break
+                    @case('depense_diverse')
+                        Dépense Diverse
+                        @break
+                @endswitch
+            </span>
+        </div>
+    </div>
+    @endif
 
     <div class="signature">
         Signature de l'agent
     </div>
 
     <div class="signature1">
-        Signature du déposant
+        Signature du {{ $mouvement->type === 'depot' ? 'déposant' : 'retirant' }}
+    </div>
+
+    <!-- Informations système (non imprimées) -->
+    <div class="no-print" style="margin-top: 20px; padding: 10px; background: #f8f9fa; border-radius: 5px; font-size: 12px;">
+        <div><strong>Informations système :</strong></div>
+        <div>ID Mouvement: {{ $mouvement->id }}</div>
+        <div>Devise: {{ $mouvement->devise }}</div>
+        <div>Type: {{ $mouvement->type_mouvement ?? 'Standard' }}</div>
+        <div>Généré le: {{ now()->format('d/m/Y H:i') }}</div>
     </div>
 
     <div class="no-print" style="margin-top: 30px; text-align: center;">
@@ -254,10 +340,10 @@
         //     }
         // }
         
-        // // function resetZoom() {
-        // //     currentZoom = 100;
-        // //     updateZoom();
-        // // }
+        // function resetZoom() {
+        //     currentZoom = 100;
+        //     updateZoom();
+        // }
         
         // function updateZoom() {
         //     document.body.className = 'zoom-' + currentZoom;

@@ -78,12 +78,12 @@ class Epargne extends Model
             $epargne->statut = 'en_attente_dispatch';
 
             // Compte transitoire de l'agent
-            $ct = CompteTransitoire::firstOrCreate(
-                ['user_id' => $epargne->user_id, 'devise' => $epargne->devise],
-                ['solde' => 0, 'statut' => 'actif', 'agent_nom' => $epargne->agent_nom]
-            );
-            $ct->solde += $epargne->montant;
-            $ct->save();
+            // $ct = CompteTransitoire::firstOrCreate(
+            //     ['user_id' => $epargne->user_id, 'devise' => $epargne->devise],
+            //     ['solde' => 0, 'statut' => 'actif', 'agent_nom' => $epargne->agent_nom]
+            // );
+            // $ct->solde += $epargne->montant;
+            // $ct->save();
 
             // Gestion du compte selon le type (individuel ou groupe)
             if ($isGroupe) {

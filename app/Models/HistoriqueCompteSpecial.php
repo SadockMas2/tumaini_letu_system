@@ -15,9 +15,26 @@ class HistoriqueCompteSpecial extends Model
         'client_nom',
         'cycle_id',
         'montant',
+        'credit_id',
         'devise',
         'description',
     ];
+
+    public static function rules()
+{
+    return [
+        'cycle_id' => 'nullable|exists:cycles,id',
+        'client_nom' => 'required|string',
+        'montant' => 'required|numeric',
+        'devise' => 'required|string',
+        'description' => 'nullable|string',
+    ];
+}
+public function credit()
+{
+    return $this->belongsTo(Credit::class);
+}
+
 
     public function cycle()
     {

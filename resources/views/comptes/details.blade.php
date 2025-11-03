@@ -378,13 +378,13 @@
                     <p class="text-gray-500 mb-6 max-w-md mx-auto">
                         Ce compte n'a pas encore de crédit en cours. Vous pouvez demander un nouveau crédit en cliquant sur le bouton ci-dessous.
                     </p>
-                    <a 
+                    {{-- <a 
                         href="{{ route('credits.create', $compte->id) }}" 
                         class="inline-flex items-center bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-semibold py-3 px-6 rounded-xl transition-all duration-200 transform hover:scale-105 shadow-lg"
                     >
                         <i class="fas fa-plus-circle mr-2"></i>
                         Demander un Premier Crédit
-                    </a>
+                    </a> --}}
                 </div>
             @endif
 
@@ -641,13 +641,13 @@
                     </a>
                 @endif
                 
-                <a 
+                {{-- <a 
                     href="{{ route('credits.create', $compte->id) }}" 
                     class="flex-1 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-semibold py-4 px-6 rounded-xl transition-all duration-200 transform hover:scale-105 shadow-lg hover:shadow-xl flex items-center justify-center"
                 >
                     <i class="fas fa-plus-circle mr-3"></i>
                     Nouveau Crédit
-                </a>
+                </a> --}}
                 
                 <a 
                     href="{{ url('/admin/comptes') }}" 

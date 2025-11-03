@@ -19,18 +19,27 @@ class MouvementsTable
 {
     public static function configure(Table $table): Table
     {
-        // Calcul des totaux pour la journée en cours
+        // Calcul des totaux pour la journée en cours groupés par devise
         $today = Carbon::today();
-        $totals = Mouvement::whereDate('created_at', $today)
+        $totalsByCurrency = Mouvement::whereDate('created_at', $today)
             ->select(
+                'devise',
                 DB::raw('SUM(CASE WHEN type = "depot" THEN montant ELSE 0 END) as total_depots'),
                 DB::raw('SUM(CASE WHEN type = "retrait" THEN montant ELSE 0 END) as total_retraits')
             )
-            ->first();
+            ->groupBy('devise')
+            ->get();
 
-        $totalDepots = $totals->total_depots ?? 0;
-        $totalRetraits = $totals->total_retraits ?? 0;
-        $soldeJournee = $totalDepots - $totalRetraits;
+        // Préparer l'affichage des totaux par devise
+        $totalsDisplay = [];
+        foreach ($totalsByCurrency as $total) {
+            $soldeJournee = $total->total_depots - $total->total_retraits;
+            $totalsDisplay[] = "{$total->devise}: Dépots " . number_format($total->total_depots, 2, ',', ' ') . 
+                             " - Retraits " . number_format($total->total_retraits, 2, ',', ' ') . 
+                             " - Solde " . number_format($soldeJournee, 2, ',', ' ');
+        }
+
+        $totalsLabel = count($totalsDisplay) > 0 ? implode(' | ', $totalsDisplay) : 'Aucun mouvement aujourd\'hui';
 
         return $table
             ->columns([
@@ -41,15 +50,23 @@ class MouvementsTable
                 TextColumn::make('montant')
                     ->label('Montant')
                     ->sortable()
-                    ->money('USD'),
+                    ->formatStateUsing(function ($state, Mouvement $record) {
+                        return number_format($state, 2, ',', ' ') . ' ' . $record->devise;
+                    }),
                 TextColumn::make('solde_apres')
                     ->label('Solde après')
                     ->sortable()
-                    ->money('USD'),
+                    ->formatStateUsing(function ($state, Mouvement $record) {
+                        return number_format($state, 2, ',', ' ') . ' ' . $record->devise;
+                    }),
                 TextColumn::make('operateur.name')
                     ->label('Opérateur')
                     ->sortable(),
                 TextColumn::make('description')->label('Description')->toggleable(),
+                TextColumn::make('devise')
+                    ->label('Devise')
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: false),
                 TextColumn::make('created_at')
                     ->dateTime()
                     ->sortable()
@@ -60,9 +77,9 @@ class MouvementsTable
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->headerActions([
-                // Affichage des totaux
+                // Affichage des totaux par devise
                 Action::make('totaux_journee')
-                    ->label("Totaux journée - Dépots: " . number_format($totalDepots, 2, ',', ' ') . " USD - Retraits: " . number_format($totalRetraits, 2, ',', ' ') . " USD - Solde: " . number_format($soldeJournee, 2, ',', ' ') . " USD")
+                    ->label($totalsLabel)
                     ->disabled()
                     ->color('info')
                     ->extraAttributes(['class' => 'cursor-default']),
@@ -136,27 +153,47 @@ class MouvementsTable
             DB::transaction(function () {
                 $today = Carbon::today();
                 
-                // Récupérer tous les mouvements de la journée
+                // Récupérer tous les mouvements de la journée groupés par devise
                 $mouvements = Mouvement::whereDate('created_at', $today)->get();
                 
                 if ($mouvements->isEmpty()) {
                     throw new \Exception('Aucun mouvement à clôturer pour aujourd\'hui.');
                 }
                 
-                // Calcul des totaux
-                $totalDepots = $mouvements->where('type', 'depot')->sum('montant');
-                $totalRetraits = $mouvements->where('type', 'retrait')->sum('montant');
-                $soldeFinal = $totalDepots - $totalRetraits;
+                // Calcul des totaux par devise
+                $totalsByCurrency = [];
+                foreach ($mouvements as $mouvement) {
+                    $devise = $mouvement->devise;
+                    if (!isset($totalsByCurrency[$devise])) {
+                        $totalsByCurrency[$devise] = [
+                            'total_depots' => 0,
+                            'total_retraits' => 0,
+                            'nombre_operations' => 0
+                        ];
+                    }
+                    
+                    if ($mouvement->type === 'depot') {
+                        $totalsByCurrency[$devise]['total_depots'] += $mouvement->montant;
+                    } else {
+                        $totalsByCurrency[$devise]['total_retraits'] += $mouvement->montant;
+                    }
+                    $totalsByCurrency[$devise]['nombre_operations']++;
+                }
                 
-                // Créer l'enregistrement de clôture dans l'historique
-                HistoriqueMouvementCaisse::create([
-                    'date_cloture' => $today,
-                    'total_depots' => $totalDepots,
-                    'total_retraits' => $totalRetraits,
-                    'solde_final' => $soldeFinal,
-                    'nombre_operations' => $mouvements->count(),
-                    'cloture_par' => Auth::id(),
-                ]);
+                // Créer les enregistrements de clôture par devise dans l'historique
+                foreach ($totalsByCurrency as $devise => $totals) {
+                    $soldeFinal = $totals['total_depots'] - $totals['total_retraits'];
+                    
+                    HistoriqueMouvementCaisse::create([
+                        'date_cloture' => $today,
+                        'total_depots' => $totals['total_depots'],
+                        'total_retraits' => $totals['total_retraits'],
+                        'solde_final' => $soldeFinal,
+                        'nombre_operations' => $totals['nombre_operations'],
+                        'devise' => $devise,
+                        'cloture_par' => Auth::id(),
+                    ]);
+                }
                 
                 // Marquer les mouvements comme clôturés (au lieu de les supprimer)
                 Mouvement::whereDate('created_at', $today)

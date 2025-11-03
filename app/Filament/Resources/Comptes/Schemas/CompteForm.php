@@ -14,8 +14,16 @@ class CompteForm
         return $schema
             ->components([
                 Select::make('client_id')
-                    ->label('Client')
-                    ->options(Client::all()->pluck('nom', 'id'))
+                    ->label('Nom du membre')
+                    ->options(
+ 
+                        Client::query()                   
+                            ->select('id', 'nom', 'postnom', 'prenom')
+                            ->get()
+                            ->mapWithKeys(fn (Client $client) => [
+                                $client->id => $client->nom . ' ' . $client->postnom . ' ' . $client->prenom])
+                    )
+                    
                     ->searchable()
                     ->required()
                     ->reactive(),

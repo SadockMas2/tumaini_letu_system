@@ -48,67 +48,67 @@ class CreditGroupe extends Model
     }
 
     // Créer les crédits individuels avec caution bloquée
-    public function creerCreditsIndividuelsAvecCaution()
-    {
-        Log::info('🎯 === CRÉATION CRÉDITS INDIVIDUELS AVEC CAUTION ===');
+    // public function creerCreditsIndividuelsAvecCaution()
+    // {
+    //     Log::info('🎯 === CRÉATION CRÉDITS INDIVIDUELS AVEC CAUTION ===');
         
-        $repartition = $this->repartition_membres ?? [];
+    //     $repartition = $this->repartition_membres ?? [];
         
-        foreach ($repartition as $membreId => $details) {
-            $montantMembre = floatval($details['montant_accorde'] ?? 0);
+    //     foreach ($repartition as $membreId => $details) {
+    //         $montantMembre = floatval($details['montant_accorde'] ?? 0);
             
-            if ($montantMembre > 0) {
-                Log::info("👤 Traitement membre ID: {$membreId}, Montant: {$montantMembre}");
+    //         if ($montantMembre > 0) {
+    //             Log::info("👤 Traitement membre ID: {$membreId}, Montant: {$montantMembre}");
 
-                $compteMembre = DB::table('comptes')->where('client_id', $membreId)->first();
-                if (!$compteMembre) {
-                    Log::error("❌ Compte non trouvé pour client_id: {$membreId}");
-                    continue;
-                }
+    //             $compteMembre = DB::table('comptes')->where('client_id', $membreId)->first();
+    //             if (!$compteMembre) {
+    //                 Log::error("❌ Compte non trouvé pour client_id: {$membreId}");
+    //                 continue;
+    //             }
 
-                try {
-                    // BLOQUER LA CAUTION DANS LE COMPTE DU MEMBRE (20% du montant)
-                    $caution = floatval($details['caution'] ?? 0);
-                    if ($caution > 0) {
-                        $this->bloquerCaution($compteMembre->id, $caution);
-                        Log::info("🔒 Caution bloquée: {$caution} USD pour compte {$compteMembre->id}");
-                    }
+    //             try {
+    //                 // BLOQUER LA CAUTION DANS LE COMPTE DU MEMBRE (20% du montant)
+    //                 $caution = floatval($details['caution'] ?? 0);
+    //                 if ($caution > 0) {
+    //                     $this->bloquerCaution($compteMembre->id, $caution);
+    //                     Log::info("🔒 Caution bloquée: {$caution} USD pour compte {$compteMembre->id}");
+    //                 }
 
-                    // CRÉER LE CRÉDIT INDIVIDUEL
-                    $creditId = DB::table('credits')->insertGetId([
-                        'compte_id' => $compteMembre->id,
-                        'credit_groupe_id' => $this->id,
-                        'type_credit' => 'groupe',
-                        'montant_demande' => $montantMembre,
-                        'montant_accorde' => $montantMembre,
-                        'montant_total' => $details['montant_total'],
-                        'frais_dossier' => $details['frais_dossier'],
-                        'frais_alerte' => $details['frais_alerte'],
-                        'frais_carnet' => $details['frais_carnet'],
-                        'frais_adhesion' => $details['frais_adhesion'],
-                        'caution' => $caution,
-                        'caution_bloquee' => $caution,
-                        'remboursement_hebdo' => $details['remboursement_hebdo'],
-                        'duree_mois' => 4,
-                        'statut_demande' => 'approuve',
-                        'date_demande' => now(),
-                        'date_octroi' => now(),
-                        'date_echeance' => now()->addMonths(4),
-                        'created_at' => now(),
-                        'updated_at' => now(),
-                    ]);
+    //                 // CRÉER LE CRÉDIT INDIVIDUEL
+    //                 $creditId = DB::table('credits')->insertGetId([
+    //                     'compte_id' => $compteMembre->id,
+    //                     'credit_groupe_id' => $this->id,
+    //                     'type_credit' => 'groupe',
+    //                     'montant_demande' => $montantMembre,
+    //                     'montant_accorde' => $montantMembre,
+    //                     'montant_total' => $details['montant_total'],
+    //                     'frais_dossier' => $details['frais_dossier'],
+    //                     'frais_alerte' => $details['frais_alerte'],
+    //                     'frais_carnet' => $details['frais_carnet'],
+    //                     'frais_adhesion' => $details['frais_adhesion'],
+    //                     'caution' => $caution,
+    //                     'caution_bloquee' => $caution,
+    //                     'remboursement_hebdo' => $details['remboursement_hebdo'],
+    //                     'duree_mois' => 4,
+    //                     'statut_demande' => 'approuve',
+    //                     'date_demande' => now(),
+    //                     'date_octroi' => now(),
+    //                     'date_echeance' => now()->addMonths(4),
+    //                     'created_at' => now(),
+    //                     'updated_at' => now(),
+    //                 ]);
 
-                    Log::info("✅ Crédit créé - ID: {$creditId}");
+    //                 Log::info("✅ Crédit créé - ID: {$creditId}");
 
-                } catch (\Exception $e) {
-                    Log::error("❌ Erreur création crédit membre {$membreId}: " . $e->getMessage());
-                    throw $e;
-                }
-            }
-        }
+    //             } catch (\Exception $e) {
+    //                 Log::error("❌ Erreur création crédit membre {$membreId}: " . $e->getMessage());
+    //                 throw $e;
+    //             }
+    //         }
+    //     }
         
-        Log::info('🎉 === CRÉDITS INDIVIDUELS TERMINÉS ===');
-    }
+    //     Log::info('🎉 === CRÉDITS INDIVIDUELS TERMINÉS ===');
+    // }
 
     // Bloquer la caution dans le compte du membre// Bloquer la caution dans le compte du membre
 private function bloquerCaution($compteId, $montantCaution)
@@ -145,20 +145,38 @@ private function bloquerCaution($compteId, $montantCaution)
     ]);
 }
     // Créer les échéanciers pour tous les membres
-    public function creerEcheanciersMembres()
-    {
-        Log::info('📅 === CRÉATION ÉCHÉANCIERS MEMBRES ===');
+  // Dans App\Models\CreditGroupe
+public function creerEcheanciersMembres()
+{
+    Log::info('📅 === CRÉATION ÉCHÉANCIERS POUR GROUPE ===');
+    
+    $montantRestant = floatval($this->montant_total);
+    $dateDebut = now()->addWeeks(2); // Début dans 2 semaines
+    
+    for ($semaine = 1; $semaine <= 16; $semaine++) {
+        $dateEcheance = $dateDebut->copy()->addWeeks($semaine - 1);
+        $montantPaye = $semaine === 16 ? $montantRestant : $this->remboursement_hebdo_total;
         
-        $creditsIndividuels = DB::table('credits')
-            ->where('credit_groupe_id', $this->id)
-            ->get();
-
-        foreach ($creditsIndividuels as $credit) {
-            $this->creerEcheancierMembre($credit);
-        }
+        if ($montantRestant <= 0) break;
         
-        Log::info('✅ Échéanciers créés pour tous les membres');
+        $montantRestant -= $montantPaye;
+        if ($montantRestant < 0) $montantRestant = 0;
+        
+        DB::table('echeanciers')->insert([
+            'credit_groupe_id' => $this->id,
+            'compte_id' => $this->compte_id,
+            'semaine' => $semaine,
+            'date_echeance' => $dateEcheance,
+            'montant_a_payer' => $montantPaye,
+            'capital_restant' => $montantRestant,
+            'statut' => 'a_venir',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
     }
+    
+    Log::info("📊 Échéancier créé pour crédit groupe ID: {$this->id}");
+}
 
     // Créer échéancier pour un membre
     private function creerEcheancierMembre($credit)
@@ -252,16 +270,16 @@ private function bloquerCaution($compteId, $montantCaution)
     public static function calculerFraisGroupe($montantTotalGroupe)
     {
         $frais = [
-            50 => ['dossier' => 2, 'alerte' => 4.5, 'carnet' => 2.5, 'adhesion' => 1, 'caution' => 10],
-            100 => ['dossier' => 4, 'alerte' => 4.5, 'carnet' => 2.5, 'adhesion' => 1, 'caution' => 20],
-            150 => ['dossier' => 6, 'alerte' => 4.5, 'carnet' => 2.5, 'adhesion' => 1, 'caution' => 30],
-            200 => ['dossier' => 8, 'alerte' => 4.5, 'carnet' => 2.5, 'adhesion' => 1, 'caution' => 40],
-            250 => ['dossier' => 10, 'alerte' => 4.5, 'carnet' => 2.5, 'adhesion' => 1, 'caution' => 50],
-            300 => ['dossier' => 12, 'alerte' => 4.5, 'carnet' => 2.5, 'adhesion' => 1, 'caution' => 60],
-            350 => ['dossier' => 14, 'alerte' => 4.5, 'carnet' => 2.5, 'adhesion' => 1, 'caution' => 70],
-            400 => ['dossier' => 16, 'alerte' => 4.5, 'carnet' => 2.5, 'adhesion' => 1, 'caution' => 80],
-            450 => ['dossier' => 18, 'alerte' => 4.5, 'carnet' => 2.5, 'adhesion' => 1, 'caution' => 90],
-            500 => ['dossier' => 20, 'alerte' => 4.5, 'carnet' => 2.5, 'adhesion' => 1, 'caution' => 100],
+            50 => ['dossier' => 2, 'alerte' => 4.5, 'carnet' => 2.5, 'adhesion' => 5, 'caution' => 10],
+            100 => ['dossier' => 4, 'alerte' => 4.5, 'carnet' => 2.5, 'adhesion' => 5, 'caution' => 20],
+            150 => ['dossier' => 6, 'alerte' => 4.5, 'carnet' => 2.5, 'adhesion' => 5, 'caution' => 30],
+            200 => ['dossier' => 8, 'alerte' => 4.5, 'carnet' => 2.5, 'adhesion' => 5, 'caution' => 40],
+            250 => ['dossier' => 10, 'alerte' => 4.5, 'carnet' => 2.5, 'adhesion' => 5, 'caution' => 50],
+            300 => ['dossier' => 12, 'alerte' => 4.5, 'carnet' => 2.5, 'adhesion' => 5, 'caution' => 60],
+            350 => ['dossier' => 14, 'alerte' => 4.5, 'carnet' => 2.5, 'adhesion' => 5, 'caution' => 70],
+            400 => ['dossier' => 16, 'alerte' => 4.5, 'carnet' => 2.5, 'adhesion' => 5, 'caution' => 80],
+            450 => ['dossier' => 18, 'alerte' => 4.5, 'carnet' => 2.5, 'adhesion' => 5, 'caution' => 90],
+            500 => ['dossier' => 20, 'alerte' => 4.5, 'carnet' => 2.5, 'adhesion' => 5, 'caution' => 100],
         ];
 
         $montantArrondi = floor($montantTotalGroupe / 50) * 50;

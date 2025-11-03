@@ -100,6 +100,17 @@ class MouvementForm
                             ->required()
                             ->placeholder(fn ($get) => $get('type') === 'depot' ? 'Nom du déposant' : 'Nom du retirant'),
 
+                       
+                        Select::make('devise')
+                            ->label('Devise')
+                            ->options([
+                                'USD' => 'USD',
+                                'CDF' => 'CDF',
+                            ])
+                            ->default('USD')
+                            ->required()
+                            ->visible(fn ($get) => !$get('compte_id')), // Masquer si compte sélectionné (devise du compte)
+
                         TextInput::make('montant')
                             ->label('Montant (USD)')
                             ->numeric()

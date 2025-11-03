@@ -4,65 +4,61 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class CashRegister extends Model
 {
     protected $fillable = [
         'nom',
-        'devise',
+        'devise', 
         'solde_actuel',
         'solde_ouverture',
-        'solde_cloture',
-        'agence_id',
+        'plafond',
         'responsable_id',
-        'statut',
-        'plafond_journalier',
-        'description'
+        'agence_id',
+        'statut'
     ];
 
     protected $casts = [
         'solde_actuel' => 'decimal:2',
         'solde_ouverture' => 'decimal:2',
-        'solde_cloture' => 'decimal:2',
-        'plafond_journalier' => 'decimal:2'
+        'plafond' => 'decimal:2'
     ];
 
-    public function agence(): BelongsTo
-    {
-        return $this->belongsTo(Agence::class);
-    }
-
-    public function responsable(): BelongsTo
+    public function responsable()
     {
         return $this->belongsTo(User::class, 'responsable_id');
     }
 
-    public function rapportsCoffre(): HasMany
+    public function agence()
     {
-        return $this->hasMany(RapportCoffre::class);
+        return $this->belongsTo(Agence::class);
     }
 
-    public function alimenter(float $montant, string $source, string $reference): MouvementCoffre
+    public function mouvements(): HasMany
+    {
+        return $this->hasMany(MouvementCoffre::class, 'coffre_id');
+    }
+
+    public function alimenter(float $montant, string $source, string $reference, string $description = null): MouvementCoffre
     {
         $this->solde_actuel += $montant;
         $this->save();
 
         return MouvementCoffre::create([
-            'coffre_destination_id' => $this->id,
+            'coffre_id' => $this->id,
             'type_mouvement' => 'entree',
             'montant' => $montant,
             'devise' => $this->devise,
             'source_type' => $source,
             'reference' => $reference,
-            'description' => "Alimentation depuis {$source}",
+            'description' => $description ?? "Alimentation depuis {$source}",
             'date_mouvement' => now(),
             'operateur_id' => auth()->id()
         ]);
     }
 
-    public function transfererVersCaisse(float $montant, string $typeCaisse, string $reference): MouvementCoffre
+    public function transfererVersComptabilite(float $montant, string $motif): MouvementCoffre
     {
         if ($this->solde_actuel < $montant) {
             throw new \Exception('Solde insuffisant dans le coffre');
@@ -72,20 +68,15 @@ class CashRegister extends Model
         $this->save();
 
         return MouvementCoffre::create([
-            'coffre_source_id' => $this->id,
+            'coffre_id' => $this->id,
             'type_mouvement' => 'sortie',
             'montant' => $montant,
             'devise' => $this->devise,
-            'destination_type' => $typeCaisse,
-            'reference' => $reference,
-            'description' => "Transfert vers {$typeCaisse}",
+            'destination_type' => 'comptabilite',
+            'reference' => 'TRANSF-COMPT-' . now()->format('YmdHis'),
+            'description' => "Transfert vers comptabilité - {$motif}",
             'date_mouvement' => now(),
             'operateur_id' => auth()->id()
         ]);
-    }
-
-    public function peutTransferer(float $montant): bool
-    {
-        return $this->solde_actuel >= $montant;
     }
 }

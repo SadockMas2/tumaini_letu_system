@@ -12,18 +12,30 @@ class Caisse extends Model
     protected $fillable = [
         'type_caisse',
         'devise',
-        'solde_actuel',
+        'solde', // Utilisez 'solde' au lieu de 'solde_actuel'
         'plafond',
-        'comptable_id',
-        'agence_id',
+        'nom', // Utilisez 'nom' au lieu de 'description'
         'statut',
-        'description'
+        'comptable_id',
+        'agence_id'
     ];
 
     protected $casts = [
-        'solde_actuel' => 'decimal:2',
+        'solde' => 'decimal:2', // CHANGÉ : solde_actuel → solde
         'plafond' => 'decimal:2'
     ];
+
+    // Accesseur pour compatibilité
+    public function getDescriptionAttribute()
+    {
+        return $this->nom; // Utilisez 'nom' comme description
+    }
+
+    // Mutateur pour compatibilité
+    public function setDescriptionAttribute($value)
+    {
+        $this->attributes['nom'] = $value;
+    }
 
     public function comptable(): BelongsTo
     {
@@ -46,11 +58,11 @@ class Caisse extends Model
             throw new \Exception('La petite caisse ne peut pas gérer des dépenses supérieures à 100 USD');
         }
 
-        if ($this->solde_actuel < $montant) {
+        if ($this->solde < $montant) { // CHANGÉ : solde_actuel → solde
             throw new \Exception('Solde insuffisant dans la caisse');
         }
 
-        $this->solde_actuel -= $montant;
+        $this->solde -= $montant; // CHANGÉ : solde_actuel → solde
         $this->save();
 
         return Depense::create(array_merge($details, [
@@ -65,7 +77,17 @@ class Caisse extends Model
 
     public function recevoirAlimentation(float $montant, string $reference): void
     {
-        $this->solde_actuel += $montant;
+        $this->solde += $montant; // CHANGÉ : solde_actuel → solde
         $this->save();
+    }
+
+    public function getTypeCaisseFormattedAttribute(): string
+    {
+        return match($this->type_caisse) {
+            'petite_caisse' => 'Petite Caisse (< 100 USD)',
+            'grande_caisse' => 'Grande Caisse',
+            'caisse_operations' => 'Caisse Opérations',
+            default => $this->type_caisse
+        };
     }
 }

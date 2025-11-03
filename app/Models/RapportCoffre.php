@@ -5,23 +5,24 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class RapportCoffre extends Model
 {
     protected $fillable = [
-        'coffre_fort_id',
+        'coffre_id',
         'date_rapport',
         'numero_rapport',
-        'responsable_nom',
-        'guichet_agence',
+        'responsable_coffre',
+        'agence',
         'solde_ouverture',
         'total_entrees',
         'total_sorties',
         'solde_cloture_theorique',
         'solde_physique_reel',
         'ecart',
-        'explication_ecart',
-        'observations'
+        'observations',
+        'statut'
     ];
 
     protected $casts = [
@@ -36,22 +37,16 @@ class RapportCoffre extends Model
 
     public function coffre(): BelongsTo
     {
-        return $this->belongsTo(CoffreFort::class);
+        return $this->belongsTo(CashRegister::class, 'coffre_id');
     }
 
-    public function getEntreesDetailsAttribute()
+    public function entrees(): HasMany
     {
-        return $this->coffre->mouvements()
-            ->where('type_mouvement', 'entree')
-            ->whereDate('date_mouvement', $this->date_rapport)
-            ->get();
+        return $this->hasMany(EntreeRapport::class);
     }
 
-    public function getSortiesDetailsAttribute()
+    public function sorties(): HasMany
     {
-        return $this->coffre->mouvements()
-            ->where('type_mouvement', 'sortie')
-            ->whereDate('date_mouvement', $this->date_rapport)
-            ->get();
+        return $this->hasMany(SortieRapport::class);
     }
 }
