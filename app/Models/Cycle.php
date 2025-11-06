@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Support\Facades\Log;
 
 class Cycle extends Model
 {
@@ -28,6 +29,11 @@ class Cycle extends Model
     {
         return $this->belongsTo(Client::class);
     }
+
+    public function ecrituresComptables()
+{
+    return $this->morphMany(EcritureComptable::class, 'sourceable');
+}
 
     public function groupeSolidaire()
     {
@@ -84,12 +90,30 @@ class Cycle extends Model
     }
 
     // Fermer le cycle
-    public function fermer()
-    {
-        $this->statut = 'cloture';
-        $this->date_fin = now();
-        $this->save();
-    }
+ // Dans app/Models/Cycle.php
+
+/**
+ * Relation avec les écritures comptables
+ */
+
+/**
+ * Méthode pour fermer le cycle avec historique
+ */
+public function fermer(): void
+{
+    $this->update([
+        'statut' => 'clôturé',
+        'date_cloture' => now(),
+        'solde_final' => $this->solde_initial + $this->epargnes()->where('statut', 'valide')->sum('montant')
+    ]);
+    
+    // Historique de clôture
+    Log::info("Cycle clôturé", [
+        'cycle_id' => $this->id,
+        'solde_final' => $this->solde_final,
+        'date_cloture' => $this->date_cloture
+    ]);
+}
 
     // Scope pour filtrer par type
     public function scopeIndividuels($query)

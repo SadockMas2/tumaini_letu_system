@@ -16,40 +16,45 @@ class CycleService
     /**
      * Créer un nouveau cycle d'épargne
      */
-    public function creerCycle(array $data): Cycle
-    {
-        return DB::transaction(function () use ($data) {
-            Log::info('Début création cycle', ['data' => $data]);
-            
-            // Vérifier d'abord si le compte transitoire a suffisamment de fonds
-            if (isset($data['solde_initial']) && $data['solde_initial'] > 0) {
-                $this->validerSoldeTransitoire($data);
-            }
-            
-            $cycle = Cycle::create($data);
-            Log::info('Cycle créé', ['cycle_id' => $cycle->id]);
-            
-            // Débiter le compte transitoire APRÈS la création du cycle
-            if ($cycle->solde_initial > 0) {
-                Log::info('Début débit compte transitoire', [
-                    'agent_id' => $cycle->user_id,
-                    'montant' => $cycle->solde_initial,
-                    'devise' => $cycle->devise
-                ]);
-                $this->debiterCompteTransitoire($cycle);
-                Log::info('Débit compte transitoire terminé');
-            }
-            
-            // Créditer le compte spécial UNIQUEMENT ici
-            if ($cycle->solde_initial > 0) {
-                Log::info('Début crédit compte spécial', ['montant' => $cycle->solde_initial]);
-                $cycle->crediterCompteSpecial();
-                Log::info('Crédit compte spécial terminé');
-            }
-            
-            return $cycle;
-        });
-    }
+   public function creerCycle(array $data): Cycle
+{
+    return DB::transaction(function () use ($data) {
+        Log::info('Début création cycle', ['data' => $data]);
+        
+        // Vérifier d'abord si le compte transitoire a suffisamment de fonds
+        if (isset($data['solde_initial']) && $data['solde_initial'] > 0) {
+            $this->validerSoldeTransitoire($data);
+        }
+        
+        $cycle = Cycle::create($data);
+        Log::info('Cycle créé', ['cycle_id' => $cycle->id]);
+        
+        // Débiter le compte transitoire APRÈS la création du cycle
+        if ($cycle->solde_initial > 0) {
+            Log::info('Début débit compte transitoire', [
+                'agent_id' => $cycle->user_id,
+                'montant' => $cycle->solde_initial,
+                'devise' => $cycle->devise
+            ]);
+            $this->debiterCompteTransitoire($cycle);
+            Log::info('Débit compte transitoire terminé');
+        }
+        
+        // Créditer le compte spécial UNIQUEMENT ici
+        if ($cycle->solde_initial > 0) {
+            Log::info('Début crédit compte spécial', ['montant' => $cycle->solde_initial]);
+            $cycle->crediterCompteSpecial();
+            Log::info('Crédit compte spécial terminé');
+        }
+        
+        // ✅ NOUVEAU : Enregistrer l'écriture comptable
+        $comptabilityService = app(ComptabilityService::class);
+        $comptabilityService->enregistrerOuvertureCycle($cycle);
+        Log::info('Écriture comptable créée pour le cycle');
+        
+        return $cycle;
+    });
+}
 
     // Ajoutez cette méthode dans CycleService
     public function diagnostiquerCompteTransitoire(int $userId, string $devise)
@@ -203,36 +208,49 @@ private function debiterCompteTransitoire(Cycle $cycle): void
     /**
      * Ajouter une épargne à un cycle
      */
-    public function ajouterEpargne(array $data): Epargne
-    {
-        return DB::transaction(function () use ($data) {
-            $epargne = Epargne::create($data);
-            return $epargne;
-        });
-    }
+   public function ajouterEpargne(array $data): Epargne
+{
+    return DB::transaction(function () use ($data) {
+        $epargne = Epargne::create($data);
+        
+        // ✅ NOUVEAU : Enregistrer l'écriture comptable
+        if ($epargne->statut === 'valide') {
+            $comptabilityService = app(ComptabilityService::class);
+            $comptabilityService->enregistrerEpargne($epargne);
+            Log::info('Écriture comptable créée pour l\'épargne');
+        }
+        
+        return $epargne;
+    });
+}
+
 
     /**
      * Clôturer un cycle et traiter les soldes
-     */
-    public function cloturerCycle(int $cycleId): Cycle
-    {
-        return DB::transaction(function () use ($cycleId) {
-            $cycle = Cycle::findOrFail($cycleId);
-            
-            // Vérifier que toutes les épargnes sont validées
-            $epargnesEnAttente = Epargne::where('cycle_id', $cycleId)
-                ->whereIn('statut', ['en_attente_dispatch', 'en_attente_validation'])
-                ->exists();
-            
-            if ($epargnesEnAttente) {
-                throw new \Exception('Impossible de clôturer le cycle : des épargnes sont en attente');
-            }
+     */public function cloturerCycle(int $cycleId): Cycle
+{
+    return DB::transaction(function () use ($cycleId) {
+        $cycle = Cycle::findOrFail($cycleId);
+        
+        // Vérifier que toutes les épargnes sont validées
+        $epargnesEnAttente = Epargne::where('cycle_id', $cycleId)
+            ->whereIn('statut', ['en_attente_dispatch', 'en_attente_validation'])
+            ->exists();
+        
+        if ($epargnesEnAttente) {
+            throw new \Exception('Impossible de clôturer le cycle : des épargnes sont en attente');
+        }
 
-            $cycle->fermer();
-            
-            return $cycle;
-        });
-    }
+        $cycle->fermer();
+        
+        // ✅ NOUVEAU : Enregistrer l'écriture comptable de clôture
+        $comptabilityService = app(ComptabilityService::class);
+        $comptabilityService->enregistrerClotureCycle($cycle);
+        Log::info('Écriture comptable créée pour la clôture du cycle');
+        
+        return $cycle;
+    });
+}
 
     /**
      * Récupérer le solde total d'un cycle

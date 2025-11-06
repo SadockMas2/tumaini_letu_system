@@ -48,13 +48,13 @@ class CompteEpargneForm
                             ->default('USD')
                             ->required(),
                             
-                        TextInput::make('taux_interet')
-                            ->label('Taux d\'intérêt (%)')
-                            ->numeric()
-                            ->minValue(0)
-                            ->maxValue(100)
-                            ->step(0.01)
-                            ->default(0),
+                        // TextInput::make('taux_interet')
+                        //     ->label('Taux d\'intérêt (%)')
+                        //     ->numeric()
+                        //     ->minValue(0)
+                        //     ->maxValue(100)
+                        //     ->step(0.01)
+                        //     ->default(0),
                             
                         TextInput::make('solde_minimum')
                             ->label('Solde minimum')

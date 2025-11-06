@@ -963,15 +963,15 @@ Section::make('Détails de l\'Opération')
 
                         $typeOperation = $get('type_operation');
 
-                        if ($typeOperation === 'paiement_salaire') {
-                            $devise = $get('devise_salaire') ?? 'USD';
-                            $caisse = Caisse::where('type_caisse', 'like', '%grande%')
-                                            ->where('devise', $devise)
-                                            ->first();
-                            if ($caisse && $value > $caisse->solde) {
-                                $fail("Solde insuffisant dans la caisse {$caisse->nom}. Maximum: " . number_format($caisse->solde, 2) . " {$devise}");
-                            }
-                        }
+                        // if ($typeOperation === 'paiement_salaire') {
+                        //     $devise = $get('devise_salaire') ?? 'USD';
+                        //     $caisse = Caisse::where('type_caisse', 'like', '%grande%')
+                        //                     ->where('devise', $devise)
+                        //                     ->first();
+                        //     if ($caisse && $value > $caisse->solde) {
+                        //         $fail("Solde insuffisant dans la caisse {$caisse->nom}. Maximum: " . number_format($caisse->solde, 2) . " {$devise}");
+                        //     }
+                        // }
                         
                         if ($typeOperation === 'retrait_compte') {
                             $compteId = $get('compte_id');
@@ -1421,87 +1421,75 @@ Section::make('Détails de l\'Opération')
         });
     }
 
-    private static function paiementSalaire(array $data)
-    {
-        $compte = Compte::find($data['compte_id']);
-        
-        if (!$compte) {
-            throw new \Exception('Compte non trouvé');
-        }
-
-        $devise = $data['devise_salaire'] ?? 'USD';
-        
-        $caisse = Caisse::where('type_caisse', 'like', '%grande%')
-                        ->where('devise', $devise)
-                        ->first();
-
-        if (!$caisse) {
-            throw new \Exception("Aucune grande caisse trouvée pour la devise {$devise}");
-        }
-
-        if ($caisse->solde < $data['montant']) {
-            throw new \Exception("Solde insuffisant dans la caisse {$caisse->nom}. Solde disponible: " . number_format($caisse->solde, 2) . " {$devise}");
-        }
-
-        if ($compte->devise !== $devise) {
-            throw new \Exception("La devise du compte ({$compte->devise}) ne correspond pas à la devise du paiement ({$devise})");
-        }
-
-        DB::transaction(function () use ($data, $compte, $caisse, $devise) {
-            // Débiter la caisse
-            $ancienSoldeCaisse = $caisse->solde;
-            $caisse->solde -= $data['montant'];
-            $caisse->save();
-
-            // Créditer le compte
-            $ancienSoldeCompte = $compte->solde;
-            $compte->solde += $data['montant'];
-            $compte->save();
-
-            // Enregistrer le mouvement
-            $mouvement = Mouvement::create([
-                'compte_id' => $compte->id,
-                'caisse_id' => $caisse->id,
-                'type' => 'depot',
-                'type_mouvement' => 'paiement_salaire',
-                'montant' => $data['montant'],
-                'solde_avant' => $ancienSoldeCompte,
-                'solde_apres' => $compte->solde,
-                'description' => $data['description'] ?? "Paiement {$data['type_charge']} - {$data['periode_paiement']}",
-                'nom_deposant' => $data['client_nom_complet'] ?? self::getNomCompletClient($compte),
-                'devise' => $devise,
-                'operateur_id' => Auth::id(),
-                'numero_compte' => $compte->numero_compte,
-                'client_nom' => $data['client_nom_complet'] ?? self::getNomCompletClient($compte),
-                'date_mouvement' => now()
-            ]);
-
-            // Enregistrer la transaction de paiement de salaire
-            $paiementSalaire = PaiementSalaire::create([
-                'compte_id' => $compte->id,
-                'caisse_id' => $caisse->id,
-                'type_charge' => $data['type_charge'],
-                'montant' => $data['montant'],
-                'devise' => $devise,
-                'periode' => $data['periode_paiement'],
-                'beneficiaire' => $data['client_nom_complet'] ?? $compte->nom,
-                'description' => $data['description'] ?? "Paiement {$data['type_charge']} - {$data['periode_paiement']}",
-                'operateur_id' => Auth::id(),
-                'date_paiement' => now(),
-                'reference' => 'SAL-' . now()->format('YmdHis')
-            ]);
-
-            // Générer l'écriture comptable
-            self::genererEcritureComptableSalaire($mouvement, $compte, $caisse, $data);
-
-            Notification::make()
-                ->title('Paiement de salaire effectué')
-                ->body("Paiement de {$data['montant']} {$devise} crédité sur le compte {$compte->numero_compte} ({$compte->nom})")
-                ->success()
-                ->send();
-        });
+private static function paiementSalaire(array $data)
+{
+    $compte = Compte::find($data['compte_id']);
+    
+    if (!$compte) {
+        throw new \Exception('Compte non trouvé');
     }
 
+    $devise = $data['devise_salaire'] ?? 'USD';
+
+    DB::transaction(function () use ($data, $compte, $devise) {
+        // CRÉDITER le compte du membre pour qu'il puisse retirer l'argent
+        $ancienSoldeCompte = $compte->solde;
+        $nouveauSolde = $ancienSoldeCompte + $data['montant'];
+        
+        $compte->solde = $nouveauSolde; // CRÉDITER le compte
+        $compte->save();
+
+        // CORRECTION : S'assurer que les valeurs sont correctes pour le mouvement
+        $mouvement = Mouvement::create([
+            'compte_id' => $compte->id,
+            'type' => 'depot', // Type dépôt pour créditer le compte
+            'type_mouvement' => 'paiement_salaire',
+            'montant' => $data['montant'],
+            'solde_avant' => (float) $ancienSoldeCompte, // Convertir en float pour être sûr
+            'solde_apres' => (float) $nouveauSolde, // Utiliser la variable calculée
+            'description' => $data['description'] ?? "Paiement {$data['type_charge']} - {$data['periode_paiement']}",
+            'nom_deposant' => $data['client_nom_complet'] ?? self::getNomCompletClient($compte),
+            'devise' => $devise,
+            'operateur_id' => Auth::id(),
+            'numero_compte' => $compte->numero_compte,
+            'client_nom' => $data['client_nom_complet'] ?? self::getNomCompletClient($compte),
+            'date_mouvement' => now()
+        ]);
+
+        // Enregistrer la transaction de paiement de salaire (sans caisse_id)
+        $paiementSalaire = PaiementSalaire::create([
+            'compte_id' => $compte->id,
+            'type_charge' => $data['type_charge'],
+            'montant' => $data['montant'],
+            'devise' => $devise,
+            'periode' => $data['periode_paiement'],
+            'beneficiaire' => $data['client_nom_complet'] ?? $compte->nom,
+            'description' => $data['description'] ?? "Paiement {$data['type_charge']} - {$data['periode_paiement']}",
+            'operateur_id' => Auth::id(),
+            'date_paiement' => now(),
+            'reference' => 'SAL-' . now()->format('YmdHis')
+        ]);
+
+        // Générer l'écriture comptable avec les comptes 66 et 422
+        self::genererEcritureComptableSalaire($mouvement, $compte, $data);
+
+        // LOG pour vérification
+        logger("=== VÉRIFICATION PAIEMENT SALAIRE ===");
+        logger("Compte: {$compte->numero_compte}");
+        logger("Ancien solde: {$ancienSoldeCompte}");
+        logger("Montant crédité: {$data['montant']}");
+        logger("Nouveau solde calculé: {$nouveauSolde}");
+        logger("Solde compte après save: {$compte->solde}");
+        logger("Mouvement - solde_avant: {$mouvement->solde_avant}");
+        logger("Mouvement - solde_apres: {$mouvement->solde_apres}");
+
+        Notification::make()
+            ->title('Paiement de salaire effectué')
+            ->body("Paiement de {$data['montant']} {$devise} crédité sur le compte {$compte->numero_compte} ({$compte->nom}) - Nouveau solde: {$nouveauSolde} {$devise}")
+            ->success()
+            ->send();
+    });
+}
    private static function achatCarnetLivre(array $data)
 {
     $devise = $data['devise_achat'] ?? 'USD';
@@ -1868,56 +1856,64 @@ Section::make('Détails de l\'Opération')
         ]);
     }
 
-    private static function genererEcritureComptableSalaire($mouvement, $compte, $caisse, $data)
-    {
-        $journal = JournalComptable::where('type_journal', 'caisse')->first();
-        
-        if (!$journal) {
-            throw new \Exception('Journal de caisse non trouvé');
-        }
-
-        $reference = 'SAL-' . now()->format('Ymd-His');
-        $typeCompte = match($data['type_charge']) {
-            'salaire' => '641100',
-            'transport' => '641200',
-            'communication' => '641300',
-            'prime' => '641400',
-            'avance' => '455000',
-            default => '641500' // autres charges
-        };
-
-        // Débit: Compte de charge
-        EcritureComptable::create([
-            'journal_comptable_id' => $journal->id,
-            'reference_operation' => $reference,
-            'type_operation' => 'paiement_salaire',
-            'compte_number' => $typeCompte,
-            'libelle' => "Paiement {$data['type_charge']} - {$data['periode_paiement']} - {$data['description']}",
-            'montant_debit' => $data['montant'],
-            'montant_credit' => 0,
-            'date_ecriture' => now(),
-            'date_valeur' => now(),
-            'devise' => $data['devise_salaire'],
-            'statut' => 'comptabilise',
-            'created_by' => Auth::id(),
-        ]);
-
-        // Crédit: Compte de la caisse
-        EcritureComptable::create([
-            'journal_comptable_id' => $journal->id,
-            'reference_operation' => $reference,
-            'type_operation' => 'paiement_salaire',
-            'compte_number' => '571100', // Compte caisse
-            'libelle' => "Paiement {$data['type_charge']} - {$data['periode_paiement']} - {$data['description']}",
-            'montant_debit' => 0,
-            'montant_credit' => $data['montant'],
-            'date_ecriture' => now(),
-            'date_valeur' => now(),
-            'devise' => $data['devise_salaire'],
-            'statut' => 'comptabilise',
-            'created_by' => Auth::id(),
-        ]);
+private static function genererEcritureComptableSalaire($mouvement, $compte, $data)
+{
+    $journal = JournalComptable::where('type_journal', 'caisse')->first();
+    
+    if (!$journal) {
+        throw new \Exception('Journal de caisse non trouvé');
     }
+
+    $reference = 'SAL-' . now()->format('Ymd-His');
+    
+    // Déterminer le compte de charges selon le type de charge
+    $compteCharge = self::getCompteChargeSalaire($data['type_charge']);
+    
+    // ÉCRITURE 1: Débit des charges de personnel (compte 66)
+    EcritureComptable::create([
+        'journal_comptable_id' => $journal->id,
+        'reference_operation' => $reference,
+        'type_operation' => 'paiement_salaire',
+        'compte_number' => $compteCharge, // Compte 66xxx
+        'libelle' => "Paiement {$data['type_charge']} - {$data['periode_paiement']} - {$compte->nom}",
+        'montant_debit' => $data['montant'],
+        'montant_credit' => 0,
+        'date_ecriture' => now(),
+        'date_valeur' => now(),
+        'devise' => $data['devise_salaire'],
+        'statut' => 'comptabilise',
+        'created_by' => Auth::id(),
+    ]);
+
+    // ÉCRITURE 2: Crédit du compte personnel (compte 422)
+    EcritureComptable::create([
+        'journal_comptable_id' => $journal->id,
+        'reference_operation' => $reference,
+        'type_operation' => 'paiement_salaire',
+        'compte_number' => '422000', // Compte 422 - Personnel, rémunérations dues
+        'libelle' => "Paiement {$data['type_charge']} - {$data['periode_paiement']} - {$compte->nom}",
+        'montant_debit' => 0,
+        'montant_credit' => $data['montant'],
+        'date_ecriture' => now(),
+        'date_valeur' => now(),
+        'devise' => $data['devise_salaire'],
+        'statut' => 'comptabilise',
+        'created_by' => Auth::id(),
+    ]);
+}
+
+private static function getCompteChargeSalaire(string $typeCharge): string
+{
+    return match($typeCharge) {
+        'salaire' => '661100', // Appointements, salaires et commissions
+        'transport' => '661800', // Autres rémunérations directes
+        'communication' => '661800', // Autres rémunérations directes  
+        'prime' => '661200', // Primes et gratifications
+        'avance' => '661800', // Autres rémunérations directes
+        'autres' => '661800', // Autres rémunérations directes
+        default => '661100' // Par défaut salaires
+    };
+}
 
     private static function genererEcritureComptableAchat($mouvement, $achat, $caisse, $data)
     {

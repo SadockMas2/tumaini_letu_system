@@ -31,13 +31,10 @@ class DispatchEpargneResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = "heroicon-o-archive-box-arrow-down";
 
-       
+        protected static ?string $navigationLabel = 'Dispatch Epargnes';
+
      protected static string|UnitEnum|null $navigationGroup = '💰 EPARGNES';
 
-       public static function getNavigationBadge(): ?string
-    {
-        return static::getModel()::count();
-    } 
     public static function form(Schema $schema): Schema
     {
         return DispatchEpargneForm::configure($schema);
@@ -51,6 +48,11 @@ class DispatchEpargneResource extends Resource
     {
         return [];
     }
+    
+      public static function getNavigationBadge(): ?string
+    {
+        return static::getModel()::count();
+    } 
 
     public static function getPages(): array
     {

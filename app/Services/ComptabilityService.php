@@ -3,7 +3,9 @@
 
 namespace App\Services;
 
+use App\Models\Cycle;
 use App\Models\EcritureComptable;
+use App\Models\Epargne;
 use App\Models\JournalComptable;
 use App\Models\MouvementCoffre;
 use App\Models\Caisse;
@@ -555,4 +557,159 @@ public function enregistrerRetourVersCoffre($mouvementCoffreId, $reference)
             'created_by' => Auth::id(),
         ]);
     }
+
+    // Dans ComptabilityService.php - Ajouter ces méthodes
+
+/**
+ * Enregistre l'écriture comptable pour l'ouverture d'un cycle
+ */
+public function enregistrerOuvertureCycle(Cycle $cycle): void
+{
+    DB::transaction(function () use ($cycle) {
+        $journal = $this->getJournal('ventes'); // Ou 'operations' selon votre plan
+        
+        $reference = 'CYCLE-' . $cycle->numero_cycle . '-' . now()->format('Ymd');
+        
+        // Débit: Compte de produits d'épargne (compte produit)
+        EcritureComptable::create([
+            'journal_comptable_id' => $journal->id,
+            'reference_operation' => $reference,
+            'type_operation' => 'ouverture_cycle',
+            'compte_number' => '758200', // Compte produits épargne - à adapter
+            'libelle' => "Ouverture cycle {$cycle->numero_cycle} - {$cycle->client_nom}",
+            'montant_debit' => $cycle->solde_initial,
+            'montant_credit' => 0,
+            'date_ecriture' => now(),
+            'date_valeur' => now(),
+            'devise' => $cycle->devise,
+            'statut' => 'comptabilise',
+            'created_by' => Auth::id(),
+        ]);
+
+        // Crédit: Compte spécial du cycle
+        EcritureComptable::create([
+            'journal_comptable_id' => $journal->id,
+            'reference_operation' => $reference,
+            'type_operation' => 'ouverture_cycle',
+            'compte_number' => '511300', // Compte spécial cycles - à adapter
+            'libelle' => "Ouverture cycle {$cycle->numero_cycle} - {$cycle->client_nom}",
+            'montant_debit' => 0,
+            'montant_credit' => $cycle->solde_initial,
+            'date_ecriture' => now(),
+            'date_valeur' => now(),
+            'devise' => $cycle->devise,
+            'statut' => 'comptabilise',
+            'created_by' => Auth::id(),
+        ]);
+
+        Log::info("Écriture comptable créée pour l'ouverture du cycle", [
+            'cycle_id' => $cycle->id,
+            'reference' => $reference,
+            'montant' => $cycle->solde_initial
+        ]);
+    });
+}
+
+/**
+ * Enregistre l'écriture comptable pour une épargne individuelle ou de groupe
+ */
+public function enregistrerEpargne(Epargne $epargne): void
+{
+    DB::transaction(function () use ($epargne) {
+        $journal = $this->getJournal('ventes');
+        
+        $typeEpargne = $epargne->type_epargne === 'individuel' ? 'Individuelle' : 'Groupe';
+        $reference = 'EPARGNE-' . $epargne->id . '-' . now()->format('Ymd');
+        
+        // Débit: Compte de produits d'épargne
+        EcritureComptable::create([
+            'journal_comptable_id' => $journal->id,
+            'reference_operation' => $reference,
+            'type_operation' => 'depot_epargne',
+            'compte_number' => '758200', // Compte produits épargne
+            'libelle' => "Épargne {$typeEpargne} - {$epargne->client_nom} - Cycle {$epargne->cycle->numero_cycle}",
+            'montant_debit' => $epargne->montant,
+            'montant_credit' => 0,
+            'date_ecriture' => now(),
+            'date_valeur' => now(),
+            'devise' => $epargne->devise,
+            'statut' => 'comptabilise',
+            'created_by' => Auth::id(),
+        ]);
+
+        // Crédit: Compte spécial du cycle
+        EcritureComptable::create([
+            'journal_comptable_id' => $journal->id,
+            'reference_operation' => $reference,
+            'type_operation' => 'depot_epargne',
+            'compte_number' => '511300', // Compte spécial cycles
+            'libelle' => "Épargne {$typeEpargne} - {$epargne->client_nom} - Cycle {$epargne->cycle->numero_cycle}",
+            'montant_debit' => 0,
+            'montant_credit' => $epargne->montant,
+            'date_ecriture' => now(),
+            'date_valeur' => now(),
+            'devise' => $epargne->devise,
+            'statut' => 'comptabilise',
+            'created_by' => Auth::id(),
+        ]);
+
+        Log::info("Écriture comptable créée pour l'épargne", [
+            'epargne_id' => $epargne->id,
+            'type' => $epargne->type_epargne,
+            'montant' => $epargne->montant
+        ]);
+    });
+}
+
+/**
+ * Enregistre la clôture d'un cycle
+ */
+public function enregistrerClotureCycle(Cycle $cycle): void
+{
+    DB::transaction(function () use ($cycle) {
+        $journal = $this->getJournal('ventes');
+        
+        $soldeTotal = $cycle->solde_initial + $cycle->epargnes()->where('statut', 'valide')->sum('montant');
+        $reference = 'CLOTURE-CYCLE-' . $cycle->numero_cycle;
+        
+        // Débit: Compte spécial du cycle (vider le compte)
+        EcritureComptable::create([
+            'journal_comptable_id' => $journal->id,
+            'reference_operation' => $reference,
+            'type_operation' => 'cloture_cycle',
+            'compte_number' => '511300', // Compte spécial cycles
+            'libelle' => "Clôture cycle {$cycle->numero_cycle} - {$cycle->client_nom}",
+            'montant_debit' => $soldeTotal,
+            'montant_credit' => 0,
+            'date_ecriture' => now(),
+            'date_valeur' => now(),
+            'devise' => $cycle->devise,
+            'statut' => 'comptabilise',
+            'created_by' => Auth::id(),
+        ]);
+
+        // Crédit: Compte de résultat (bénéfice) ou compte de restitution
+        EcritureComptable::create([
+            'journal_comptable_id' => $journal->id,
+            'reference_operation' => $reference,
+            'type_operation' => 'cloture_cycle',
+            'compte_number' => '791000', // Compte de résultat - à adapter
+            'libelle' => "Clôture cycle {$cycle->numero_cycle} - {$cycle->client_nom}",
+            'montant_debit' => 0,
+            'montant_credit' => $soldeTotal,
+            'date_ecriture' => now(),
+            'date_valeur' => now(),
+            'devise' => $cycle->devise,
+            'statut' => 'comptabilise',
+            'created_by' => Auth::id(),
+        ]);
+
+        Log::info("Écriture comptable créée pour la clôture du cycle", [
+            'cycle_id' => $cycle->id,
+            'solde_total' => $soldeTotal
+        ]);
+    });
+}
+
+
 }

@@ -56,10 +56,10 @@ class CompteEpargnesTable
                     ->label('Devise')
                     ->sortable(),
                     
-                TextColumn::make('taux_interet')
-                    ->label('Taux %')
-                    ->suffix('%')
-                    ->sortable(),
+                // TextColumn::make('taux_interet')
+                //     ->label('Taux %')
+                //     ->suffix('%')
+                //     ->sortable(),
                     
                 TextColumn::make('statut')
                     ->badge()
@@ -97,68 +97,67 @@ class CompteEpargnesTable
             ])
             ->recordActions([
                 ViewAction::make(),
-                EditAction::make(),
-                DeleteAction::make(),
-                Action::make('depot')
-                    ->label('Dépôt')
-                    ->icon('heroicon-o-plus')
-                    ->color('success')
-                     ->action(function (CompteEpargne $record, array $data) {
-                        if ($record->crediter($data['montant'], $data['description'])) {
-                            // Message de succès
-                           Notification::make()
-                                ->title('Dépôt réussi')
-                                ->body("Le montant de {$data['montant']} {$record->devise} a été crédité sur le compte {$record->numero_compte}")
-                                ->success()
-                                ->send();
-                        } else {
-                            // Message d'erreur
-                           Notification::make()
-                                ->title('Erreur de dépôt')
-                                ->body('Impossible d\'effectuer le dépôt')
-                                ->danger()
-                                ->send();
-                        }
-                    })
-                    ->schema([
-                        TextInput::make('montant')
-                            ->numeric()
-                            ->required()
-                            ->minValue(0.01),
-                        Textarea::make('description')
-                            ->label('Description'),
-                    ]),
+                
+                // Action::make('depot')
+                //     ->label('Dépôt')
+                //     ->icon('heroicon-o-plus')
+                //     ->color('success')
+                //      ->action(function (CompteEpargne $record, array $data) {
+                //         if ($record->crediter($data['montant'], $data['description'])) {
+                //             // Message de succès
+                //            Notification::make()
+                //                 ->title('Dépôt réussi')
+                //                 ->body("Le montant de {$data['montant']} {$record->devise} a été crédité sur le compte {$record->numero_compte}")
+                //                 ->success()
+                //                 ->send();
+                //         } else {
+                //             // Message d'erreur
+                //            Notification::make()
+                //                 ->title('Erreur de dépôt')
+                //                 ->body('Impossible d\'effectuer le dépôt')
+                //                 ->danger()
+                //                 ->send();
+                //         }
+                //     })
+                //     ->schema([
+                //         TextInput::make('montant')
+                //             ->numeric()
+                //             ->required()
+                //             ->minValue(0.01),
+                //         Textarea::make('description')
+                //             ->label('Description'),
+                //     ]),
                     
-                Action::make('retrait')
-                    ->label('Retrait')
-                    ->icon('heroicon-o-minus')
-                    ->color('warning')
-                    ->action(function (CompteEpargne $record, array $data) {
-                        if ($record->debiter($data['montant'], $data['description'])) {
-                            // Message de succès
-                          Notification::make()
-                                ->title('Retrait réussi')
-                                ->body("Le montant de {$data['montant']} {$record->devise} a été retiré du compte {$record->numero_compte}")
-                                ->success()
-                                ->send();
-                        } else {
-                            // Message d'erreur
-                        Notification::make()
-                                ->title('Erreur de retrait')
-                                ->body('Impossible d\'effectuer le retrait - solde insuffisant ou compte inactif')
-                                ->danger()
-                                ->send();
-                        }
-                    })
-                    ->schema([
-                        TextInput::make('montant')
-                            ->numeric()
-                            ->required()
-                            ->minValue(0.01)
-                             ->maxValue(fn (CompteEpargne $record) => $record->solde),
-                        Textarea::make('description')
-                            ->label('Description'),
-                    ]),
+                // Action::make('retrait')
+                //     ->label('Retrait')
+                //     ->icon('heroicon-o-minus')
+                //     ->color('warning')
+                //     ->action(function (CompteEpargne $record, array $data) {
+                //         if ($record->debiter($data['montant'], $data['description'])) {
+                //             // Message de succès
+                //           Notification::make()
+                //                 ->title('Retrait réussi')
+                //                 ->body("Le montant de {$data['montant']} {$record->devise} a été retiré du compte {$record->numero_compte}")
+                //                 ->success()
+                //                 ->send();
+                //         } else {
+                //             // Message d'erreur
+                //         Notification::make()
+                //                 ->title('Erreur de retrait')
+                //                 ->body('Impossible d\'effectuer le retrait - solde insuffisant ou compte inactif')
+                //                 ->danger()
+                //                 ->send();
+                //         }
+                //     })
+                //     ->schema([
+                //         TextInput::make('montant')
+                //             ->numeric()
+                //             ->required()
+                //             ->minValue(0.01)
+                //              ->maxValue(fn (CompteEpargne $record) => $record->solde),
+                //         Textarea::make('description')
+                //             ->label('Description'),
+                //     ]),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([

@@ -237,6 +237,12 @@ private static function mettreAJourSolde($mouvement, $compte, $montant)
         $mouvement->solde_apres = $compte->solde; // Utiliser le solde actuel du compte
         return;
     }
+      if ($mouvement->type_mouvement === 'paiement_salaire') {
+        // Pour les paiements de salaire, on utilise les valeurs déjà calculées
+        // Le solde a déjà été mis à jour dans paiementSalaire
+        $mouvement->solde_apres = $compte->solde; // Utiliser le solde actuel du compte
+        return;
+    }
 
     // Pour les autres types de mouvements, continuer la logique normale
     $soldeActuel = (float) $compte->solde;

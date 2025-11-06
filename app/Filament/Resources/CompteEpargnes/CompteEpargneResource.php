@@ -51,7 +51,7 @@ class CompteEpargneResource extends Resource
         return [
             'index' => ListCompteEpargnes::route('/'),
             'create' => CreateCompteEpargne::route('/create'),
-            'edit' => EditCompteEpargne::route('/{record}/edit'),
+            // 'edit' => EditCompteEpargne::route('/{record}/edit'),
         ];
     }
 

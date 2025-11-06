@@ -81,7 +81,7 @@ class CycleResource extends Resource
         return [
             'index' => ListCycles::route('/'),
             'create' => CreateCycle::route('/create'),
-            // 'edit' => EditCycle::route('/{record}/edit'),
+            'edit' => EditCycle::route('/{record}/edit'),
         ];
     }
 

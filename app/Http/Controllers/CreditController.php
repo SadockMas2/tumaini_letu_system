@@ -135,7 +135,7 @@ public function processApproval(Request $request, $credit_id)
             $remboursementHebdo = Credit::calculerRemboursementHebdo($montantTotal, 'individuel');
 
             // Calculer le total des frais à payer (sans la caution)
-            $totalFrais = $frais['dossier'] + $frais['alerte'] ;
+            $totalFrais = $frais['dossier'] + $frais['alerte'];
             
             // Vérifier si le solde est suffisant pour couvrir les frais
             $compte = $credit->compte;
@@ -167,8 +167,15 @@ public function processApproval(Request $request, $credit_id)
 
             Log::info("💰 FRAIS DÉDUITS - Solde après frais: {$soldeApresFrais}");
 
-            // 3. TRANSFÉRER LES FRAIS VERS LE COMPTE SPÉCIAL
-            $this->transfererFraisVersCompteSpecial($totalFrais, $compte->devise, $credit);
+            // 3. TRANSFÉRER LES FRAIS VERS LE COMPTE SPÉCIAL (CORRECTION)
+            $compteSpecial = $this->transfererFraisVersCompteSpecial($totalFrais, $compte->devise, $credit);
+
+            // ✅ CORRECTION : CRÉDITER EFFECTIVEMENT LE COMPTE SPÉCIAL (comme pour le groupe)
+            $ancienSoldeSpecial = $compteSpecial->solde;
+            $compteSpecial->solde += $totalFrais;
+            $compteSpecial->save();
+
+            Log::info("💰 COMPTE SPÉCIAL CRÉDITÉ - Ancien solde: {$ancienSoldeSpecial} USD, Nouveau solde: {$compteSpecial->solde} USD");
 
             // 4. CRÉER L'HISTORIQUE DANS LE COMPTE SPÉCIAL
             $this->creerHistoriqueCompteSpecial($totalFrais, $compte->devise, $credit, $compte);
@@ -180,7 +187,6 @@ public function processApproval(Request $request, $credit_id)
                 'montant_total' => $montantTotal,
                 'frais_dossier' => $frais['dossier'],
                 'frais_alerte' => $frais['alerte'],
-                // 'frais_adhesion' => $frais['adhesion'],
                 'caution' => $frais['caution'],
                 'remboursement_hebdo' => $remboursementHebdo,
                 'duree_mois' => 4,
@@ -196,25 +202,12 @@ public function processApproval(Request $request, $credit_id)
 
             Log::info("💳 CRÉDIT AJOUTÉ - Solde après crédit: {$soldeApresCredit}");
 
-            // 7. CRÉER LE MOUVEMENT "CRÉDIT OCTROYÉ"
-            // Mouvement::create([
-            //     'compte_id' => $compte->id,
-            //     'type_mouvement' => 'credit_octroye',
-            //     'montant' => $request->montant_accorde,
-            //     'solde_avant' => $soldeApresFrais,
-            //     'solde_apres' => $soldeApresCredit,
-            //     'description' => "Octroi de crédit individuel - Montant: {$request->montant_accorde} {$compte->devise}",
-            //     'reference' => 'CREDIT-' . $credit->id,
-            //     'date_mouvement' => now(),
-            //     'nom_deposant' => $compte->nom . ' ' . $compte->prenom ?? 'Système',
-            // ]);
-
-            // 8. BLOQUER LA CAUTION DANS LE COMPTE (CORRIGÉ POUR CRÉDIT INDIVIDUEL)
+            // 7. BLOQUER LA CAUTION DANS LE COMPTE
             $caution = $frais['caution'];
             if ($caution > 0) {
                 DB::table('cautions')->insert([
                     'compte_id' => $compte->id,
-                    'credit_id' => $credit->id, // ✅ CORRECTION: credit_id pour crédit individuel
+                    'credit_id' => $credit->id,
                     'montant' => $caution,
                     'statut' => 'bloquee',
                     'date_blocage' => now(),
@@ -223,18 +216,17 @@ public function processApproval(Request $request, $credit_id)
                 ]);
 
                 Log::info("🔒 CAUTION BLOQUÉE - Montant: {$caution} USD pour crédit individuel #{$credit->id}");
-                // 9. GÉNÉRER LES ÉCRITURES COMPTABLES
-                // $this->genererEcrituresComptablesCreditIndividuel(
-                //     $credit, 
-                //     $compte, 
-                //     $frais, 
-                //     $montantTotal
-                // );
-
-Log::info('✅ Crédit individuel approuvé avec succès - Frais transférés - Caution bloquée - Écritures comptables créées');
             }
 
-            Log::info('✅ Crédit individuel approuvé avec succès - Frais transférés - Caution bloquée');
+            // ✅ CORRECTION : GÉNÉRER LES ÉCRITURES COMPTABLES POUR LE CRÉDIT INDIVIDUEL
+            $this->genererEcrituresComptablesCreditIndividuel(
+                $credit, 
+                $compte, 
+                $frais, 
+                $montantTotal
+            );
+
+            Log::info('✅ Crédit individuel approuvé avec succès - Frais transférés - Caution bloquée - Écritures comptables créées');
             Log::info("📈 RÉCAPITULATIF - Début: {$soldeDebut}, Après frais: {$soldeApresFrais}, Final: {$soldeApresCredit}, Caution bloquée: {$caution}");
 
             DB::commit();
@@ -263,8 +255,6 @@ Log::info('✅ Crédit individuel approuvé avec succès - Frais transférés - 
         ]);
         return back()->with('error', 'Erreur lors du traitement: ' . $e->getMessage());
     }
-
-    
 }
 
 

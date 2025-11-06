@@ -30,6 +30,8 @@ class ComptabilitesTable
                 TextColumn::make('date_ecriture')
                     ->date()
                     ->sortable(),
+                TextColumn::make('reference_operation')
+                    ->label('Reference'),
                 TextColumn::make('journal.libelle_journal')
                     ->label('Journal'),
                 TextColumn::make('compte_number')

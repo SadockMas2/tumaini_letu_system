@@ -17,6 +17,7 @@ class CompteSpecialsTable
     {
         return $table
             ->columns([
+                   TextColumn::make('nom')->label('Nom '),
                 TextColumn::make('solde')->label('Solde'),
                 TextColumn::make('devise')->label('Devise'),
                 TextColumn::make('updated_at')->label('Dernière mise à jour')->dateTime(),

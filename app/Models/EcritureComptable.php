@@ -5,6 +5,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\Auth ;
 
 class EcritureComptable extends Model
 {
@@ -23,7 +24,9 @@ class EcritureComptable extends Model
         'notes',
         'piece_jointe',
         'created_by',
-        'updated_by'
+        'updated_by',    
+        'created_at',
+        'updated_at'
     ];
 
     protected $casts = [
@@ -42,6 +45,10 @@ class EcritureComptable extends Model
         return $this->belongsTo(JournalComptable::class, 'journal_comptable_id');
     }
 
+    public function sourceable()
+{
+    return $this->morphTo();
+}
     // Relation avec le plan comptable
     public function planComptable(): BelongsTo
     {
@@ -67,13 +74,13 @@ class EcritureComptable extends Model
 
         static::creating(function ($model) {
             if (auth()->check()) {
-                $model->created_by = auth()->id();
+                $model->created_by = Auth::id();
             }
         });
 
         static::updating(function ($model) {
             if (auth()->check()) {
-                $model->updated_by = auth()->id();
+                $model->updated_by = Auth::id();
             }
         });
     }

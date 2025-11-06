@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use App\Models\Compte;
 use App\Models\CompteTransitoire;
+use Illuminate\Support\Facades\Log;
 
 class Epargne extends Model
 {
@@ -15,13 +16,22 @@ class Epargne extends Model
         'user_id',
         'agent_nom',
         'montant',
-        'date_apport ',
+        'date_apport',
         'devise',
         'numero_compte_membre',
         'solde_apres_membre',
         'client_nom',
         'type_epargne',
+        'statut',
     ];
+
+    /**
+     * Relation avec les écritures comptables
+     */
+    public function ecrituresComptables()
+    {
+        return $this->morphMany(EcritureComptable::class, 'sourceable');
+    }
 
     public function client()
     {
@@ -36,6 +46,11 @@ class Epargne extends Model
     public function agent()
     {
         return $this->belongsTo(User::class, 'user_id');
+    }
+
+    public function collecteur()
+    {
+        return $this->belongsTo(User::class, 'agent_id');
     }
 
     public function cycle()
@@ -77,13 +92,16 @@ class Epargne extends Model
             // Statut initial
             $epargne->statut = 'en_attente_dispatch';
 
-            // Compte transitoire de l'agent
-            // $ct = CompteTransitoire::firstOrCreate(
-            //     ['user_id' => $epargne->user_id, 'devise' => $epargne->devise],
-            //     ['solde' => 0, 'statut' => 'actif', 'agent_nom' => $epargne->agent_nom]
-            // );
-            // $ct->solde += $epargne->montant;
-            // $ct->save();
+            // ✅ SUPPRIMER le crédit du compte transitoire
+            // L'agent doit déjà avoir les fonds dans son compte transitoire
+            // avant de pouvoir créer une épargne
+
+            Log::info("Création épargne sans crédit compte transitoire", [
+                'epargne_id' => $epargne->id,
+                'agent_id' => $epargne->user_id,
+                'montant' => $epargne->montant,
+                'devise' => $epargne->devise
+            ]);
 
             // Gestion du compte selon le type (individuel ou groupe)
             if ($isGroupe) {
@@ -107,20 +125,19 @@ class Epargne extends Model
                     ]
                 );
             }
+        });
 
-            // // Mettre à jour le solde du compte
-            // $compte->solde += $epargne->montant;
-            // $compte->save();
-
-            // $epargne->numero_compte_membre = $compte->numero_compte;
-            // $epargne->solde_apres_membre = $compte->solde;
-
-            // SUPPRIMER la logique de premiere_mise
+        static::updated(function ($epargne) {
+            Log::info("Epargne mise à jour", [
+                'epargne_id' => $epargne->id,
+                'nouveau_statut' => $epargne->statut,
+                'agent_id' => $epargne->user_id
+            ]);
         });
     }
 
     public function user()
     {
-        return $this->hasMany(\App\Models\User::class);
+        return $this->belongsTo(User::class, 'user_id');
     }
 }
