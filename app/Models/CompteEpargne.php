@@ -138,4 +138,15 @@ class CompteEpargne extends Model
         $this->solde -= $montant;
         return $this->save();
     }
+
+    public function getNomCompletAttribute(): string
+{
+    if ($this->type_compte === 'individuel' && $this->client) {
+        return $this->client->nom_complet;
+    } elseif ($this->type_compte === 'groupe_solidaire' && $this->groupeSolidaire) {
+        return $this->groupeSolidaire->nom_groupe . ' (Groupe)';
+    }
+    
+    return 'N/A';
+}
 }

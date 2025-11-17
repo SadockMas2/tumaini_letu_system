@@ -480,12 +480,16 @@ public function processApprovalGroupe(Request $request, $credit_groupe_id)
                 throw new \Exception("Solde groupe insuffisant pour payer les frais. Solde: {$soldeDebutGroupe} USD, Frais: {$totalFraisGroupe} USD");
             }
 
-            // ✅ CORRECTION : NE PAS METTRE À JOUR MANUELLEMENT LE SOLDE
-            // Le système le fera automatiquement via le mouvement
-
-            // 1. CRÉER LE MOUVEMENT "RETRAIT FRAIS" POUR LE GROUPE (SEULE DÉDUCTION)
-            $soldeApresFraisGroupe = $soldeDebutGroupe - $totalFraisGroupe;
+            // === DÉBUT DE LA SECTION CORRIGÉE ===
             
+            // 1. DÉDUIRE LES FRAIS DU SOLDE DU COMPTE GROUPE
+            $soldeApresFraisGroupe = $soldeDebutGroupe - $totalFraisGroupe;
+            $compteGroupe->solde = $soldeApresFraisGroupe;
+            $compteGroupe->save();
+
+            Log::info("💰 FRAIS DÉDUITS - Solde début: {$soldeDebutGroupe} USD, Frais: {$totalFraisGroupe} USD, Solde après: {$soldeApresFraisGroupe} USD");
+
+            // 2. CRÉER LE MOUVEMENT "RETRAIT FRAIS" POUR LE GROUPE
             Mouvement::create([
                 'compte_id' => $compteGroupe->id,
                 'type_mouvement' => 'frais_payes_credit_groupe',
@@ -498,63 +502,66 @@ public function processApprovalGroupe(Request $request, $credit_groupe_id)
                 'nom_deposant' => $compteGroupe->nom ?? 'Groupe',
             ]);
 
-            // ✅ CORRECTION : RECHARGER LE COMPTE POUR AVOIR LE BON SOLDE
-            $compteGroupe->refresh();
-            Log::info("✅ FRAIS PRÉLEVÉS - Solde après mouvement: {$compteGroupe->solde} USD");
-
-            // 2. TRANSFÉRER LES FRAIS VERS LE COMPTE SPÉCIAL
+            // 3. TRANSFÉRER LES FRAIS VERS LE COMPTE SPÉCIAL
             $compteSpecial = $this->transfererFraisVersCompteSpecial($totalFraisGroupe, $compteGroupe->devise, $credit);
-            
+
             // CRÉDITER LE COMPTE SPÉCIAL
             $ancienSoldeSpecial = $compteSpecial->solde;
             $compteSpecial->solde += $totalFraisGroupe;
             $compteSpecial->save();
-            
+
             Log::info("💰 COMPTE SPÉCIAL CRÉDITÉ - Ancien solde: {$ancienSoldeSpecial} USD, Nouveau solde: {$compteSpecial->solde} USD");
 
-            // 3. CRÉER L'HISTORIQUE DU COMPTE SPÉCIAL
+            // 4. CRÉER L'HISTORIQUE DU COMPTE SPÉCIAL
             $this->creerHistoriqueCompteSpecial($totalFraisGroupe, $compteGroupe->devise, $credit, $compteGroupe);
 
-            // 4. CRÉDITER DIRECTEMENT LES COMPTES DES MEMBRES (AVEC VÉRIFICATION)
+            // ✅ VÉRIFICATION FINALE
+            $compteGroupe->refresh();
+            Log::info("✅ VÉRIFICATION FINALE - Solde groupe après frais: {$compteGroupe->solde} USD");
+
+            // === FIN DE LA SECTION CORRIGÉE ===
+
+            // 5. CRÉDITER DIRECTEMENT LES COMPTES DES MEMBRES (AVEC VÉRIFICATION)
             Log::info("💳 CRÉDIT DIRECT AUX MEMBRES - Total: {$montantTotalGroupe} USD");
             $this->crediterComptesMembresSansDouble($request->montants_membres, $credit);
 
-          // 5. BLOQUER LA CAUTION DANS LE COMPTE GROUPE (SANS DÉDUCTION DU SOLDE)
-                $soldeActuelGroupe = $compteGroupe->fresh()->solde;
-                $cautionBloquee = false;
+            // 6. BLOQUER LA CAUTION DANS LE COMPTE GROUPE (SANS DÉDUCTION DU SOLDE)
+            $soldeActuelGroupe = $compteGroupe->fresh()->solde;
+            $cautionBloquee = false;
 
-                if ($totalCautionGroupe > 0) {
-                    // ✅ CORRECTION : NE PAS DÉDUIRE LA CAUTION DU SOLDE
-                    // La caution reste dans le compte mais est marquée comme bloquée
-                    
-                    // Enregistrer la caution dans la table cautions (statut "bloquee")
-                    DB::table('cautions')->insert([
-                        'compte_id' => $compteGroupe->id,
-                        'credit_groupe_id' => $credit->id,
-                        'montant' => $totalCautionGroupe,
-                        'statut' => 'bloquee',
-                        'date_blocage' => now(),
-                        'created_at' => now(),
-                        'updated_at' => now(),
-                    ]);
+            if ($totalCautionGroupe > 0) {
+                // ✅ CORRECTION : NE PAS DÉDUIRE LA CAUTION DU SOLDE
+                // La caution reste dans le compte mais est marquée comme bloquée
+                
+                // Enregistrer la caution dans la table cautions (statut "bloquee")
+                DB::table('cautions')->insert([
+                    'compte_id' => $compteGroupe->id,
+                    'credit_groupe_id' => $credit->id,
+                    'montant' => $totalCautionGroupe,
+                    'statut' => 'bloquee',
+                    'date_blocage' => now(),
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
 
-                    // ✅ CORRECTION : CRÉER UN MOUVEMENT DE "BLOQUAGE" SANS DÉDUCTION
-                    Mouvement::create([
-                        'compte_id' => $compteGroupe->id,
-                        'type_mouvement' => 'caution_bloquee_groupe',
-                        'montant' => 0, // ❌ IMPORTANT : Montant 0 car pas de déduction
-                        'solde_avant' => $soldeActuelGroupe,
-                        'solde_apres' => $soldeActuelGroupe, // Même solde
-                        'description' => "Caution bloquée pour crédit groupe - Montant: {$totalCautionGroupe} USD (non déduit)",
-                        'reference' => 'CAUTION-GROUPE-' . $credit->id,
-                        'date_mouvement' => now(),
-                        'nom_deposant' => 'TUMAINI LETU Finances',
-                    ]);
+                // ✅ CORRECTION : CRÉER UN MOUVEMENT DE "BLOQUAGE" SANS DÉDUCTION
+                Mouvement::create([
+                    'compte_id' => $compteGroupe->id,
+                    'type_mouvement' => 'caution_bloquee_groupe',
+                    'montant' => 0, // ❌ IMPORTANT : Montant 0 car pas de déduction
+                    'solde_avant' => $soldeActuelGroupe,
+                    'solde_apres' => $soldeActuelGroupe, // Même solde
+                    'description' => "Caution bloquée pour crédit groupe - Montant: {$totalCautionGroupe} USD (non déduit)",
+                    'reference' => 'CAUTION-GROUPE-' . $credit->id,
+                    'date_mouvement' => now(),
+                    'nom_deposant' => 'TUMAINI LETU Finances',
+                ]);
 
-                    $cautionBloquee = true;
-                    Log::info("🔒 CAUTION BLOQUÉE (NON DÉDUITE) - Montant: {$totalCautionGroupe} USD, Solde groupe inchangé: {$soldeActuelGroupe} USD");
-                }
-            // 6. METTRE À JOUR LE CRÉDIT GROUPE
+                $cautionBloquee = true;
+                Log::info("🔒 CAUTION BLOQUÉE (NON DÉDUITE) - Montant: {$totalCautionGroupe} USD, Solde groupe inchangé: {$soldeActuelGroupe} USD");
+            }
+
+            // 7. METTRE À JOUR LE CRÉDIT GROUPE
             $montantTotalAvecInteret = $montantTotalGroupe * 1.225;
             $remboursementHebdoTotal = $montantTotalAvecInteret / 16;
 
@@ -576,7 +583,7 @@ public function processApprovalGroupe(Request $request, $credit_groupe_id)
                 'caution_bloquee' => $cautionBloquee,
             ]);
 
-            // 7. GÉNÉRER LES ÉCRITURES COMPTABLES
+            // 8. GÉNÉRER LES ÉCRITURES COMPTABLES
             $this->genererEcrituresComptablesCreditGroupeCorrect(
                 $credit,
                 $compteGroupe,
@@ -617,12 +624,13 @@ public function processApprovalGroupe(Request $request, $credit_groupe_id)
     }
 }
 
+
 /**
- * CRÉDITER LES COMPTES DES MEMBRES SANS DOUBLE CRÉDIT
+ * CRÉDITER LES COMPTES DES MEMBRES AVEC MISE À JOUR DES SOLDES
  */
 private function crediterComptesMembresSansDouble($montantsMembres, $creditGroupe)
 {
-    Log::info('💳 === CRÉDIT DIRECT AUX MEMBRES - SANS DOUBLE ===');
+    Log::info('💳 === CRÉDIT DIRECT AUX MEMBRES - AVEC MISE À JOUR SOLDE ===');
     
     $totalCredite = 0;
     $membresCredites = 0;
@@ -642,13 +650,14 @@ private function crediterComptesMembresSansDouble($montantsMembres, $creditGroup
 
                 $soldeDebutMembre = $compteMembre->solde;
                 
-                // ✅ CORRECTION : NE PAS METTRE À JOUR MANUELLEMENT LE SOLDE
-                // Le système le fera automatiquement via le mouvement
+                // ✅ CORRECTION : METTRE À JOUR LE SOLDE DU COMPTE
                 $nouveauSolde = $soldeDebutMembre + $montant;
+                $compteMembre->solde = $nouveauSolde;
+                $compteMembre->save();
                 
-                Log::info("👤 Membre {$membreId}: Solde début = {$soldeDebutMembre} USD, Crédit = {$montant} USD");
+                Log::info("👤 Membre {$membreId}: Solde début = {$soldeDebutMembre} USD, Crédit = {$montant} USD, Nouveau solde = {$nouveauSolde} USD");
 
-                // CRÉER LE MOUVEMENT "DÉPÔT" POUR LE MEMBRE (SEUL CRÉDIT)
+                // CRÉER LE MOUVEMENT "DÉPÔT" POUR LE MEMBRE
                 Mouvement::create([
                     'compte_id' => $compteMembre->id,
                     'type_mouvement' => 'credit_groupe_recu',
@@ -661,9 +670,9 @@ private function crediterComptesMembresSansDouble($montantsMembres, $creditGroup
                     'nom_deposant' => 'TUMAINI LETU Finances',
                 ]);
 
-                // ✅ CORRECTION : RECHARGER POUR VÉRIFIER
+                // ✅ VÉRIFICATION : RECHARGER POUR CONFIRMER
                 $compteMembre->refresh();
-                Log::info("✅ APRÈS CRÉDIT: Solde après = {$compteMembre->solde} USD");
+                Log::info("✅ VÉRIFICATION: Solde après mouvement = {$compteMembre->solde} USD");
 
                 $totalCredite += $montant;
                 $membresCredites++;
@@ -678,7 +687,12 @@ private function crediterComptesMembresSansDouble($montantsMembres, $creditGroup
     }
 
     Log::info("💰 TOTAL CRÉDITÉ AUX MEMBRES: {$totalCredite} USD pour {$membresCredites} membres");
-    Log::info('💳 === FIN CRÉDIT DIRECT SANS DOUBLE ===');
+    Log::info('💳 === FIN CRÉDIT DIRECT AVEC MISE À JOUR SOLDE ===');
+    
+    return [
+        'total_credite' => $totalCredite,
+        'membres_credites' => $membresCredites
+    ];
 }
 
 

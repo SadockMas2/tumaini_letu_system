@@ -58,6 +58,24 @@
             -webkit-text-fill-color: transparent;
             background-clip: text;
         }
+
+        .filter-btn {
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.filter-btn.active {
+    transform: scale(1.05);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.mouvement-row {
+    transition: all 0.3s ease;
+}
+
+.mouvement-row.hidden {
+    display: none;
+}
     </style>
 </head>
 <body class="font-sans antialiased">
@@ -609,9 +627,238 @@
             </div>
             @endif
 
+
+
+<!-- Section Relevé des Mouvements (Cachée par défaut) -->
+<div class="bg-white rounded-xl border border-gray-200 overflow-hidden mb-8">
+    <!-- Header avec bouton pour afficher/masquer -->
+    <div class="bg-gradient-to-r from-blue-50 to-indigo-100 px-6 py-4 border-b border-gray-200">
+        <div class="flex justify-between items-center">
+            <div>
+                <h3 class="text-lg font-semibold text-gray-800 flex items-center">
+                    <i class="fas fa-exchange-alt mr-2 text-blue-500"></i>
+                    Relevé des Mouvements - Retraits & Dépôts
+                </h3>
+                <p class="text-sm text-gray-600 mt-1">
+                    Historique complet des transactions du compte
+                </p>
+            </div>
+            <div class="flex gap-2">
+                <button 
+                    onclick="toggleReleve()"
+                    class="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg transition-all duration-200 flex items-center"
+                >
+                    <i class="fas fa-eye mr-2"></i>
+                    Voir le Relevé
+                </button>
+                <button 
+                    onclick="exportReleve()"
+                    class="bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-lg transition-all duration-200 flex items-center"
+                >
+                    <i class="fas fa-file-export mr-2"></i>
+                    Exporter Relevé
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Contenu du relevé (caché par défaut) -->
+    <div id="releveContent" class="hidden">
+        <!-- Statistiques Rapides -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 p-6 bg-gray-50 border-b border-gray-200">
+            <div class="text-center">
+                <div class="text-2xl font-bold text-green-600">
+                    {{ number_format($statsMouvements['total_depots'], 2, ',', ' ') }} {{ $compte->devise }}
+                </div>
+                <p class="text-sm text-gray-600">Total Dépôts</p>
+                <p class="text-xs text-gray-500">{{ $statsMouvements['nombre_depots'] }} opérations</p>
+            </div>
+            <div class="text-center">
+                <div class="text-2xl font-bold text-red-600">
+                    {{ number_format($statsMouvements['total_retraits'], 2, ',', ' ') }} {{ $compte->devise }}
+                </div>
+                <p class="text-sm text-gray-600">Total Retraits</p>
+                <p class="text-xs text-gray-500">{{ $statsMouvements['nombre_retraits'] }} opérations</p>
+            </div>
+            <div class="text-center">
+                <div class="text-2xl font-bold text-blue-600">
+                    {{ number_format($statsMouvements['total_depots'] - $statsMouvements['total_retraits'], 2, ',', ' ') }} {{ $compte->devise }}
+                </div>
+                <p class="text-sm text-gray-600">Solde Net</p>
+                <p class="text-xs text-gray-500">Dépôts - Retraits</p>
+            </div>
+            <div class="text-center">
+                <div class="text-2xl font-bold text-purple-600">
+                    {{ $mouvements->total() }}
+                </div>
+                <p class="text-sm text-gray-600">Total Opérations</p>
+                <p class="text-xs text-gray-500">Toutes transactions</p>
+            </div>
+        </div>
+
+        <!-- Filtres -->
+        <div class="px-6 py-4 bg-white border-b border-gray-200">
+            <div class="flex flex-col sm:flex-row gap-4 items-center justify-between">
+                <div class="flex gap-2">
+                    <button class="filter-btn active bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-sm font-medium transition-all duration-200">
+                        Tous
+                    </button>
+                    <button class="filter-btn bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm font-medium transition-all duration-200" data-type="depot">
+                        Dépôts
+                    </button>
+                    <button class="filter-btn bg-red-100 text-red-700 px-3 py-1 rounded-full text-sm font-medium transition-all duration-200" data-type="retrait">
+                        Retraits
+                    </button>
+                </div>
+                <div class="text-sm text-gray-500">
+                    Affichage des {{ $mouvements->count() }} dernières opérations
+                </div>
+            </div>
+        </div>
+
+        <!-- Tableau des Mouvements -->
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead>
+                    <tr class="bg-gray-50 border-b border-gray-200">
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Date & Heure
+                        </th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Type
+                        </th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Référence
+                        </th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Description
+                        </th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Montant
+                        </th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Solde Avant
+                        </th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Solde Après
+                        </th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Opérateur
+                        </th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200">
+                    @forelse($mouvements as $mouvement)
+                    <tr class="mouvement-row hover:bg-gray-50 transition-colors duration-150" data-type="{{ $mouvement->type }}">
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="text-sm font-medium text-gray-900">
+                                {{ $mouvement->created_at->format('d/m/Y') }}
+                            </div>
+                            <div class="text-xs text-gray-500">
+                                {{ $mouvement->created_at->format('H:i:s') }}
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            @if($mouvement->type === 'depot')
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                    <i class="fas fa-arrow-down mr-1"></i>
+                                    Dépôt
+                                </span>
+                            @else
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                    <i class="fas fa-arrow-up mr-1"></i>
+                                    Retrait
+                                </span>
+                            @endif
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="text-sm font-mono text-gray-900">
+                                {{ $mouvement->reference ?? 'N/A' }}
+                            </div>
+                        </td>
+                        <td class="px-6 py-4">
+                            <div class="text-sm text-gray-900 max-w-xs truncate">
+                                {{ $mouvement->description ?? 'Transaction' }}
+                            </div>
+                            @if($mouvement->nom_deposant)
+                            <div class="text-xs text-gray-500">
+                                Par: {{ $mouvement->nom_deposant }}
+                            </div>
+                            @endif
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="text-sm font-medium {{ $mouvement->type === 'depot' ? 'text-green-600' : 'text-red-600' }}">
+                                {{ $mouvement->type === 'depot' ? '+' : '-' }}
+                                {{ number_format($mouvement->montant, 2, ',', ' ') }} {{ $mouvement->devise ?? $compte->devise }}
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="text-sm text-gray-600">
+                                {{ number_format($mouvement->solde_avant, 2, ',', ' ') }} {{ $mouvement->devise ?? $compte->devise }}
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="text-sm font-semibold text-gray-900">
+                                {{ number_format($mouvement->solde_apres, 2, ',', ' ') }} {{ $mouvement->devise ?? $compte->devise }}
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="text-sm text-gray-600">
+                                {{ $mouvement->operateur->name ?? 'Système' }}
+                            </div>
+                            <div class="text-xs text-gray-500">
+                                {{ $mouvement->operateur->numero_employe ?? 'N/A' }}
+                            </div>
+                        </td>
+                    </tr>
+                    @empty
+                    <tr>
+                        <td colspan="8" class="px-6 py-12 text-center">
+                            <div class="text-gray-400 mb-4">
+                                <i class="fas fa-exchange-alt text-4xl"></i>
+                            </div>
+                            <p class="text-gray-500 text-lg">Aucun mouvement enregistré</p>
+                            <p class="text-gray-400 text-sm mt-2">Les transactions apparaîtront ici</p>
+                        </td>
+                    </tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        @if($mouvements->hasPages())
+        <div class="px-6 py-4 bg-gray-50 border-t border-gray-200">
+            <div class="flex items-center justify-between">
+                <div class="text-sm text-gray-700">
+                    Affichage de {{ $mouvements->firstItem() }} à {{ $mouvements->lastItem() }} sur {{ $mouvements->total() }} résultats
+                </div>
+                <div class="flex space-x-2">
+                    @if($mouvements->onFirstPage())
+                        <span class="px-3 py-1 bg-gray-200 text-gray-500 rounded-md text-sm">Précédent</span>
+                    @else
+                        <a href="{{ $mouvements->previousPageUrl() }}" class="px-3 py-1 bg-blue-500 text-white rounded-md text-sm hover:bg-blue-600 transition-colors">
+                            Précédent
+                        </a>
+                    @endif
+
+                    @if($mouvements->hasMorePages())
+                        <a href="{{ $mouvements->nextPageUrl() }}" class="px-3 py-1 bg-blue-500 text-white rounded-md text-sm hover:bg-blue-600 transition-colors">
+                            Suivant
+                        </a>
+                    @else
+                        <span class="px-3 py-1 bg-gray-200 text-gray-500 rounded-md text-sm">Suivant</span>
+                    @endif
+                </div>
+            </div>
+        </div>
+        @endif
+    </div>
+</div>
+
             <!-- Action Buttons -->
             <div class="flex flex-col sm:flex-row gap-4 mt-8 pt-6 border-t border-gray-200">
-                @if($compte->credits->where('statut_demande', 'approuve')->count() > 0 || $compte->creditsGroupe->where('statut_demande', 'approuve')->count() > 0)
+                {{-- @if($compte->credits->where('statut_demande', 'approuve')->count() > 0 || $compte->creditsGroupe->where('statut_demande', 'approuve')->count() > 0)
                     <a 
                         href="{{ route('credits.payment', $compte->id) }}" 
                         class="flex-1 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-semibold py-4 px-6 rounded-xl transition-all duration-200 transform hover:scale-105 shadow-lg hover:shadow-xl flex items-center justify-center"
@@ -620,7 +867,7 @@
                         Effectuer un Paiement
                     </a>
                 @endif
-                
+                 --}}
                 @if($compte->credits->where('statut_demande', 'en_attente')->count() > 0)
                     <a 
                         href="{{ route('credits.approval', $compte->credits->where('statut_demande', 'en_attente')->first()->id) }}" 
@@ -711,6 +958,143 @@
                 }, 500);
             }
         });
+
+        // Filtrage des mouvements
+document.addEventListener('DOMContentLoaded', function() {
+    const filterButtons = document.querySelectorAll('.filter-btn');
+    const mouvementRows = document.querySelectorAll('.mouvement-row');
+    
+    filterButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            // Retirer la classe active de tous les boutons
+            filterButtons.forEach(btn => btn.classList.remove('active'));
+            // Ajouter la classe active au bouton cliqué
+            this.classList.add('active');
+            
+            const filterType = this.dataset.type;
+            
+            // Filtrer les lignes
+            mouvementRows.forEach(row => {
+                if (!filterType || row.dataset.type === filterType) {
+                    row.classList.remove('hidden');
+                } else {
+                    row.classList.add('hidden');
+                }
+            });
+        });
+    });
+    
+    // Animation d'apparition des lignes
+    mouvementRows.forEach((row, index) => {
+        row.style.opacity = '0';
+        row.style.transform = 'translateY(20px)';
+        
+        setTimeout(() => {
+            row.style.transition = 'all 0.5s ease';
+            row.style.opacity = '1';
+            row.style.transform = 'translateY(0)';
+        }, index * 50);
+    });
+});
+
+function exportReleve() {
+    // Ici vous pouvez implémenter l'export PDF ou Excel
+    alert('Fonction d\'export à implémenter');
+    // Exemple : window.location.href = "{{ route('comptes.export-releve', $compte->id) }}";
+}
+// Fonction pour afficher/masquer le relevé
+function toggleReleve() {
+    const releveContent = document.getElementById('releveContent');
+    const toggleBtn = document.querySelector('[onclick="toggleReleve()"]');
+    
+    if (releveContent.classList.contains('hidden')) {
+        // Afficher le relevé
+        releveContent.classList.remove('hidden');
+        releveContent.style.opacity = '0';
+        releveContent.style.transform = 'translateY(-10px)';
+        
+        setTimeout(() => {
+            releveContent.style.transition = 'all 0.5s ease';
+            releveContent.style.opacity = '1';
+            releveContent.style.transform = 'translateY(0)';
+        }, 50);
+        
+        toggleBtn.innerHTML = '<i class="fas fa-eye-slash mr-2"></i>Masquer le Relevé';
+        toggleBtn.classList.remove('bg-blue-500', 'hover:bg-blue-600');
+        toggleBtn.classList.add('bg-gray-500', 'hover:bg-gray-600');
+    } else {
+        // Masquer le relevé
+        releveContent.style.opacity = '0';
+        releveContent.style.transform = 'translateY(-10px)';
+        
+        setTimeout(() => {
+            releveContent.classList.add('hidden');
+        }, 500);
+        
+        toggleBtn.innerHTML = '<i class="fas fa-eye mr-2"></i>Voir le Relevé';
+        toggleBtn.classList.remove('bg-gray-500', 'hover:bg-gray-600');
+        toggleBtn.classList.add('bg-blue-500', 'hover:bg-blue-600');
+    }
+}
+
+// Fonction pour exporter le relevé
+function exportReleve() {
+    // Vérifier si le relevé est affiché
+    const releveContent = document.getElementById('releveContent');
+    if (releveContent.classList.contains('hidden')) {
+        // Si le relevé est masqué, l'afficher d'abord
+        toggleReleve();
+        
+        // Attendre un peu puis exporter
+        setTimeout(() => {
+            window.location.href = "{{ route('comptes.export-releve', $compte->id) }}";
+        }, 1000);
+    } else {
+        // Exporter directement
+        window.location.href = "{{ route('comptes.export-releve', $compte->id) }}";
+    }
+}
+
+// Filtrage des mouvements
+document.addEventListener('DOMContentLoaded', function() {
+    const filterButtons = document.querySelectorAll('.filter-btn');
+    const mouvementRows = document.querySelectorAll('.mouvement-row');
+    
+    filterButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            // Retirer la classe active de tous les boutons
+            filterButtons.forEach(btn => btn.classList.remove('active'));
+            // Ajouter la classe active au bouton cliqué
+            this.classList.add('active');
+            
+            const filterType = this.dataset.type;
+            
+            // Filtrer les lignes
+            mouvementRows.forEach(row => {
+                if (!filterType || row.dataset.type === filterType) {
+                    row.classList.remove('hidden');
+                } else {
+                    row.classList.add('hidden');
+                }
+            });
+        });
+    });
+    
+    // Animation d'apparition des lignes (seulement quand le relevé est affiché)
+    const releveContent = document.getElementById('releveContent');
+    if (!releveContent.classList.contains('hidden')) {
+        mouvementRows.forEach((row, index) => {
+            row.style.opacity = '0';
+            row.style.transform = 'translateY(20px)';
+            
+            setTimeout(() => {
+                row.style.transition = 'all 0.5s ease';
+                row.style.opacity = '1';
+                row.style.transform = 'translateY(0)';
+            }, index * 50);
+        });
+    }
+});
     </script>
 </body>
 </html>

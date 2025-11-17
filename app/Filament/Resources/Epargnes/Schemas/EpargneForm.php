@@ -5,13 +5,15 @@ namespace App\Filament\Resources\Epargnes\Schemas;
 use App\Models\Client;
 use App\Models\GroupeSolidaire;
 use App\Models\Cycle;
+
 use Filament\Forms\Components\DateTimePicker;
+use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\Hidden;
+use Filament\Forms\Form;
+use Filament\Notifications\Notification;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
-use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\Auth;
 
 class EpargneForm
@@ -19,7 +21,7 @@ class EpargneForm
     public static function configure(Schema $schema): Schema
     {
         return $schema
-            ->components([
+            ->schema([
                 Section::make('Type d\'Épargne')
                     ->schema([
                         Select::make('type_epargne')
@@ -29,7 +31,7 @@ class EpargneForm
                                 'groupe_solidaire' => 'Épargne Groupe Solidaire',
                             ])
                             ->required()
-                            ->reactive()
+                            ->live()
                             ->afterStateUpdated(function ($state, $set, $get) {
                                 $set('client_id', null);
                                 $set('groupe_solidaire_id', null);
@@ -53,7 +55,7 @@ class EpargneForm
                             })
                             ->required(fn ($get) => $get('type_epargne') === 'individuel')
                             ->visible(fn ($get) => $get('type_epargne') === 'individuel')
-                            ->reactive()
+                            ->live()
                             ->afterStateUpdated(function ($state, $set, $get) {
                                 $set('client_nom', null);
                                 $set('cycle_id', null);
@@ -76,7 +78,7 @@ class EpargneForm
                             })
                             ->required(fn ($get) => $get('type_epargne') === 'groupe_solidaire')
                             ->visible(fn ($get) => $get('type_epargne') === 'groupe_solidaire')
-                            ->reactive()
+                            ->live()
                             ->afterStateUpdated(function ($state, $set, $get) {
                                 $set('client_nom', null);
                                 $set('cycle_id', null);
@@ -98,7 +100,7 @@ class EpargneForm
                     ->columns(2),
 
                 Hidden::make('agent_nom')
-                    ->default(fn () => Auth::id()),
+                    ->default(fn () => Auth::user()->name ?? 'Agent'),
 
                 Section::make('Détails de l\'Épargne')
                     ->schema([
@@ -106,7 +108,7 @@ class EpargneForm
                             ->label('Devise')
                             ->options(['USD' => 'USD', 'CDF' => 'CDF'])
                             ->required()
-                            ->reactive()
+                            ->live()
                             ->afterStateUpdated(function ($state, $set, $get) {
                                 $set('cycle_id', null);
                                 $set('montant', null);
@@ -135,7 +137,6 @@ class EpargneForm
                                 if ($typeEpargne === 'individuel' && $clientId) {
                                     return Cycle::where('client_id', $clientId)
                                         ->where('devise', $devise)
-                                        // MODIFICATION : Inclure les cycles clôturés aussi
                                         ->get()
                                         ->mapWithKeys(function ($cycle) {
                                             $statut = $cycle->statut === 'ouvert' ? ' (Ouvert)' : ' (Clôturé)';
@@ -145,7 +146,6 @@ class EpargneForm
                                 } elseif ($typeEpargne === 'groupe_solidaire' && $groupeId) {
                                     return Cycle::where('groupe_solidaire_id', $groupeId)
                                         ->where('devise', $devise)
-                                        // MODIFICATION : Inclure les cycles clôturés aussi
                                         ->get()
                                         ->mapWithKeys(function ($cycle) {
                                             $statut = $cycle->statut === 'ouvert' ? ' (Ouvert)' : ' (Clôturé)';
@@ -157,7 +157,7 @@ class EpargneForm
                                 return [];
                             })
                             ->required()
-                            ->reactive()
+                            ->live()
                             ->afterStateUpdated(function ($state, $set, $get) {
                                 if ($state) {
                                     $cycle = Cycle::find($state);
@@ -179,12 +179,41 @@ class EpargneForm
                                 }
                             }),
 
+                        // AFFICHAGE DES INFORMATIONS DU CYCLE - Version Filament v4
+                 
+TextInput::make('info_cycle')
+    ->label('Statut du Cycle')
+    ->disabled()
+    ->dehydrated()
+    ->default('Sélectionnez un cycle')
+    ->helperText(function ($get) {
+        $cycleId = $get('cycle_id');
+        
+        if (!$cycleId) {
+            return 'Sélectionnez un cycle pour voir les informations';
+        }
+        
+        $cycle = Cycle::find($cycleId);
+        if (!$cycle) {
+            return 'Cycle non trouvé';
+        }
+        
+        // UTILISER LE VRAI COMPTEUR
+        $epargnesExistantes = $cycle->getNombreEpargnesReelAttribute();
+        $epargnesRestantes = $cycle->epargnes_restantes;
+        
+        return "Statut: " . ucfirst($cycle->statut) . 
+               " | Épargnes réelles: {$epargnesExistantes}/{$cycle->nombre_max_epargnes}" .
+               " | Restantes: {$epargnesRestantes}";
+    }),
                         TextInput::make('montant')
                             ->label('Montant de l\'épargne')
                             ->numeric()
                             ->required()
                             ->default(null)
                             ->dehydrated()
+                            //  ->disabled()
+                           
                             ->helperText('Ce montant correspond au solde initial du cycle sélectionné'),
 
                         Select::make('statut')
@@ -230,7 +259,6 @@ class EpargneForm
             foreach ($devises as $devise) {
                 $cycle = Cycle::where($typeField, $id)
                     ->where('devise', $devise)
-                    // MODIFICATION : Prendre le dernier cycle (ouvert ou clôturé)
                     ->latest('id')
                     ->first();
                 
@@ -259,7 +287,6 @@ class EpargneForm
             // Recherche avec la devise spécifique
             $cycle = Cycle::where($typeField, $id)
                 ->where('devise', $devise)
-                // MODIFICATION : Prendre le dernier cycle (ouvert ou clôturé)
                 ->latest('id')
                 ->first();
 

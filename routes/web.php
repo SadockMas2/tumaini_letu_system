@@ -2,8 +2,10 @@
 
 use App\Http\Controllers\CompteController;
 use App\Http\Controllers\CreditController;
+use App\Http\Controllers\EtatTresorerieController;
 use App\Http\Controllers\MouvementController;
 use App\Http\Controllers\PaiementController;
+use App\Http\Controllers\RapportTresorerieController;
 use App\Services\CycleService;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
@@ -258,4 +260,23 @@ Route::get('/test-debit-direct/{userId}/{devise}/{montant}', function ($userId, 
             'trace' => $e->getTraceAsString()
         ], 500);
     }
+});
+
+Route::get('/comptes/{compte_id}/export-releve', [CompteController::class, 'exportReleve'])
+    ->name('comptes.export-releve');
+
+Route::prefix('etats-tresorerie')->group(function () {
+    Route::get('/temps-reel', [EtatTresorerieController::class, 'etatTresorerieTempsReel']);
+    Route::get('/etat-sortie', [EtatTresorerieController::class, 'etatSortieTempsReel']);
+    Route::get('/grandes-caisses-comptabilite', [EtatTresorerieController::class, 'etatGrandesCaissesComptabilite']);
+    Route::get('/export-pdf', [EtatTresorerieController::class, 'exportPdfEtatSortie']);
+});
+
+// routes/api.php
+
+Route::prefix('rapports-tresorerie')->group(function () {
+    Route::get('/pdf', [RapportTresorerieController::class, 'genererRapportPDF']);
+    Route::get('/apercu-pdf', [RapportTresorerieController::class, 'apercuRapportPDF']);
+    Route::get('/synthese', [RapportTresorerieController::class, 'rapportSynthese']);
+    Route::get('/donnees', [RapportTresorerieController::class, 'donneesRapport']);
 });

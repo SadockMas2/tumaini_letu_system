@@ -6,9 +6,12 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\Auth;
 
 class RapportTresorerie extends Model
 {
+
+      protected $table = 'rapport_tresoreries';
     protected $fillable = [
         'date_rapport',
         'numero_rapport',
@@ -44,7 +47,7 @@ class RapportTresorerie extends Model
 
         static::creating(function ($rapport) {
             $rapport->numero_rapport = 'RAPP-' . now()->format('Ymd-His');
-            $rapport->created_by = auth()->id();
+            $rapport->created_by = Auth::id();
         });
     }
 }

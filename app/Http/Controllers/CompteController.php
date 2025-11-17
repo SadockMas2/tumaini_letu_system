@@ -4,28 +4,78 @@ namespace App\Http\Controllers;
 
 use App\Models\Compte;
 use App\Models\Credit;
+use App\Models\Mouvement;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class CompteController extends Controller
 {
-    public function index()
+  public function index()
     {
         return redirect('/admin/comptes');
     }
 
-   public function details($compte_id)
-{
-    $compte = Compte::with([
-        'credits' => function($query) {
-            $query->orderBy('created_at', 'desc');
-        },
-        'creditsGroupe' => function($query) {
-            $query->orderBy('created_at', 'desc');
-        }
-    ])->findOrFail($compte_id);
+    public function details($compte_id)
+    {
+        $compte = Compte::with([
+            'credits' => function($query) {
+                $query->orderBy('created_at', 'desc');
+            },
+            'creditsGroupe' => function($query) {
+                $query->orderBy('created_at', 'desc');
+            },
+            'mouvements' => function($query) {
+                $query->orderBy('created_at', 'desc');
+            }
+        ])->findOrFail($compte_id);
 
-    return view('comptes.details', compact('compte'));
+        // Récupérer les mouvements avec pagination
+        $mouvements = Mouvement::where('compte_id', $compte_id)
+            ->orWhere('numero_compte', $compte->numero_compte)
+            ->orderBy('created_at', 'desc')
+            ->paginate(20);
+
+        // Calculer les statistiques des mouvements
+        $statsMouvements = [
+            'total_depots' => Mouvement::where('compte_id', $compte_id)
+                ->where('type', 'depot')
+                ->sum('montant'),
+            'total_retraits' => Mouvement::where('compte_id', $compte_id)
+                ->where('type', 'retrait')
+                ->sum('montant'),
+            'nombre_depots' => Mouvement::where('compte_id', $compte_id)
+                ->where('type', 'depot')
+                ->count(),
+            'nombre_retraits' => Mouvement::where('compte_id', $compte_id)
+                ->where('type', 'retrait')
+                ->count(),
+        ];
+
+        return view('comptes.details', compact('compte', 'mouvements', 'statsMouvements'));
+    }
+
+
+public function exportReleve($compte_id)
+{
+    $compte = Compte::findOrFail($compte_id);
+    $mouvements = Mouvement::where('compte_id', $compte_id)
+        ->orWhere('numero_compte', $compte->numero_compte)
+        ->orderBy('created_at', 'desc')
+        ->get();
+
+    // Calculer les statistiques pour l'export
+    $statsMouvements = [
+        'total_depots' => $mouvements->where('type', 'depot')->sum('montant'),
+        'total_retraits' => $mouvements->where('type', 'retrait')->sum('montant'),
+        'nombre_depots' => $mouvements->where('type', 'depot')->count(),
+        'nombre_retraits' => $mouvements->where('type', 'retrait')->count(),
+    ];
+
+    $html = view('comptes.export-releve', compact('compte', 'mouvements', 'statsMouvements'))->render();
+    
+    return response()->streamDownload(function () use ($html) {
+        echo $html;
+    }, 'releve-compte-' . $compte->numero_compte . '-' . now()->format('d-m-Y') . '.html');
 }
 
     // Nouvelle méthode pour accorder un crédit

@@ -65,7 +65,7 @@ class DispatchEpargneResource extends Resource
     {
         /** @var \App\Models\User|null $user */
         $user = Auth::user();
-        return $user && $user->can('view_epargne');
+        return $user && $user->can('view_cycle');
     }
 
     

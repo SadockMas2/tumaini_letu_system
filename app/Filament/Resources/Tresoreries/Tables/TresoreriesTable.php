@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Tresoreries\Tables;
 
+use App\Models\Caisse;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\CreateAction;
@@ -16,6 +17,7 @@ class TresoreriesTable
     public static function configure(Table $table): Table
     {
         return $table
+        ->query(Caisse::query()->where('type_caisse', '!=', 'petite_caisse'))
             ->columns([
                 TextColumn::make('type_caisse')
                     ->badge()
@@ -32,9 +34,9 @@ class TresoreriesTable
                     ->label('Solde Actuel')
                     ->color(fn ($record) => $record->solde > 0 ? 'success' : 'danger'),
                 
-                TextColumn::make('plafond')
-                    ->money(fn ($record) => $record->devise)
-                    ->label('Plafond'),
+                // TextColumn::make('plafond')
+                //     ->money(fn ($record) => $record->devise)
+                //     ->label('Plafond'),
                 
                 TextColumn::make('devise')
                     ->badge()

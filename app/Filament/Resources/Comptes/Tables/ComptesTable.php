@@ -60,15 +60,43 @@ class ComptesTable
                         'actif' => 'success', 'inactif' => 'danger', 'suspendu' => 'warning', default => 'gray',
                     }),
                 
-                TextColumn::make('credits_count')
+                // Crédits Actifs - POUR INDIVIDUELS ET GROUPES
+                TextColumn::make('credits_actifs_count')
                     ->label('Crédits Actifs')
-                    ->counts('credits')
+                    ->getStateUsing(function ($record) {
+                        if (str_starts_with($record->numero_compte, 'GS')) {
+                            // Pour les groupes: compter les crédits groupe approuvés avec montant total > 0
+                            return CreditGroupe::where('compte_id', $record->id)
+                                ->where('statut_demande', 'approuve')
+                                ->where('montant_total', '>', 0)
+                                ->count();
+                        } else {
+                            // Pour les individuels: compter les crédits individuels approuvés avec montant total > 0
+                            return $record->credits()
+                                ->where('statut_demande', 'approuve')
+                                ->where('montant_total', '>', 0)
+                                ->count();
+                        }
+                    })
                     ->badge()
                     ->color(fn ($state): string => $state > 0 ? 'primary' : 'gray'),
                 
+                // Demandes en Attente - POUR INDIVIDUELS ET GROUPES
                 TextColumn::make('credits_en_attente_count')
                     ->label('Dem. Attente')
-                    ->getStateUsing(fn ($record) => $record->credits()->where('statut_demande', 'en_attente')->count())
+                    ->getStateUsing(function ($record) {
+                        if (str_starts_with($record->numero_compte, 'GS')) {
+                            // Pour les groupes: compter les crédits groupe en attente
+                            return CreditGroupe::where('compte_id', $record->id)
+                                ->where('statut_demande', 'en_attente')
+                                ->count();
+                        } else {
+                            // Pour les individuels: compter les crédits individuels en attente
+                            return $record->credits()
+                                ->where('statut_demande', 'en_attente')
+                                ->count();
+                        }
+                    })
                     ->badge()
                     ->color(fn ($state): string => $state > 0 ? 'warning' : 'gray'),
             ])
@@ -123,7 +151,16 @@ class ComptesTable
                                 ->where('montant_total', '>', 0)
                                 ->exists();
                         }
+
+                        
                     })
+
+                    ->visible(function () {
+                        /** @var User|null $user */
+                        $user = Auth::user();
+                        return $user && $user->can('view_comptespecial');
+                    })
+                    
                     ->url(fn ($record) => route('credits.payment', ['compte_id' => $record->id])),
 
                 // Accorder Crédit Individuel - UNIQUEMENT POUR INDIVIDUELS
@@ -238,7 +275,7 @@ class ComptesTable
             ])
             ->toolbarActions([
                 BulkActionGroup::make([
-                    DeleteBulkAction::make(),
+                    
                 ]),
             ])
             ->emptyStateActions([

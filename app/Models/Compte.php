@@ -35,8 +35,21 @@ class Compte extends Model
     public function mouvements()
     {
         return $this->hasMany(Mouvement::class);
+
     }
 
+    
+    public function getReleveOperationsAttribute()
+    {
+        return $this->mouvements()
+            ->whereIn('type_mouvement', ['depot', 'retrait', 'depot_compte', 'retrait_compte'])
+            ->orWhere(function($query) {
+                $query->whereIn('type', ['depot', 'retrait']);
+            })
+            ->orderBy('created_at', 'desc')
+            ->get();
+    }
+    
     public function credits(): HasMany
     {
         return $this->hasMany(Credit::class, 'compte_id');

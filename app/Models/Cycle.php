@@ -23,6 +23,8 @@ class Cycle extends Model
         'type_cycle',
         'user_id',
         'agent_nom',
+        'nombre_max_epargnes', 
+        'nombre_epargnes_actuel', 
     ];
 
     public function client()
@@ -86,14 +88,77 @@ class Cycle extends Model
             // Si devise ou solde initial non fournis, prendre des valeurs par défaut
             $cycle->devise = $cycle->devise ?: 'CDF';
             $cycle->solde_initial = $cycle->solde_initial ?: 0;
+
+            $cycle->nombre_max_epargnes = $cycle->nombre_max_epargnes ?: 30;
+            $cycle->nombre_epargnes_actuel = 0;
         });
+
     }
 
-    // Fermer le cycle
- // Dans app/Models/Cycle.php
+     /**
+     * Vérifier si le cycle peut accepter de nouvelles épargnes
+     */
+    public function peutAccepterEpargne(): bool
+    {
+        return $this->statut === 'ouvert' && 
+               $this->nombre_epargnes_actuel < $this->nombre_max_epargnes;
+    }
+
+    /**
+     * Incrémenter le compteur d'épargnes et clôturer si nécessaire
+     */
+    public function incrementerEpargne(): void
+    {
+        $this->nombre_epargnes_actuel += 1;
+        
+        // Clôturer automatiquement si le maximum est atteint
+        if ($this->nombre_epargnes_actuel >= $this->nombre_max_epargnes) {
+            $this->fermer();
+            Log::info("Cycle clôturé automatiquement - limite d'épargnes atteinte", [
+                'cycle_id' => $this->id,
+                'nombre_epargnes' => $this->nombre_epargnes_actuel,
+                'limite' => $this->nombre_max_epargnes
+            ]);
+        } else {
+            $this->save();
+        }
+    }
+
+    /**
+     * Obtenir le nombre d'épargnes valides
+     */
+       public function getNombreEpargnesValidesAttribute(): int
+    {
+        return $this->epargnes()->where('statut', 'valide')->count();
+    }
+
+    public function getNombreEpargnesReelAttribute(): int
+    {
+        return $this->epargnes()->count();
+    }
+
+
+
+
+
+
+    /**
+     * Obtenir le nombre d'épargnes restantes possibles
+     */
+       public function getEpargnesRestantesAttribute(): int
+{
+    $epargnesExistantes = $this->getNombreEpargnesReelAttribute();
+    return max(0, $this->nombre_max_epargnes - $epargnesExistantes);
+}
+
+public function synchroniserCompteurEpargnes(): void
+{
+    $nombreReel = $this->getNombreEpargnesReelAttribute();
+    $this->update(['nombre_epargnes_actuel' => $nombreReel]);
+}
 
 /**
- * Relation avec les écritures comptables
+ * Obtenir le nombre d'épargnes valides
  */
 
 /**

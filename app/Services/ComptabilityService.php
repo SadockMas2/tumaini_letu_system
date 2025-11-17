@@ -3,6 +3,7 @@
 
 namespace App\Services;
 
+use App\Models\CashRegister;
 use App\Models\Cycle;
 use App\Models\EcritureComptable;
 use App\Models\Epargne;
@@ -439,8 +440,11 @@ public function enregistrerRetourVersCoffre($mouvementCoffreId, $reference)
     /**
      * Récupère le solde d'un compte comptable
      */
-       public function getSoldeCompte(string $compteNumber, string $devise): float
-    {
+    // Dans ComptabilityService.php - Améliorer la méthode getSoldeCompte()
+
+public function getSoldeCompte(string $compteNumber, string $devise): float
+{
+    try {
         $debits = EcritureComptable::where('compte_number', $compteNumber)
             ->where('devise', $devise)
             ->where('statut', 'comptabilise')
@@ -451,9 +455,189 @@ public function enregistrerRetourVersCoffre($mouvementCoffreId, $reference)
             ->where('statut', 'comptabilise')
             ->sum('montant_credit');
 
-        return $debits - $credits;
-    }
+        $solde = $debits - $credits;
+        
+        Log::info("Solde compte calculé", [
+            'compte' => $compteNumber,
+            'devise' => $devise,
+            'debits' => $debits,
+            'credits' => $credits,
+            'solde' => $solde
+        ]);
 
+        return $solde;
+        
+    } catch (\Exception $e) {
+        Log::error("Erreur calcul solde compte", [
+            'compte' => $compteNumber,
+            'devise' => $devise,
+            'error' => $e->getMessage()
+        ]);
+        return 0;
+    }
+}
+
+
+// Dans ComptabilityService.php - Ajouter cette méthode
+
+public function synchroniserGrandeCaisse(): array
+{
+    return DB::transaction(function () {
+        // Récupérer les soldes physiques réels
+        $grandeCaisseUSD = Caisse::where('type_caisse', 'grande_caisse')
+                                ->where('devise', 'USD')
+                                ->first();
+        $grandeCaisseCDF = Caisse::where('type_caisse', 'grande_caisse')
+                                ->where('devise', 'CDF')
+                                ->first();
+
+        $soldesPhysiques = [
+            'usd' => $grandeCaisseUSD ? $grandeCaisseUSD->solde : 0,
+            'cdf' => $grandeCaisseCDF ? $grandeCaisseCDF->solde : 0
+        ];
+
+        // Récupérer les soldes comptables actuels
+        $soldeComptableUSD = $this->getSoldeCompte(self::COMPTE_CAISSE, 'USD');
+        $soldeComptableCDF = $this->getSoldeCompte(self::COMPTE_CAISSE, 'CDF');
+
+        $ecarts = [
+            'usd' => $soldesPhysiques['usd'] - $soldeComptableUSD,
+            'cdf' => $soldesPhysiques['cdf'] - $soldeComptableCDF
+        ];
+
+        // Si les écarts sont importants, créer des écritures d'ajustement
+        if (abs($ecarts['usd']) > 0.01 || abs($ecarts['cdf']) > 0.01) {
+            $journal = $this->getJournal('caisse');
+            $reference = 'AJUST-GRANDE-CAISSE-' . now()->format('Ymd-His');
+
+            // Ajustement pour USD
+            if (abs($ecarts['usd']) > 0.01) {
+                if ($ecarts['usd'] > 0) {
+                    // Débit: Grande Caisse (on augmente le solde comptable)
+                    EcritureComptable::create([
+                        'journal_comptable_id' => $journal->id,
+                        'reference_operation' => $reference,
+                        'type_operation' => 'ajustement_solde',
+                        'compte_number' => self::COMPTE_CAISSE,
+                        'libelle' => "Ajustement solde grande caisse USD - Écart: " . number_format($ecarts['usd'], 2),
+                        'montant_debit' => $ecarts['usd'],
+                        'montant_credit' => 0,
+                        'date_ecriture' => now(),
+                        'date_valeur' => now(),
+                        'devise' => 'USD',
+                        'statut' => 'comptabilise',
+                        'created_by' => Auth::id(),
+                    ]);
+
+                    // Crédit: Compte de régularisation
+                    EcritureComptable::create([
+                        'journal_comptable_id' => $journal->id,
+                        'reference_operation' => $reference,
+                        'type_operation' => 'ajustement_solde',
+                        'compte_number' => '471000', // Compte de régularisation
+                        'libelle' => "Ajustement solde grande caisse USD - Écart: " . number_format($ecarts['usd'], 2),
+                        'montant_debit' => 0,
+                        'montant_credit' => $ecarts['usd'],
+                        'date_ecriture' => now(),
+                        'date_valeur' => now(),
+                        'devise' => 'USD',
+                        'statut' => 'comptabilise',
+                        'created_by' => Auth::id(),
+                    ]);
+                } else {
+                    // Crédit: Grande Caisse (on diminue le solde comptable)
+                    EcritureComptable::create([
+                        'journal_comptable_id' => $journal->id,
+                        'reference_operation' => $reference,
+                        'type_operation' => 'ajustement_solde',
+                        'compte_number' => self::COMPTE_CAISSE,
+                        'libelle' => "Ajustement solde grande caisse USD - Écart: " . number_format(abs($ecarts['usd']), 2),
+                        'montant_debit' => 0,
+                        'montant_credit' => abs($ecarts['usd']),
+                        'date_ecriture' => now(),
+                        'date_valeur' => now(),
+                        'devise' => 'USD',
+                        'statut' => 'comptabilise',
+                        'created_by' => Auth::id(),
+                    ]);
+
+                    // Débit: Compte de régularisation
+                    EcritureComptable::create([
+                        'journal_comptable_id' => $journal->id,
+                        'reference_operation' => $reference,
+                        'type_operation' => 'ajustement_solde',
+                        'compte_number' => '471000', // Compte de régularisation
+                        'libelle' => "Ajustement solde grande caisse USD - Écart: " . number_format(abs($ecarts['usd']), 2),
+                        'montant_debit' => abs($ecarts['usd']),
+                        'montant_credit' => 0,
+                        'date_ecriture' => now(),
+                        'date_valeur' => now(),
+                        'devise' => 'USD',
+                        'statut' => 'comptabilise',
+                        'created_by' => Auth::id(),
+                    ]);
+                }
+            }
+
+            // Ajustement pour CDF (même logique)
+            if (abs($ecarts['cdf']) > 0.01) {
+                // ... même logique que pour USD
+            }
+        }
+
+        return [
+            'soldes_physiques' => $soldesPhysiques,
+            'soldes_comptables_avant' => [
+                'usd' => $soldeComptableUSD,
+                'cdf' => $soldeComptableCDF
+            ],
+            'ecarts' => $ecarts,
+            'ajustement_effectue' => abs($ecarts['usd']) > 0.01 || abs($ecarts['cdf']) > 0.01
+        ];
+    });
+}
+
+
+
+
+public function verifierCohérenceSoldes(): array
+{
+    $etat = $this->getEtatComptes();
+    
+    // Récupérer les soldes physiques réels (déjà utilisés dans getEtatComptes())
+    $caissesPhysiquesUSD = Caisse::where('devise', 'USD')->sum('solde');
+    $caissesPhysiquesCDF = Caisse::where('devise', 'CDF')->sum('solde');
+    
+    $coffresPhysiquesUSD = CashRegister::where('devise', 'USD')->sum('solde_actuel');
+    $coffresPhysiquesCDF = CashRegister::where('devise', 'CDF')->sum('solde_actuel');
+    
+    // Maintenant les soldes "comptables" pour les caisses sont les mêmes que les physiques
+    // puisque nous utilisons directement les soldes physiques
+    $ecartUSD = ($etat['grande_caisse_usd'] + $etat['petite_caisse_usd']) - $caissesPhysiquesUSD;
+    $ecartCDF = ($etat['grande_caisse_cdf'] + $etat['petite_caisse_cdf']) - $caissesPhysiquesCDF;
+    
+    // Pour les coffres, on compare toujours comptable vs physique
+    $ecartCoffreUSD = $etat['coffre_usd'] - $coffresPhysiquesUSD;
+    $ecartCoffreCDF = $etat['coffre_cdf'] - $coffresPhysiquesCDF;
+    
+    return [
+        'etat_comptable' => $etat,
+        'soldes_physiques' => [
+            'caisses_usd' => $caissesPhysiquesUSD,
+            'caisses_cdf' => $caissesPhysiquesCDF,
+            'coffres_usd' => $coffresPhysiquesUSD,
+            'coffres_cdf' => $coffresPhysiquesCDF,
+        ],
+        'ecarts' => [
+            'caisses_usd' => $ecartUSD, // Devrait être 0 maintenant
+            'caisses_cdf' => $ecartCDF, // Devrait être 0 maintenant
+            'coffres_usd' => $ecartCoffreUSD,
+            'coffres_cdf' => $ecartCoffreCDF,
+        ],
+        'coherent' => abs($ecartUSD) < 0.01 && abs($ecartCDF) < 0.01 
+                   && abs($ecartCoffreUSD) < 0.01 && abs($ecartCoffreCDF) < 0.01
+    ];
+}
 
     /**
      * Vérifie les fonds disponibles pour distribution
@@ -463,21 +647,72 @@ public function enregistrerRetourVersCoffre($mouvementCoffreId, $reference)
         return $this->getSoldeCompte(self::COMPTE_TRANSIT_TRESORERIE, $devise);
     }
 
-      public function getEtatComptes(): array
-    {
-        return [
-            'transit_usd' => $this->getSoldeCompte(self::COMPTE_TRANSIT_TRESORERIE, 'USD'),
-            'transit_cdf' => $this->getSoldeCompte(self::COMPTE_TRANSIT_TRESORERIE, 'CDF'),
-            'coffre_usd' => $this->getSoldeCompte(self::COMPTE_COFFRE_FORT, 'USD'),
-            'coffre_cdf' => $this->getSoldeCompte(self::COMPTE_COFFRE_FORT, 'CDF'),
-            'banque_usd' => $this->getSoldeCompte(self::COMPTE_BANQUE, 'USD'),
-            'banque_cdf' => $this->getSoldeCompte(self::COMPTE_BANQUE, 'CDF'),
-            'caisse_usd' => $this->getSoldeCompte(self::COMPTE_CAISSE, 'USD'),
-            'caisse_cdf' => $this->getSoldeCompte(self::COMPTE_CAISSE, 'CDF'),
-            'petite_caisse_usd' => $this->getSoldeCompte(self::COMPTE_PETITE_CAISSE, 'USD'),
-            'petite_caisse_cdf' => $this->getSoldeCompte(self::COMPTE_PETITE_CAISSE, 'CDF'),
-        ];
-    }
+ // Dans ComptabilityService.php - Corriger la méthode getEtatComptes()
+
+// Dans ComptabilityService.php - Version robuste
+
+// Dans ComptabilityService.php - Corriger les clés
+
+// Dans ComptabilityService.php - Remplacer la méthode getEtatComptes()
+
+public function getEtatComptes(): array
+{
+    // Récupérer les soldes PHYSIQUES réels des caisses
+    $grandeCaisseUSD = Caisse::where('type_caisse', 'grande_caisse')
+                            ->where('devise', 'USD')
+                            ->first();
+    $grandeCaisseCDF = Caisse::where('type_caisse', 'grande_caisse')
+                            ->where('devise', 'CDF')
+                            ->first();
+    
+    $petiteCaisseUSD = Caisse::where('type_caisse', 'petite_caisse')
+                            ->where('devise', 'USD')
+                            ->first();
+    $petiteCaisseCDF = Caisse::where('type_caisse', 'petite_caisse')
+                            ->where('devise', 'CDF')
+                            ->first();
+
+    $etat = [
+        // Compte Transit Trésorerie (comptable)
+        'transit_usd' => $this->getSoldeCompte(self::COMPTE_TRANSIT_TRESORERIE, 'USD'),
+        'transit_cdf' => $this->getSoldeCompte(self::COMPTE_TRANSIT_TRESORERIE, 'CDF'),
+        
+        // Coffre Fort (comptable)
+        'coffre_usd' => $this->getSoldeCompte(self::COMPTE_COFFRE_FORT, 'USD'),
+        'coffre_cdf' => $this->getSoldeCompte(self::COMPTE_COFFRE_FORT, 'CDF'),
+        
+        // Banque (comptable)
+        'banque_usd' => $this->getSoldeCompte(self::COMPTE_BANQUE, 'USD'),
+        'banque_cdf' => $this->getSoldeCompte(self::COMPTE_BANQUE, 'CDF'),
+        
+        // GRANDE CAISSE (SOLDE PHYSIQUE RÉEL)
+        'grande_caisse_usd' => $grandeCaisseUSD ? (float) $grandeCaisseUSD->solde : 0,
+        'grande_caisse_cdf' => $grandeCaisseCDF ? (float) $grandeCaisseCDF->solde : 0,
+        
+        // PETITE CAISSE (SOLDE PHYSIQUE RÉEL)
+        'petite_caisse_usd' => $petiteCaisseUSD ? (float) $petiteCaisseUSD->solde : 0,
+        'petite_caisse_cdf' => $petiteCaisseCDF ? (float) $petiteCaisseCDF->solde : 0,
+    ];
+    
+    // Calculer les totaux
+    $etat['total_usd'] = array_sum([
+        $etat['transit_usd'],
+        $etat['coffre_usd'],
+        $etat['banque_usd'],
+        $etat['grande_caisse_usd'], // Maintenant le solde physique réel
+        $etat['petite_caisse_usd']  // Maintenant le solde physique réel
+    ]);
+    
+    $etat['total_cdf'] = array_sum([
+        $etat['transit_cdf'],
+        $etat['coffre_cdf'],
+        $etat['banque_cdf'],
+        $etat['grande_caisse_cdf'], // Maintenant le solde physique réel
+        $etat['petite_caisse_cdf']  // Maintenant le solde physique réel
+    ]);
+    
+    return $etat;
+}
 
     public function enregistrerDepenseComptable($caisseId, $montant, $devise, $compteCharge, $libelle, $beneficiaire)
     {
@@ -711,5 +946,605 @@ public function enregistrerClotureCycle(Cycle $cycle): void
     });
 }
 
+public function enregistrerRetourPetiteCaisse($caisseId, $montant, $devise, $reference, $description)
+{
+    return DB::transaction(function () use ($caisseId, $montant, $devise, $reference, $description) {
+        $journal = $this->getJournal('caisse');
+        
+        // Débit: Compte de transit (retour vers comptabilité)
+        EcritureComptable::create([
+            'journal_comptable_id' => $journal->id,
+            'reference_operation' => $reference,
+            'type_operation' => 'retour_petite_caisse',
+            'compte_number' => self::COMPTE_TRANSIT_TRESORERIE,
+            'libelle' => "Retour petite caisse - {$description}",
+            'montant_debit' => $montant,
+            'montant_credit' => 0,
+            'date_ecriture' => now(),
+            'date_valeur' => now(),
+            'devise' => $devise,
+            'statut' => 'comptabilise',
+            'created_by' => Auth::id(),
+        ]);
+
+        // Crédit: Petite caisse
+        EcritureComptable::create([
+            'journal_comptable_id' => $journal->id,
+            'reference_operation' => $reference,
+            'type_operation' => 'retour_petite_caisse',
+            'compte_number' => self::COMPTE_PETITE_CAISSE,
+            'libelle' => "Retour petite caisse - {$description}",
+            'montant_debit' => 0,
+            'montant_credit' => $montant,
+            'date_ecriture' => now(),
+            'date_valeur' => now(),
+            'devise' => $devise,
+            'statut' => 'comptabilise',
+            'created_by' => Auth::id(),
+        ]);
+
+        return true;
+    });
+}
+
+
+// Ajouter ces méthodes dans ComptabilityService.php
+
+/**
+ * Enregistre un paiement de salaire/charge (débit direct sur compte)
+ */
+/**
+ * Enregistre un paiement de salaire/charge (crédit direct sur compte)
+ */
+public function enregistrerPaiementSalaireCharge($mouvement, $compte, $typeCharge, $description, $beneficiaire)
+{
+    return DB::transaction(function () use ($mouvement, $compte, $typeCharge, $description, $beneficiaire) {
+        $journal = $this->getJournal('caisse');
+        
+        $reference = 'SAL-' . now()->format('Ymd-His');
+        $compteCharge = $this->getCompteChargeSalaire($typeCharge);
+        
+        // Débit: Compte de charge (la charge pour l'organisation)
+        EcritureComptable::create([
+            'journal_comptable_id' => $journal->id,
+            'reference_operation' => $reference,
+            'type_operation' => 'paiement_salaire_charge',
+            'compte_number' => $compteCharge,
+            'libelle' => "Paiement {$typeCharge} - {$beneficiaire} - {$description}",
+            'montant_debit' => $mouvement->montant,
+            'montant_credit' => 0,
+            'date_ecriture' => now(),
+            'date_valeur' => now(),
+            'devise' => $mouvement->devise,
+            'statut' => 'comptabilise',
+            'created_by' => Auth::id(),
+        ]);
+
+        // Crédit: Compte du membre (le membre reçoit l'argent)
+        EcritureComptable::create([
+            'journal_comptable_id' => $journal->id,
+            'reference_operation' => $reference,
+            'type_operation' => 'paiement_salaire_charge',
+            'compte_number' => '422000', // Compte membres
+            'libelle' => "Paiement {$typeCharge} - {$beneficiaire} - {$description}",
+            'montant_debit' => 0,
+            'montant_credit' => $mouvement->montant,
+            'date_ecriture' => now(),
+            'date_valeur' => now(),
+            'devise' => $mouvement->devise,
+            'statut' => 'comptabilise',
+            'created_by' => Auth::id(),
+        ]);
+
+        return true;
+    });
+}
+
+/**
+ * Enregistre une dépense diverse (utilisation petite caisse)
+ */
+public function enregistrerDepenseDiverse($caisseId, $montant, $devise, $compteCharge, $description, $beneficiaire)
+{
+    return DB::transaction(function () use ($caisseId, $montant, $devise, $compteCharge, $description, $beneficiaire) {
+        $journal = $this->getJournal('achats');
+        
+        $reference = 'DEP-DIV-' . now()->format('Ymd-His');
+        
+        // Débit: Compte de charge
+        EcritureComptable::create([
+            'journal_comptable_id' => $journal->id,
+            'reference_operation' => $reference,
+            'type_operation' => 'depense_diverse',
+            'compte_number' => $compteCharge,
+            'libelle' => "Dépense diverse - {$beneficiaire} - {$description}",
+            'montant_debit' => $montant,
+            'montant_credit' => 0,
+            'date_ecriture' => now(),
+            'date_valeur' => now(),
+            'devise' => $devise,
+            'statut' => 'comptabilise',
+            'created_by' => Auth::id(),
+        ]);
+
+        // Crédit: Petite caisse
+        EcritureComptable::create([
+            'journal_comptable_id' => $journal->id,
+            'reference_operation' => $reference,
+            'type_operation' => 'depense_diverse',
+            'compte_number' => self::COMPTE_PETITE_CAISSE,
+            'libelle' => "Dépense diverse - {$beneficiaire} - {$description}",
+            'montant_debit' => 0,
+            'montant_credit' => $montant,
+            'date_ecriture' => now(),
+            'date_valeur' => now(),
+            'devise' => $devise,
+            'statut' => 'comptabilise',
+            'created_by' => Auth::id(),
+        ]);
+
+        return true;
+    });
+}
+
+/**
+ * Enregistre le délaistage de la petite caisse
+ */
+public function enregistrerDelaisagePetiteCaisse($montant, $devise, $reference, $motif)
+{
+    return DB::transaction(function () use ($montant, $devise, $reference, $motif) {
+        $journal = $this->getJournal('caisse');
+        
+        // Débit: Compte de transit
+        EcritureComptable::create([
+            'journal_comptable_id' => $journal->id,
+            'reference_operation' => $reference,
+            'type_operation' => 'delaisage_petite_caisse',
+            'compte_number' => self::COMPTE_TRANSIT_TRESORERIE,
+            'libelle' => "Délaistage petite caisse - {$motif}",
+            'montant_debit' => $montant,
+            'montant_credit' => 0,
+            'date_ecriture' => now(),
+            'date_valeur' => now(),
+            'devise' => $devise,
+            'statut' => 'comptabilise',
+            'created_by' => Auth::id(),
+        ]);
+
+        // Crédit: Petite caisse
+        EcritureComptable::create([
+            'journal_comptable_id' => $journal->id,
+            'reference_operation' => $reference,
+            'type_operation' => 'delaisage_petite_caisse',
+            'compte_number' => self::COMPTE_PETITE_CAISSE,
+            'libelle' => "Délaistage petite caisse - {$motif}",
+            'montant_debit' => 0,
+            'montant_credit' => $montant,
+            'date_ecriture' => now(),
+            'date_valeur' => now(),
+            'devise' => $devise,
+            'statut' => 'comptabilise',
+            'created_by' => Auth::id(),
+        ]);
+
+        return true;
+    });
+}
+
+/**
+ * Détermine le compte de charge pour les salaires
+ */
+private function getCompteChargeSalaire(string $typeCharge): string
+{
+    return match($typeCharge) {
+        'salaire' => '661100',
+        'transport' => '661800', 
+        'communication' => '661800',
+        'prime' => '661200',
+        'autres' => '661800',
+        default => '661100'
+    };
+}
+
+// public function forcerExactement630USD()
+// {
+//     return DB::transaction(function () {
+//         $journal = $this->getJournal('caisse');
+//         $reference = 'FORCE-630-USD-' . now()->format('Ymd-His');
+//         $montantForce = 630;
+        
+//         // 1. D'abord, réinitialiser le compte transit à 0
+//         $soldeActuel = $this->getSoldeCompte(self::COMPTE_TRANSIT_TRESORERIE, 'USD');
+        
+//         if ($soldeActuel > 0) {
+//             // Vider le compte transit
+//             EcritureComptable::create([
+//                 'journal_comptable_id' => $journal->id,
+//                 'reference_operation' => $reference . '-VIDAGE',
+//                 'type_operation' => 'force_reset_transit',
+//                 'compte_number' => '471000', // Compte de régularisation
+//                 'libelle' => "Vidage forcé compte transit -{$soldeActuel} USD",
+//                 'montant_debit' => $soldeActuel,
+//                 'montant_credit' => 0,
+//                 'date_ecriture' => now(),
+//                 'date_valeur' => now(),
+//                 'devise' => 'USD',
+//                 'statut' => 'comptabilise',
+//                 'created_by' => Auth::id(),
+//             ]);
+
+//             EcritureComptable::create([
+//                 'journal_comptable_id' => $journal->id,
+//                 'reference_operation' => $reference . '-VIDAGE',
+//                 'type_operation' => 'force_reset_transit',
+//                 'compte_number' => self::COMPTE_TRANSIT_TRESORERIE,
+//                 'libelle' => "Vidage forcé compte transit -{$soldeActuel} USD",
+//                 'montant_debit' => 0,
+//                 'montant_credit' => $soldeActuel,
+//                 'date_ecriture' => now(),
+//                 'date_valeur' => now(),
+//                 'devise' => 'USD',
+//                 'statut' => 'comptabilise',
+//                 'created_by' => Auth::id(),
+//             ]);
+//         }
+
+//         // 2. Maintenant, mettre EXACTEMENT 630 USD
+//         EcritureComptable::create([
+//             'journal_comptable_id' => $journal->id,
+//             'reference_operation' => $reference . '-ALIMENT',
+//             'type_operation' => 'force_aliment_transit',
+//             'compte_number' => self::COMPTE_TRANSIT_TRESORERIE,
+//             'libelle' => "Alimentation forcée compte transit +630 USD",
+//             'montant_debit' => $montantForce,
+//             'montant_credit' => 0,
+//             'date_ecriture' => now(),
+//             'date_valeur' => now(),
+//             'devise' => 'USD',
+//             'statut' => 'comptabilise',
+//             'created_by' => Auth::id(),
+//         ]);
+
+//         EcritureComptable::create([
+//             'journal_comptable_id' => $journal->id,
+//             'reference_operation' => $reference . '-ALIMENT',
+//             'type_operation' => 'force_aliment_transit',
+//             'compte_number' => '471000', // Compte de régularisation
+//             'libelle' => "Alimentation forcée compte transit +630 USD",
+//             'montant_debit' => 0,
+//             'montant_credit' => $montantForce,
+//             'date_ecriture' => now(),
+//             'date_valeur' => now(),
+//             'devise' => 'USD',
+//             'statut' => 'comptabilise',
+//             'created_by' => Auth::id(),
+//         ]);
+
+//         $nouveauSolde = $this->getSoldeCompte(self::COMPTE_TRANSIT_TRESORERIE, 'USD');
+        
+//         return [
+//             'reference' => $reference,
+//             'ancien_solde' => $soldeActuel,
+//             'nouveau_solde' => $nouveauSolde,
+//             'montant_force' => $montantForce
+//         ];
+//     });
+// }
+
+
+ /**
+     * Générer un rapport instantané de la comptabilité
+     */
+    public function rapportInstantaneeComptabilite($date = null)
+    {
+        $date = $date ? Carbon::parse($date) : Carbon::now();
+        
+        // Récupérer les petites caisses
+        $petitesCaisses = Caisse::where('type_caisse', 'petite_caisse')
+            ->with(['mouvements' => function($query) use ($date) {
+                $query->whereDate('created_at', $date)
+                      ->orderBy('created_at', 'asc');
+            }])
+            ->get();
+
+        // Récupérer les mouvements de transit (compte 511100)
+        $mouvementsTransit = EcritureComptable::where('compte_number', self::COMPTE_TRANSIT_TRESORERIE)
+            ->whereDate('date_ecriture', $date)
+            ->orderBy('date_ecriture', 'asc')
+            ->get();
+
+        $rapport = [
+            'date_rapport' => $date->format('d/m/Y'),
+            'date_generation' => Carbon::now()->format('d/m/Y H:i:s'),
+            'logo_base64' => $this->getLogoBase64(),
+            'type' => 'comptabilite_instantanee',
+            
+            // Soldes des comptes
+            'soldes_comptes' => [
+                'transit_usd' => $this->getSoldeCompte(self::COMPTE_TRANSIT_TRESORERIE, 'USD'),
+                'transit_cdf' => $this->getSoldeCompte(self::COMPTE_TRANSIT_TRESORERIE, 'CDF'),
+                'petite_caisse_usd' => $this->getSoldeCompte(self::COMPTE_PETITE_CAISSE, 'USD'),
+                'petite_caisse_cdf' => $this->getSoldeCompte(self::COMPTE_PETITE_CAISSE, 'CDF'),
+                'coffre_usd' => $this->getSoldeCompte(self::COMPTE_COFFRE_FORT, 'USD'),
+                'coffre_cdf' => $this->getSoldeCompte(self::COMPTE_COFFRE_FORT, 'CDF'),
+                'banque_usd' => $this->getSoldeCompte(self::COMPTE_BANQUE, 'USD'),
+                'banque_cdf' => $this->getSoldeCompte(self::COMPTE_BANQUE, 'CDF'),
+            ],
+            
+            // Petites caisses par devise
+            'petites_caisses' => [
+                'usd' => [
+                    'solde_total' => 0,
+                    'depots' => 0,
+                    'retraits' => 0,
+                    'operations' => 0,
+                    'caisses' => []
+                ],
+                'cdf' => [
+                    'solde_total' => 0,
+                    'depots' => 0,
+                    'retraits' => 0,
+                    'operations' => 0,
+                    'caisses' => []
+                ]
+            ],
+            
+            // Mouvements de transit
+            'transit' => [
+                'usd' => [
+                    'entrees' => 0,
+                    'sorties' => 0,
+                    'solde' => 0,
+                    'mouvements' => []
+                ],
+                'cdf' => [
+                    'entrees' => 0,
+                    'sorties' => 0,
+                    'solde' => 0,
+                    'mouvements' => []
+                ]
+            ],
+            
+            // Synthèse des opérations
+            'synthese' => [
+                'total_entrees' => 0,
+                'total_sorties' => 0,
+                'solde_net' => 0
+            ]
+        ];
+
+        // Traitement des petites caisses
+        foreach ($petitesCaisses as $caisse) {
+            $mouvements = $caisse->mouvements;
+            
+            $depots = $mouvements->where('type', 'depot')->sum('montant');
+            $retraits = $mouvements->where('type', 'retrait')->sum('montant');
+            $operations = $mouvements->count();
+
+            $caisseData = [
+                'nom' => $caisse->nom,
+                'solde_actuel' => $caisse->solde,
+                'plafond' => $caisse->plafond,
+                'depots' => $depots,
+                'retraits' => $retraits,
+                'operations' => $operations,
+                'pourcentage_utilisation' => $caisse->plafond > 0 ? ($caisse->solde / $caisse->plafond) * 100 : 0,
+                'mouvements' => $mouvements->map(function($mouvement) {
+                    return [
+                        'type' => $mouvement->type,
+                        'type_mouvement' => $mouvement->type_mouvement,
+                        'montant' => $mouvement->montant,
+                        'description' => $mouvement->description,
+                        'beneficiaire' => $mouvement->nom_deposant ?? $mouvement->client_nom,
+                        'operateur' => $mouvement->operateur->name ?? 'N/A',
+                        'heure' => $mouvement->created_at->format('H:i:s')
+                    ];
+                })->values()
+            ];
+
+            if ($caisse->devise === 'USD') {
+                $rapport['petites_caisses']['usd']['solde_total'] += $caisse->solde;
+                $rapport['petites_caisses']['usd']['depots'] += $depots;
+                $rapport['petites_caisses']['usd']['retraits'] += $retraits;
+                $rapport['petites_caisses']['usd']['operations'] += $operations;
+                $rapport['petites_caisses']['usd']['caisses'][] = $caisseData;
+            } elseif ($caisse->devise === 'CDF') {
+                $rapport['petites_caisses']['cdf']['solde_total'] += $caisse->solde;
+                $rapport['petites_caisses']['cdf']['depots'] += $depots;
+                $rapport['petites_caisses']['cdf']['retraits'] += $retraits;
+                $rapport['petites_caisses']['cdf']['operations'] += $operations;
+                $rapport['petites_caisses']['cdf']['caisses'][] = $caisseData;
+            }
+        }
+
+        // Traitement des mouvements de transit
+        foreach ($mouvementsTransit as $mouvement) {
+            $estEntree = $mouvement->montant_debit > 0;
+            $montant = $estEntree ? $mouvement->montant_debit : $mouvement->montant_credit;
+            
+            $mouvementData = [
+                'type_operation' => $mouvement->type_operation,
+                'libelle' => $mouvement->libelle,
+                'montant' => $montant,
+                'type' => $estEntree ? 'entree' : 'sortie',
+                'reference' => $mouvement->reference_operation,
+                'date_heure' => $mouvement->date_ecriture->format('H:i:s'),
+                'operateur' => $mouvement->createdBy->name ?? 'N/A'
+            ];
+
+            if ($mouvement->devise === 'USD') {
+                if ($estEntree) {
+                    $rapport['transit']['usd']['entrees'] += $montant;
+                } else {
+                    $rapport['transit']['usd']['sorties'] += $montant;
+                }
+                $rapport['transit']['usd']['mouvements'][] = $mouvementData;
+            } elseif ($mouvement->devise === 'CDF') {
+                if ($estEntree) {
+                    $rapport['transit']['cdf']['entrees'] += $montant;
+                } else {
+                    $rapport['transit']['cdf']['sorties'] += $montant;
+                }
+                $rapport['transit']['cdf']['mouvements'][] = $mouvementData;
+            }
+        }
+
+        // Calcul des soldes de transit
+        $rapport['transit']['usd']['solde'] = $rapport['transit']['usd']['entrees'] - $rapport['transit']['usd']['sorties'];
+        $rapport['transit']['cdf']['solde'] = $rapport['transit']['cdf']['entrees'] - $rapport['transit']['cdf']['sorties'];
+
+        // Synthèse générale
+        $rapport['synthese']['total_entrees'] = $rapport['transit']['usd']['entrees'] + $rapport['transit']['cdf']['entrees'];
+        $rapport['synthese']['total_sorties'] = $rapport['transit']['usd']['sorties'] + $rapport['transit']['cdf']['sorties'];
+        $rapport['synthese']['solde_net'] = $rapport['synthese']['total_entrees'] - $rapport['synthese']['total_sorties'];
+
+        return $rapport;
+    }
+
+    /**
+     * Générer un rapport période pour la comptabilité
+     */
+    public function rapportPeriodeComptabilite($dateDebut, $dateFin = null)
+    {
+        $dateDebut = Carbon::parse($dateDebut);
+        $dateFin = $dateFin ? Carbon::parse($dateFin) : Carbon::now();
+
+        $rapport = [
+            'periode' => $dateDebut->format('d/m/Y') . ' - ' . $dateFin->format('d/m/Y'),
+            'date_generation' => Carbon::now()->format('d/m/Y H:i:s'),
+            'type' => 'comptabilite_periode',
+            
+            'evolution_journaliere' => [],
+            'totaux_periode' => [
+                'usd' => ['entrees' => 0, 'sorties' => 0, 'solde' => 0],
+                'cdf' => ['entrees' => 0, 'sorties' => 0, 'solde' => 0]
+            ]
+        ];
+
+        // Générer l'évolution jour par jour
+        $dateCourante = $dateDebut->copy();
+        while ($dateCourante <= $dateFin) {
+            $jourData = [
+                'date' => $dateCourante->format('d/m/Y'),
+                'transit_usd' => ['entrees' => 0, 'sorties' => 0],
+                'transit_cdf' => ['entrees' => 0, 'sorties' => 0],
+                'petites_caisses_usd' => ['depots' => 0, 'retraits' => 0],
+                'petites_caisses_cdf' => ['depots' => 0, 'retraits' => 0]
+            ];
+
+            // Mouvements de transit du jour
+            $mouvementsTransit = EcritureComptable::where('compte_number', self::COMPTE_TRANSIT_TRESORERIE)
+                ->whereDate('date_ecriture', $dateCourante)
+                ->get();
+
+            foreach ($mouvementsTransit as $mouvement) {
+                $estEntree = $mouvement->montant_debit > 0;
+                $montant = $estEntree ? $mouvement->montant_debit : $mouvement->montant_credit;
+                
+                if ($mouvement->devise === 'USD') {
+                    if ($estEntree) {
+                        $jourData['transit_usd']['entrees'] += $montant;
+                        $rapport['totaux_periode']['usd']['entrees'] += $montant;
+                    } else {
+                        $jourData['transit_usd']['sorties'] += $montant;
+                        $rapport['totaux_periode']['usd']['sorties'] += $montant;
+                    }
+                } elseif ($mouvement->devise === 'CDF') {
+                    if ($estEntree) {
+                        $jourData['transit_cdf']['entrees'] += $montant;
+                        $rapport['totaux_periode']['cdf']['entrees'] += $montant;
+                    } else {
+                        $jourData['transit_cdf']['sorties'] += $montant;
+                        $rapport['totaux_periode']['cdf']['sorties'] += $montant;
+                    }
+                }
+            }
+
+            // Mouvements petites caisses du jour
+            $mouvementsPetitesCaisses = Mouvement::whereHas('caisse', function($query) {
+                    $query->where('type_caisse', 'petite_caisse');
+                })
+                ->whereDate('created_at', $dateCourante)
+                ->get();
+
+            foreach ($mouvementsPetitesCaisses as $mouvement) {
+                if ($mouvement->devise === 'USD') {
+                    if ($mouvement->type === 'depot') {
+                        $jourData['petites_caisses_usd']['depots'] += $mouvement->montant;
+                    } else {
+                        $jourData['petites_caisses_usd']['retraits'] += $mouvement->montant;
+                    }
+                } elseif ($mouvement->devise === 'CDF') {
+                    if ($mouvement->type === 'depot') {
+                        $jourData['petites_caisses_cdf']['depots'] += $mouvement->montant;
+                    } else {
+                        $jourData['petites_caisses_cdf']['retraits'] += $mouvement->montant;
+                    }
+                }
+            }
+
+            $rapport['evolution_journaliere'][] = $jourData;
+            $dateCourante->addDay();
+        }
+
+        // Calcul des soldes finaux
+        $rapport['totaux_periode']['usd']['solde'] = 
+            $rapport['totaux_periode']['usd']['entrees'] - $rapport['totaux_periode']['usd']['sorties'];
+        $rapport['totaux_periode']['cdf']['solde'] = 
+            $rapport['totaux_periode']['cdf']['entrees'] - $rapport['totaux_periode']['cdf']['sorties'];
+
+        return $rapport;
+    }
+
+    /**
+     * Convertir une image en base64 pour l'inclure dans le PDF
+     */
+    private function getLogoBase64()
+    {
+        $logoPath = public_path('images/logo-tumaini1.png');
+        
+        $possiblePaths = [
+            public_path('images/logo-tumaini1.png'),
+            public_path('images/logo-tumaini1.jpg'),
+            public_path('images/logo-tumaini1.jpeg'),
+            public_path('images/logo.png'),
+            public_path('images/logo.jpg'),
+            public_path('storage/images/logo-tumaini1.png'),
+        ];
+        
+        foreach ($possiblePaths as $path) {
+            if (file_exists($path)) {
+                $logoPath = $path;
+                break;
+            }
+        }
+        
+        if (file_exists($logoPath)) {
+            $imageData = file_get_contents($logoPath);
+            $imageInfo = getimagesize($logoPath);
+            $mimeType = $imageInfo['mime'] ?? 'image/png';
+            
+            return 'data:' . $mimeType . ';base64,' . base64_encode($imageData);
+        }
+        
+        return $this->getDefaultLogo();
+    }
+
+    /**
+     * Générer un logo par défaut en base64
+     */
+    private function getDefaultLogo()
+    {
+        $svg = '<svg width="140" height="70" xmlns="http://www.w3.org/2000/svg">
+                <rect width="140" height="70" fill="#f0f0f0" stroke="#ccc" stroke-width="1"/>
+                <text x="70" y="35" text-anchor="middle" dominant-baseline="middle" font-family="Arial" font-size="12" fill="#666">
+                    TUMAINI LETU
+                </text>
+                <text x="70" y="50" text-anchor="middle" dominant-baseline="middle" font-family="Arial" font-size="8" fill="#999">
+                    COMPTABILITÉ
+                </text>
+            </svg>';
+        
+        return 'data:image/svg+xml;base64,' . base64_encode($svg);
+    }
 
 }

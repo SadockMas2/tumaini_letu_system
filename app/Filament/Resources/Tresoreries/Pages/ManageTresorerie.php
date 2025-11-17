@@ -3,39 +3,36 @@
 
 namespace App\Filament\Resources\TresorerieResource\Pages;
 
+use App\Filament\Resources\RapportTresoreries\RapportTresorerieResource;
 use App\Filament\Resources\Tresoreries\TresorerieResource;
 use App\Models\Caisse;
 use App\Models\Compte;
+use App\Models\CompteEpargne;
 use App\Models\Mouvement;
 use App\Models\Credit;
 use App\Models\CreditGroupe;
 use App\Models\CompteTransitoire;
 use App\Models\Depense;
 use App\Models\User;
+use App\Models\TauxChange;
 use App\Models\AchatFourniture;
 use App\Models\PaiementSalaire;
 use App\Models\JournalComptable;
 use App\Models\EcritureComptable;
+use App\Services\TresorerieService;
 use Filament\Actions;
-// use Filament\Actions\Action;
-// use Filament\Forms\Components\Hidden;
-// use Filament\Forms\Components\Select;
-// use Filament\Forms\Components\Textarea;
-// use Filament\Forms\Components\TextInput;
-// use Filament\Notifications\Notification;
-// use Filament\Forms\Components\TextInput;
-// use Filament\Resources\Pages\ManageRecords;
-// use Filament\Forms\Components\Grid;
-// use Filament\Forms\Components\Section;
 use Filament\Actions\Action;
+use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ManageRecords;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
@@ -47,123 +44,488 @@ class ManageTresorerie extends ManageRecords
     {
         return [
 
-                Action::make('delaisage_tresorerie')
-                    ->label('Délaistage Trésorerie')
-                    ->icon('heroicon-o-arrow-right-circle')
-                    ->color('warning')
-                    ->schema([
-                        Select::make('devise_delaisage')
-                            ->label('Devise du Délaistage')
-                            ->options([
-                                'USD' => 'USD',
-                                'CDF' => 'CDF',
-                            ])
-                            ->required()
-                            ->default('USD')
-                            ->live()
-                            ->afterStateUpdated(function ($set, $state) {
-                                if ($state) {
-                                    $caisses = Caisse::where('devise', $state)->get();
-                                    $totalSoldes = $caisses->sum('solde');
-                                    $set('total_soldes_display', number_format($totalSoldes, 2) . ' ' . $state);
-                                    
-                                    $infoCaisses = "**Caisses en {$state}:**\n";
-                                    foreach ($caisses as $caisse) {
-                                        $infoCaisses .= "- {$caisse->nom}: " . number_format($caisse->solde, 2) . " {$caisse->devise}\n";
-                                    }
-                                    $set('info_caisses_delaisage', $infoCaisses);
-                                }
-                            }),
-                        
-                        TextInput::make('total_soldes_display')
-                            ->label('Total des Soldes à Transférer')
-                            ->disabled()
-                            ->dehydrated(false)
-                            ->default('0.00 USD'),
-                            
-                        TextInput::make('info_caisses_delaisage')
-                            ->label('Détail des Caisses')
-                            ->disabled()
-                            ->dehydrated(false)
-                            ->columnSpanFull()
-                            ->extraAttributes(['class' => 'bg-gray-50 border-gray-200']),
-                            
-                        Textarea::make('motif_delaisage')
-                            ->label('Motif du Délaistage')
-                            ->required()
-                            ->placeholder('Ex: Délaistage quotidien - Fin de journée')
-                            ->default('Délaistage automatique des caisses vers comptabilité'),
-                    ])
-                    ->action(function (array $data) {
-                        try {
-                            DB::transaction(function () use ($data) {
-                                $devise = $data['devise_delaisage'];
-                                $caisses = Caisse::where('devise', $devise)->get();
-                                
-                                if ($caisses->isEmpty()) {
-                                    throw new \Exception("Aucune caisse trouvée pour la devise {$devise}");
-                                }
-                                
-                                $totalTransfert = 0;
-                                $reference = 'DELAISAGE-' . now()->format('Ymd-His');
-                                
-                                foreach ($caisses as $caisse) {
-                                    if ($caisse->solde > 0) {
-                                        // Enregistrer le mouvement de sortie
-                                        Mouvement::create([
-                                            'caisse_id' => $caisse->id,
-                                            'type' => 'retrait',
-                                            'type_mouvement' => 'delaisage_comptabilite',
-                                            'montant' => $caisse->solde,
-                                            'solde_avant' => $caisse->solde,
-                                            'solde_apres' => 0,
-                                            'description' => $data['motif_delaisage'] . " - Transfert vers comptabilité",
-                                            'nom_deposant' => 'Système Délaistage',
-                                            'devise' => $devise,
-                                            'operateur_id' => Auth::id(),
-                                            'numero_compte' => $caisse->type_caisse,
-                                            'client_nom' => 'Transfert comptabilité',
-                                            'date_mouvement' => now()
-                                        ]);
+            // Dans getHeaderActions() - ajoutez ces nouvelles actions
+
+Action::make('rapport_instantanee')
+    ->label('Rapport Instantané')
+    ->icon('heroicon-o-clock')
+    ->color('info')
+    ->schema([
+        DatePicker::make('date_rapport')
+            ->label('Date du rapport')
+            ->default(now())
+            ->required(),
+        Toggle::make('inclure_mouvements')
+            ->label('Inclure le détail des mouvements')
+            ->default(true),
+    ])
+  ->action(function (array $data) {
+    try {
+        $tresorerieService = app(TresorerieService::class);
+        $rapport = $tresorerieService->rapportInstantanee($data['date_rapport']);
+        
+        // Export HTML temporaire
+        $html = view('pdf.rapport-instantanee', [
+            'rapport' => $rapport,
+            'inclure_mouvements' => $data['inclure_mouvements']
+        ])->render();
+
+        $filename = 'rapport-tresorerie-instantane-' . now()->format('Y-m-d-H-i') . '.html';
+        
+        return response()->streamDownload(function () use ($html) {
+            echo $html;
+        }, $filename);
+        
+    } catch (\Exception $e) {
+        Notification::make()
+            ->title('Erreur')
+            ->body('Impossible de générer le rapport: ' . $e->getMessage())
+            ->danger()
+            ->send();
+    }
+}),
+
+Action::make('rapport_periode')
+    ->label('Rapport Période')
+    ->icon('heroicon-o-calendar')
+    ->color('warning')
+    ->schema([
+        DatePicker::make('date_debut')
+            ->label('Date de début')
+            ->default(now()->subDays(7))
+            ->required(),
+        DatePicker::make('date_fin')
+            ->label('Date de fin')
+            ->default(now())
+            ->required(),
+    ])
+    ->action(function (array $data) {
+        try {
+            $tresorerieService = app(TresorerieService::class);
+            $rapport = $tresorerieService->rapportPeriode($data['date_debut'], $data['date_fin']);
+            
+            $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdf.rapport-periode', compact('rapport'))
+                ->setPaper('A4', 'landscape');
+
+            return response()->streamDownload(function () use ($pdf) {
+                echo $pdf->output();
+            }, 'rapport-tresorerie-periode-' . $data['date_debut'] . '-a-' . $data['date_fin'] . '.pdf');
+            
+        } catch (\Exception $e) {
+            Notification::make()
+                ->title('Erreur')
+                ->body('Impossible de générer le rapport: ' . $e->getMessage())
+                ->danger()
+                ->send();
+        }
+    }),
+
+// Modifiez l'action existante pour permettre de forcer la génération
+// Action::make('rapport_journalier')
+//     ->label('Rapport Journalier (Sauvegardé)')
+//     ->icon('heroicon-o-document-chart-bar')
+//     ->color('success')
+//     ->schema([
+//         DatePicker::make('date_rapport')
+//             ->label('Date du rapport')
+//             ->default(now())
+//             ->required(),
+//         Toggle::make('forcer')
+//             ->label('Forcer la génération (écraser si existe)')
+//             ->default(false)
+//             ->helperText('Si un rapport existe déjà pour cette date, il sera remplacé.'),
+//     ])
+//     ->action(function (array $data) {
+//         try {
+//             $tresorerieService = app(TresorerieService::class);
+//             $rapport = $tresorerieService->genererRapportTresorerie($data['date_rapport'], $data['forcer']);
+            
+//             Notification::make()
+//                 ->title('Rapport généré')
+//                 ->body('Rapport journalier créé avec succès')
+//                 ->success()
+//                 ->send();
+
+//             // Rediriger vers le rapport créé
+//             return redirect(RapportTresorerieResource::getUrl('view', ['record' => $rapport->id]));
+            
+//         } catch (\Exception $e) {
+//             Notification::make()
+//                 ->title('Erreur')
+//                 ->body('Erreur: ' . $e->getMessage())
+//                 ->danger()
+//                 ->send();
+//         }
+//     })
+//     ->requiresConfirmation()
+//     ->modalHeading('Générer Rapport Journalier')
+//     ->modalDescription('Êtes-vous sûr de vouloir générer le rapport pour cette date ?'),
+
+             // NOUVELLE ACTION POUR LA CONVERSION DE DEVISES
+            Action::make('conversion_devises')
+                ->label('Conversion Devises')
+                ->icon('heroicon-o-currency-dollar')
+                ->color('success')
+                ->schema([
+                    Section::make('Informations Conversion')
+                        ->schema([
+                            Select::make('devise_source')
+                                ->label('Devise Source')
+                                ->options([
+                                    'USD' => 'USD',
+                                    'CDF' => 'CDF',
+                                ])
+                                ->required()
+                                ->default('USD')
+                                ->live()
+                                ->afterStateUpdated(function ($set, $state) {
+                                    if ($state) {
+                                        // Récupérer le taux de change actuel
+                                        $taux = TauxChange::getTauxActuel($state, $state === 'USD' ? 'CDF' : 'USD');
+                                        if ($taux) {
+                                            $set('taux_change', $taux->taux);
+                                            $set('taux_change_id', $taux->id);
+                                        }
                                         
-                                        $totalTransfert += $caisse->solde;
-                                        
-                                        // Réinitialiser le solde de la caisse
-                                        $caisse->solde = 0;
-                                        $caisse->save();
+                                        // Afficher le solde de la grande caisse source
+                                        $grandeCaisseSource = Caisse::where('type_caisse', 'like', '%grande%')
+                                                                    ->where('devise', $state)
+                                                                    ->first();
+                                        if ($grandeCaisseSource) {
+                                            $set('solde_source_display', number_format($grandeCaisseSource->solde, 2) . ' ' . $state);
+                                            $set('caisse_source_id', $grandeCaisseSource->id);
+                                        } else {
+                                            $set('solde_source_display', '0.00 ' . $state);
+                                            $set('caisse_source_id', null);
+                                        }
                                     }
-                                }
-                                
-                                if ($totalTransfert > 0) {
-                                    // Générer l'écriture comptable
-                                    self::genererEcritureComptableDelaisage($totalTransfert, $devise, $reference, $data['motif_delaisage']);
-                                    
-                                    Notification::make()
-                                        ->title('Délaistage réussi')
-                                        ->body("{$totalTransfert} {$devise} transférés vers la comptabilité")
-                                        ->success()
-                                        ->send();
-                                } else {
-                                    Notification::make()
-                                        ->title('Aucun transfert')
-                                        ->body("Aucun solde à transférer pour la devise {$devise}")
-                                        ->info()
-                                        ->send();
-                                }
-                            });
-                            
-                        } catch (\Exception $e) {
-                            Notification::make()
-                                ->title('Erreur de délaistage')
-                                ->body($e->getMessage())
-                                ->danger()
-                                ->send();
+                                }),
+
+                            Select::make('devise_destination')
+                                ->label('Devise Destination')
+                                ->options([
+                                    'USD' => 'USD',
+                                    'CDF' => 'CDF',
+                                ])
+                                ->required()
+                                ->default('CDF')
+                                ->live()
+                                ->afterStateUpdated(function ($set, $state, $get) {
+                                    $deviseSource = $get('devise_source');
+                                    if ($deviseSource && $state && $deviseSource !== $state) {
+                                        // Récupérer le taux de change
+                                        $taux = TauxChange::getTauxActuel($deviseSource, $state);
+                                        if ($taux) {
+                                            $set('taux_change', $taux->taux);
+                                            $set('taux_change_id', $taux->id);
+                                        }
+                                        
+                                        // Afficher le solde de la grande caisse destination
+                                        $grandeCaisseDest = Caisse::where('type_caisse', 'like', '%grande%')
+                                                                  ->where('devise', $state)
+                                                                  ->first();
+                                        if ($grandeCaisseDest) {
+                                            $set('solde_dest_display', number_format($grandeCaisseDest->solde, 2) . ' ' . $state);
+                                            $set('caisse_destination_id', $grandeCaisseDest->id);
+                                        } else {
+                                            $set('solde_dest_display', '0.00 ' . $state);
+                                            $set('caisse_destination_id', null);
+                                        }
+                                    }
+                                }),
+
+   TextInput::make('taux_change')
+    ->label('Taux de Change')
+    ->numeric()
+    ->required()
+    ->minValue(0.0001)
+    ->step(0.0001)
+    ->live()
+    ->afterStateUpdated(function ($set, $state, $get) {
+        $montantSource = $get('montant_source') ?? 0;
+        $deviseSource = $get('devise_source');
+        $deviseDestination = $get('devise_destination');
+        
+        if ($state && $montantSource > 0) {
+            // CORRECTION DE LA LOGIQUE DE CONVERSION
+            if ($deviseSource === 'USD' && $deviseDestination === 'CDF') {
+                // USD vers CDF : MULTIPLIER par le taux
+                $montantConverti = $montantSource * $state;
+            } else if ($deviseSource === 'CDF' && $deviseDestination === 'USD') {
+                // CDF vers USD : DIVISER par le taux
+                $montantConverti = $montantSource / $state;
+            } else {
+                $montantConverti = $montantSource;
+            }
+            
+            $set('montant_destination', number_format($montantConverti, 2));
+            $set('montant_destination_value', $montantConverti);
+        }
+    }),
+                            Hidden::make('taux_change_id'),
+
+                            Grid::make(2)
+                                ->schema([
+                                    TextInput::make('solde_source_display')
+                                        ->label('Solde Grande Caisse Source')
+                                        ->disabled()
+                                        ->dehydrated(false)
+                                        ->default('0.00 USD'),
+
+                                    TextInput::make('solde_dest_display')
+                                        ->label('Solde Grande Caisse Destination')
+                                        ->disabled()
+                                        ->dehydrated(false)
+                                        ->default('0.00 CDF'),
+                                ]),
+                        ]),
+
+Section::make('Montants à Convertir')
+    ->schema([
+        TextInput::make('montant_source')
+            ->label('Montant à Convertir')
+            ->numeric()
+            ->required()
+            ->minValue(0.01)
+            ->step(0.01)
+            ->live()
+            ->afterStateUpdated(function ($set, $state, $get) {
+                $taux = $get('taux_change') ?? 1;
+                $deviseSource = $get('devise_source');
+                $deviseDestination = $get('devise_destination');
+                
+                Log::info('Changement montant source:', [
+                    'montant_source' => $state,
+                    'taux' => $taux,
+                    'devise_source' => $deviseSource,
+                    'devise_destination' => $deviseDestination
+                ]);
+                
+                if ($state && $taux) {
+                    // CORRECTION DE LA LOGIQUE
+                    if ($deviseSource === 'USD' && $deviseDestination === 'CDF') {
+                        // USD vers CDF : MULTIPLIER par le taux
+                        $montantConverti = $state * $taux;
+                        Log::info('Calcul USD->CDF:', [
+                            'operation' => 'USD->CDF',
+                            'formule' => "{$state} * {$taux}",
+                            'resultat' => $montantConverti
+                        ]);
+                    } else if ($deviseSource === 'CDF' && $deviseDestination === 'USD') {
+                        // CDF vers USD : DIVISER par le taux  
+                        $montantConverti = $state / $taux;
+                        Log::info('Calcul CDF->USD:', [
+                            'operation' => 'CDF->USD',
+                            'formule' => "{$state} / {$taux}",
+                            'resultat' => $montantConverti
+                        ]);
+                    } else {
+                        $montantConverti = $state;
+                    }
+                    
+                    $set('montant_destination', number_format($montantConverti, 2));
+                    $set('montant_destination_value', $montantConverti);
+                    
+                    Log::info('Valeurs définies:', [
+                        'montant_destination_affichage' => number_format($montantConverti, 2),
+                        'montant_destination_value' => $montantConverti
+                    ]);
+                    
+                    // Validation du solde source
+                    $caisseSourceId = $get('caisse_source_id');
+                    if ($caisseSourceId) {
+                        $caisseSource = Caisse::find($caisseSourceId);
+                        if ($caisseSource && $state > $caisseSource->solde) {
+                            $set('validation_message', 'Solde insuffisant dans la caisse source');
+                        } else {
+                            $set('validation_message', '');
                         }
-                    })
-                    ->requiresConfirmation()
-                    ->modalHeading('Délaistage Trésorerie')
-                    ->modalDescription('Êtes-vous sûr de vouloir transférer tous les soldes des caisses vers la comptabilité ?')
-                    ->visible(fn () => Auth::user()->can('view_compte')),
+                    }
+                }
+            }),
+
+                Section::make('Détails de la Conversion')
+                ->schema([
+                    Textarea::make('motif_conversion')
+                        ->label('Motif de la Conversion')
+                        ->required()
+                        ->placeholder('Ex: Conversion quotidienne - Ajustement des liquidités')
+                        ->default('Conversion de devises entre grandes caisses'),
+                ]),
+            
+        // AJOUTER CES CHAMPS CACHÉS
+        Hidden::make('caisse_source_id'),
+        Hidden::make('caisse_destination_id'),
+        Hidden::make('montant_destination_value'),
+        
+        // Champ pour afficher le montant converti
+        TextInput::make('montant_destination')
+            ->label('Montant Converti')
+            ->disabled()
+            ->dehydrated(false)
+            ->default('0.00'),
+            
+        // Champ pour afficher les messages de validation
+        TextInput::make('validation_message')
+            ->label('Validation')
+            ->disabled()
+            ->dehydrated(false)
+            ->extraAttributes(['class' => 'text-danger-600 font-medium'])
+            ->visible(fn ($get) => !empty($get('validation_message'))),
+    ])
+
+
+                ])
+                ->action(function (array $data) {
+                    try {
+                        DB::transaction(function () use ($data) {
+                            self::effectuerConversionDevises($data);
+                        });
+
+                        Notification::make()
+                            ->title('Conversion réussie')
+                            ->body("Conversion de {$data['montant_source']} {$data['devise_source']} vers " . 
+                                   number_format($data['montant_destination_value'], 2) . " {$data['devise_destination']} effectuée avec succès")
+                            ->success()
+                            ->send();
+                            
+                    } catch (\Exception $e) {
+                        Notification::make()
+                            ->title('Erreur de conversion')
+                            ->body($e->getMessage())
+                            ->danger()
+                            ->send();
+                    }
+                })
+                ->requiresConfirmation()
+                ->modalHeading('Conversion de Devises')
+                ->modalDescription('Êtes-vous sûr de vouloir effectuer cette conversion ?'),
+                // ->visible(fn () => Auth::user()->can('view_compte')),
+
+        Action::make('delaisage_tresorerie')
+    ->label('Délaistage Trésorerie')
+    ->icon('heroicon-o-arrow-right-circle')
+    ->color('warning')
+    ->schema([
+        Select::make('devise_delaisage')
+            ->label('Devise du Délaistage')
+            ->options([
+                'USD' => 'USD',
+                'CDF' => 'CDF',
+            ])
+            ->required()
+            ->default('USD')
+            ->live()
+            ->afterStateUpdated(function ($set, $state) {
+                if ($state) {
+                    // MODIFICATION : Filtrer uniquement les grandes caisses
+                    $caisses = Caisse::where('devise', $state)
+                                    ->where('type_caisse', 'like', '%grande%') // ← AJOUT IMPORTANT
+                                    ->get();
+                    
+                    $totalSoldes = $caisses->sum('solde');
+                    $set('total_soldes_display', number_format($totalSoldes, 2) . ' ' . $state);
+                    
+                    $infoCaisses = "**Grandes Caisses en {$state}:**\n";
+                    foreach ($caisses as $caisse) {
+                        $infoCaisses .= "- {$caisse->nom}: " . number_format($caisse->solde, 2) . " {$caisse->devise}\n";
+                    }
+                    $set('info_caisses_delaisage', $infoCaisses);
+                }
+            }),
+        
+        TextInput::make('total_soldes_display')
+            ->label('Total des Soldes à Transférer')
+            ->disabled()
+            ->dehydrated(false)
+            ->default('0.00 USD'),
+            
+        TextInput::make('info_caisses_delaisage')
+            ->label('Détail des Grandes Caisses') // ← MODIFICATION DU LABEL
+            ->disabled()
+            ->dehydrated(false)
+            ->columnSpanFull()
+            ->extraAttributes(['class' => 'bg-gray-50 border-gray-200']),
+            
+        Textarea::make('motif_delaisage')
+            ->label('Motif du Délaistage')
+            ->required()
+            ->placeholder('Ex: Délaistage quotidien - Fin de journée')
+            ->default('Délaistage automatique des grandes caisses vers comptabilité'), // ← MODIFICATION
+    ])
+    ->action(function (array $data) {
+        try {
+            DB::transaction(function () use ($data) {
+                $devise = $data['devise_delaisage'];
+                
+                // MODIFICATION : Filtrer uniquement les GRANDES caisses
+                $caisses = Caisse::where('devise', $devise)
+                                ->where('type_caisse', 'like', '%grande%') // ← AJOUT IMPORTANT
+                                ->get();
+                
+                if ($caisses->isEmpty()) {
+                    throw new \Exception("Aucune grande caisse trouvée pour la devise {$devise}");
+                }
+                
+                $totalTransfert = 0;
+                $reference = 'DELAISAGE-' . now()->format('Ymd-His');
+                
+                foreach ($caisses as $caisse) {
+                    if ($caisse->solde > 0) {
+                        // Enregistrer le mouvement de sortie
+                        Mouvement::create([
+                            'caisse_id' => $caisse->id,
+                            'type' => 'retrait',
+                            'type_mouvement' => 'delaisage_comptabilite',
+                            'montant' => $caisse->solde,
+                            'solde_avant' => $caisse->solde,
+                            'solde_apres' => 0,
+                            'description' => $data['motif_delaisage'] . " - Transfert vers comptabilité",
+                            'nom_deposant' => 'Système Délaistage',
+                            'devise' => $devise,
+                            'operateur_id' => Auth::id(),
+                            'numero_compte' => $caisse->type_caisse,
+                            'client_nom' => 'Transfert comptabilité',
+                            'date_mouvement' => now()
+                        ]);
+                        
+                        $totalTransfert += $caisse->solde;
+                        
+                        // Réinitialiser le solde de la caisse
+                        $caisse->solde = 0;
+                        $caisse->save();
+                    }
+                }
+                
+                if ($totalTransfert > 0) {
+                    // Générer l'écriture comptable
+                    self::genererEcritureComptableDelaisage($totalTransfert, $devise, $reference, $data['motif_delaisage']);
+                    
+                    Notification::make()
+                        ->title('Délaistage réussi')
+                        ->body("{$totalTransfert} {$devise} transférés vers la comptabilité depuis les grandes caisses")
+                        ->success()
+                        ->send();
+                } else {
+                    Notification::make()
+                        ->title('Aucun transfert')
+                        ->body("Aucun solde à transférer pour les grandes caisses en {$devise}")
+                        ->info()
+                        ->send();
+                }
+            });
+            
+        } catch (\Exception $e) {
+            Notification::make()
+                ->title('Erreur de délaistage')
+                ->body($e->getMessage())
+                ->danger()
+                ->send();
+        }
+    })
+    ->requiresConfirmation()
+    ->modalHeading('Délaistage Trésorerie (Grandes Caisses)') // ← MODIFICATION
+    ->modalDescription('Êtes-vous sûr de vouloir transférer les soldes des GRANDES caisses vers la comptabilité ?'), // ← MODIFICATION
 
             Action::make('operation_tresorerie')
                 ->label('Nouvelle Opération')
@@ -189,15 +551,14 @@ class ManageTresorerie extends ManageRecords
                                 case 'transfert_caisse':
                                     self::transfertEntreCaisses($data);
                                     break;
-                                case 'depense_diverse':
-                                    self::depenseDiverse($data);
-                                    break;
-                                case 'paiement_salaire':
-                                    self::paiementSalaire($data);
-                                    break;
-                                case 'achat_carnet_livre':
-                                    self::achatCarnetLivre($data);
-                                    break;
+                             
+                                case 'achat_carnet_livre': // S'ASSURER QUE CE CASE EXISTE
+                                self::achatCarnetLivre($data);
+                                break;
+
+                                case 'retrait_epargne': // NOUVEAU
+                                self::retraitDepuisCompteEpargne($data);
+                                break;
                             }
 
                             // Notifier la comptabilité
@@ -218,36 +579,36 @@ class ManageTresorerie extends ManageRecords
                     }
                 }),
             
-            Actions\CreateAction::make()
-                ->label('Nouvelle Caisse')
-                ->icon('heroicon-o-plus'),
+            // Actions\CreateAction::make()
+            //     ->label('Nouvelle Caisse')
+            //     ->icon('heroicon-o-plus'),
             
-            Action::make('rapport_journalier')
-                ->label('Rapport Journalier')
-                ->icon('heroicon-o-document-chart-bar')
-                ->color('info')
-                ->action(function () {
-                    try {
-                        $rapport = app(\App\Services\TresorerieService::class)->genererRapportFinJournee();
+            // Action::make('rapport_journalier')
+            //     ->label('Rapport Journalier')
+            //     ->icon('heroicon-o-document-chart-bar')
+            //     ->color('info')
+            //     ->action(function () {
+            //         try {
+            //             $rapport = app(TresorerieService::class)->genererRapportFinJournee();
                         
-                        Notification::make()
-                            ->title('Rapport généré')
-                            ->body('Rapport journalier créé avec succès')
-                            ->success()
-                            ->send();
+            //             Notification::make()
+            //                 ->title('Rapport généré')
+            //                 ->body('Rapport journalier créé avec succès')
+            //                 ->success()
+            //                 ->send();
                             
-                    } catch (\Exception $e) {
-                        Notification::make()
-                            ->title('Erreur')
-                            ->body('Erreur: ' . $e->getMessage())
-                            ->danger()
-                            ->send();
-                    }
-                })
-                ->requiresConfirmation()
-                ->modalHeading('Générer Rapport Journalier')
-                ->modalDescription('Êtes-vous sûr de vouloir générer le rapport de fin de journée ?')
-                ->visible(fn () => Auth::user()->can('view_compte')),
+            //         } catch (\Exception $e) {
+            //             Notification::make()
+            //                 ->title('Erreur')
+            //                 ->body('Erreur: ' . $e->getMessage())
+            //                 ->danger()
+            //                 ->send();
+            //         }
+            //     })
+            //     ->requiresConfirmation()
+            //     ->modalHeading('Générer Rapport Journalier')
+            //     ->modalDescription('Êtes-vous sûr de vouloir générer le rapport de fin de journée ?')
+            //     ->visible(fn () => Auth::user()->can('view_compte')),
         ];
     }
 
@@ -260,13 +621,14 @@ class ManageTresorerie extends ManageRecords
                         ->label('Type d\'opération')
                         ->options([
                             'depot_compte' => 'Dépôt vers Compte Membre',
-                            'retrait_compte' => 'Retrait depuis Compte Membre',
+                            'retrait_compte' => 'Retrait depuis Compte Courant',
+                            'retrait_epargne' => 'Retrait depuis Compte Épargne', 
                             'paiement_credit' => 'Paiement de Crédit',
                             'versement_agent' => 'Versement Agent Collecteur',
                             'transfert_caisse' => 'Transfert entre Caisses',
-                            'depense_diverse' => 'Dépense Diverse',
-                            'paiement_salaire' => 'Paiement Salaire/Charges',
                             'achat_carnet_livre' => 'Achat Carnet et Livres',
+                          
+                          
                         ])
                         ->required()
                         ->live()
@@ -369,6 +731,71 @@ class ManageTresorerie extends ManageRecords
                 ])
                 ->visible(function ($get) {
                     return in_array($get('type_operation'), ['depot_compte', 'retrait_compte', 'paiement_credit', 'paiement_salaire']);
+                }),
+
+            // Section pour les comptes épargne - NOUVELLE SECTION
+            Section::make('Informations Compte Épargne')
+                ->schema([
+                    TextInput::make('compte_epargne_numero')
+                        ->label('Numéro de Compte Épargne')
+                        ->required(function ($get) {
+                            return $get('type_operation') === 'retrait_epargne';
+                        })
+                        ->live()
+                        ->afterStateUpdated(function ($set, $state) {
+                            if ($state) {
+                                $compteEpargne = CompteEpargne::where('numero_compte', $state)->first();
+                                if ($compteEpargne) {
+                                    $set('client_epargne_nom_complet', self::getNomCompletCompteEpargne($compteEpargne));
+                                    $set('solde_epargne_display', number_format($compteEpargne->solde, 2) . ' ' . $compteEpargne->devise);
+                                    $set('devise', $compteEpargne->devise);
+                                    $set('compte_epargne_id', $compteEpargne->id);
+                                    
+                                    // Vérifier si le retrait est possible
+                                    $soldeMinimum = $compteEpargne->solde_minimum ?? 0;
+                                    $retraitMaximal = $compteEpargne->solde - $soldeMinimum;
+                                    $set('retrait_maximal_display', number_format($retraitMaximal, 2) . ' ' . $compteEpargne->devise);
+                                } else {
+                                    $set('client_epargne_nom_complet', 'Compte épargne non trouvé');
+                                    $set('solde_epargne_display', '0.00 USD');
+                                    $set('retrait_maximal_display', '0.00 USD');
+                                    $set('compte_epargne_id', null);
+                                }
+                            }
+                        })
+                        ->placeholder('Saisir le numéro de compte épargne (Ex: CEM000001 ou CEG000001)'),
+
+                    TextInput::make('client_epargne_nom_complet')
+                        ->label('Titulaire du Compte')
+                        ->disabled()
+                        ->dehydrated(false)
+                        ->default('')
+                        ->visible(function ($get) {
+                            return $get('type_operation') === 'retrait_epargne' && $get('compte_epargne_numero');
+                        }),
+
+                    Grid::make(2)
+                        ->schema([
+                            TextInput::make('solde_epargne_display')
+                                ->label('Solde Épargne')
+                                ->disabled()
+                                ->dehydrated(false)
+                                ->default('0.00 USD'),
+                            
+                            TextInput::make('retrait_maximal_display')
+                                ->label('Retrait Maximal Possible')
+                                ->disabled()
+                                ->dehydrated(false)
+                                ->default('0.00 USD'),
+                        ])
+                        ->visible(function ($get) {
+                            return $get('type_operation') === 'retrait_epargne' && $get('compte_epargne_numero');
+                        }),
+
+                    Hidden::make('compte_epargne_id'),
+                ])
+                ->visible(function ($get) {
+                    return $get('type_operation') === 'retrait_epargne';
                 }),
 
             // Section pour les paiements de crédit - MODIFIÉE
@@ -636,174 +1063,7 @@ class ManageTresorerie extends ManageRecords
                     return $get('type_operation') === 'transfert_caisse';
                 }),
 
-            // Section pour les dépenses diverses - MODIFIÉE
-            Section::make('Détails de la Dépense')
-                ->schema([
-                    Select::make('categorie_depense')
-                        ->label('Catégorie de Dépense')
-                        ->options([
-                            'frais_bureau' => 'Frais de Bureau',
-                            'transport' => 'Transport',
-                            'communication' => 'Communication',
-                            'entretien' => 'Entretien',
-                            'fournitures' => 'Fournitures',
-                            'autres' => 'Autres Dépenses',
-                        ])
-                        ->required(function ($get) {
-                            return $get('type_operation') === 'depense_diverse';
-                        }),
-
-                    Select::make('devise_depense')
-                        ->label('Devise de la Dépense')
-                        ->options([
-                            'USD' => 'USD',
-                            'CDF' => 'CDF',
-                        ])
-                        ->default('USD')
-                        ->required(function ($get) {
-                            return $get('type_operation') === 'depense_diverse';
-                        })
-                        ->live()
-                        ->afterStateUpdated(function ($set, $state) {
-                            if ($state) {
-                                $caisse = Caisse::where('type_caisse', 'like', '%grande%')
-                                                ->where('devise', $state)
-                                                ->first();
-                                if ($caisse) {
-                                    $set('solde_caisse_depense_display', number_format($caisse->solde, 2) . ' ' . $state);
-                                    $set('nom_caisse_depense', $caisse->nom);
-                                } else {
-                                    $set('solde_caisse_depense_display', '0.00 ' . $state);
-                                    $set('nom_caisse_depense', 'Non disponible');
-                                }
-                            }
-                        }),
-
-                    Grid::make(2)
-                        ->schema([
-                            TextInput::make('nom_caisse_depense')
-                                ->label('Caisse Utilisée')
-                                ->disabled()
-                                ->dehydrated(false)
-                                ->default(function ($get) {
-                                    $devise = $get('devise_depense') ?? 'USD';
-                                    $caisse = Caisse::where('type_caisse', 'like', '%grande%')
-                                                    ->where('devise', $devise)
-                                                    ->first();
-                                    return $caisse ? $caisse->nom : 'Grande Caisse ' . $devise;
-                                }),
-
-                            TextInput::make('solde_caisse_depense_display')
-                                ->label('Solde Disponible')
-                                ->disabled()
-                                ->dehydrated(false)
-                                ->default(function ($get) {
-                                    $devise = $get('devise_depense') ?? 'USD';
-                                    $caisse = Caisse::where('type_caisse', 'like', '%grande%')
-                                                    ->where('devise', $devise)
-                                                    ->first();
-                                    return $caisse ? number_format($caisse->solde, 2) . ' ' . $devise : '0.00 ' . $devise;
-                                }),
-                        ])
-                        ->visible(function ($get) {
-                            return $get('type_operation') === 'depense_diverse' && $get('devise_depense');
-                        }),
-
-                    TextInput::make('beneficiaire_depense')
-                        ->label('Bénéficiaire')
-                        ->required(function ($get) {
-                            return $get('type_operation') === 'depense_diverse';
-                        })
-                        ->placeholder('Nom du bénéficiaire de la dépense'),
-                ])
-                ->visible(function ($get) {
-                    return $get('type_operation') === 'depense_diverse';
-                }),
-
-            // Section pour le paiement des salaires et charges - MODIFIÉE
-            Section::make('Paiement des Salaires et Charges')
-                ->schema([
-                    Select::make('type_charge')
-                        ->label('Type de Charge')
-                        ->options([
-                            'salaire' => 'Salaire',
-                            'transport' => 'Frais de Transport',
-                            'communication' => 'Frais de Communication',
-                            'prime' => 'Prime',
-                            'avance' => 'Avance sur Salaire',
-                            'autres' => 'Autres Charges',
-                        ])
-                        ->required(function ($get) {
-                            return $get('type_operation') === 'paiement_salaire';
-                        })
-                        ->default('salaire'),
-
-                    Select::make('devise_salaire')
-                        ->label('Devise du Paiement')
-                        ->options([
-                            'USD' => 'USD',
-                            'CDF' => 'CDF',
-                        ])
-                        ->default('USD')
-                        ->required(function ($get) {
-                            return $get('type_operation') === 'paiement_salaire';
-                        })
-                        ->live()
-                        ->afterStateUpdated(function ($set, $state) {
-                            if ($state) {
-                                $caisse = Caisse::where('type_caisse', 'like', '%grande%')
-                                                ->where('devise', $state)
-                                                ->first();
-                                if ($caisse) {
-                                    $set('solde_caisse_salaire_display', number_format($caisse->solde, 2) . ' ' . $state);
-                                    $set('nom_caisse_salaire', $caisse->nom);
-                                } else {
-                                    $set('solde_caisse_salaire_display', '0.00 ' . $state);
-                                    $set('nom_caisse_salaire', 'Non disponible');
-                                }
-                            }
-                        }),
-
-                    Grid::make(2)
-                        ->schema([
-                            TextInput::make('nom_caisse_salaire')
-                                ->label('Caisse Utilisée')
-                                ->disabled()
-                                ->dehydrated(false)
-                                ->default(function ($get) {
-                                    $devise = $get('devise_salaire') ?? 'USD';
-                                    $caisse = Caisse::where('type_caisse', 'like', '%grande%')
-                                                    ->where('devise', $devise)
-                                                    ->first();
-                                    return $caisse ? $caisse->nom : 'Grande Caisse ' . $devise;
-                                }),
-
-                            TextInput::make('solde_caisse_salaire_display')
-                                ->label('Solde Disponible')
-                                ->disabled()
-                                ->dehydrated(false)
-                                ->default(function ($get) {
-                                    $devise = $get('devise_salaire') ?? 'USD';
-                                    $caisse = Caisse::where('type_caisse', 'like', '%grande%')
-                                                    ->where('devise', $devise)
-                                                    ->first();
-                                    return $caisse ? number_format($caisse->solde, 2) . ' ' . $devise : '0.00 ' . $devise;
-                                }),
-                        ])
-                        ->visible(function ($get) {
-                            return $get('type_operation') === 'paiement_salaire' && $get('devise_salaire');
-                        }),
-
-                    TextInput::make('periode_paiement')
-                        ->label('Période de Paiement')
-                        ->placeholder('Ex: Novembre 2024')
-                        ->required(function ($get) {
-                            return $get('type_operation') === 'paiement_salaire';
-                        }),
-                ])
-                ->visible(function ($get) {
-                    return $get('type_operation') === 'paiement_salaire';
-                }),
+           
 
             // Section pour l'achat de carnets et livres - MODIFIÉE
             Section::make('Achat de Carnets et Livres')
@@ -940,11 +1200,11 @@ Section::make('Détails de l\'Opération')
         TextInput::make('nom_retirant')
             ->label('Nom du Retirant')
             ->required(function ($get) {
-                return in_array($get('type_operation'), ['retrait_compte', 'paiement_credit']);
+                return in_array($get('type_operation'), ['retrait_compte', 'paiement_credit', 'retrait_epargne']);
             })
             ->placeholder('Saisir le nom de la personne qui retire')
             ->visible(function ($get) {
-                return in_array($get('type_operation'), ['retrait_compte', 'paiement_credit']);
+                return in_array($get('type_operation'), ['retrait_compte', 'paiement_credit','retrait_epargne']);
             }),
 
         TextInput::make('montant')
@@ -963,15 +1223,7 @@ Section::make('Détails de l\'Opération')
 
                         $typeOperation = $get('type_operation');
 
-                        // if ($typeOperation === 'paiement_salaire') {
-                        //     $devise = $get('devise_salaire') ?? 'USD';
-                        //     $caisse = Caisse::where('type_caisse', 'like', '%grande%')
-                        //                     ->where('devise', $devise)
-                        //                     ->first();
-                        //     if ($caisse && $value > $caisse->solde) {
-                        //         $fail("Solde insuffisant dans la caisse {$caisse->nom}. Maximum: " . number_format($caisse->solde, 2) . " {$devise}");
-                        //     }
-                        // }
+                  
                         
                         if ($typeOperation === 'retrait_compte') {
                             $compteId = $get('compte_id');
@@ -979,6 +1231,25 @@ Section::make('Détails de l\'Opération')
                                 $soldeDisponible = Mouvement::getSoldeDisponible($compteId);
                                 if ($value > $soldeDisponible) {
                                     $fail("Solde disponible insuffisant. Maximum: " . number_format($soldeDisponible, 2) . " USD");
+                                }
+                            }
+                        }
+
+                        if ($typeOperation === 'retrait_epargne') {
+                            $compteEpargneId = $get('compte_epargne_id');
+                            if ($compteEpargneId) {
+                                $compteEpargne = CompteEpargne::find($compteEpargneId);
+                                if ($compteEpargne) {
+                                    $soldeMinimum = $compteEpargne->solde_minimum ?? 0;
+                                    $retraitMaximal = $compteEpargne->solde - $soldeMinimum;
+                                    
+                                    if ($value > $retraitMaximal) {
+                                        $fail("Retrait impossible - Le solde minimum de " . number_format($soldeMinimum, 2) . " {$compteEpargne->devise} doit être maintenu. Maximum: " . number_format($retraitMaximal, 2) . " {$compteEpargne->devise}");
+                                    }
+                                    
+                                    if ($value > $compteEpargne->solde) {
+                                        $fail("Solde insuffisant. Maximum: " . number_format($compteEpargne->solde, 2) . " {$compteEpargne->devise}");
+                                    }
                                 }
                             }
                         }
@@ -990,16 +1261,6 @@ Section::make('Détails de l\'Opération')
                                 if ($value > $soldeDisponible) {
                                     $fail("Solde disponible insuffisant pour le paiement. Maximum: " . number_format($soldeDisponible, 2) . " USD");
                                 }
-                            }
-                        }
-
-                        if ($typeOperation === 'depense_diverse') {
-                            $devise = $get('devise_depense') ?? 'USD';
-                            $caisse = Caisse::where('type_caisse', 'like', '%grande%')
-                                            ->where('devise', $devise)
-                                            ->first();
-                            if ($caisse && $value > $caisse->solde) {
-                                $fail("Solde insuffisant dans la caisse {$caisse->nom}. Maximum: " . number_format($caisse->solde, 2) . " {$devise}");
                             }
                         }
 
@@ -1028,9 +1289,8 @@ Section::make('Détails de l\'Opération')
                     'paiement_credit' => 'Paiement de crédit',
                     'versement_agent' => 'Versement agent collecteur',
                     'transfert_caisse' => 'Transfert entre caisses',
-                    'depense_diverse' => 'Dépense diverse',
-                    'paiement_salaire' => 'Paiement salaire/charges',
-                    'achat_carnet_livre' => 'Achat de carnets/livres',
+               
+                 
                     default => 'Description de l\'opération'
                 };
             }),
@@ -1348,148 +1608,129 @@ Section::make('Détails de l\'Opération')
         });
     }
 
-    private static function depenseDiverse(array $data)
-    {
-        $devise = $data['devise_depense'] ?? 'USD';
-        
-        $caisse = Caisse::where('type_caisse', 'like', '%grande%')
-                        ->where('devise', $devise)
-                        ->first();
 
-        if (!$caisse) {
-            $caisse = Caisse::where('type_caisse', 'like', '%petite%')
-                            ->where('devise', $devise)
-                            ->first();
-        }
 
-        if (!$caisse) {
-            throw new \Exception("Aucune caisse trouvée pour la devise {$devise}");
-        }
-
-        if ($caisse->solde < $data['montant']) {
-            throw new \Exception("Solde insuffisant dans la caisse {$caisse->nom}. Solde disponible: " . number_format($caisse->solde, 2) . " {$devise}");
-        }
-
-        if ($caisse->type_caisse === 'petite_caisse' && $data['montant'] > 100) {
-            throw new \Exception("La petite caisse ne peut pas gérer des dépenses supérieures à 100 USD");
-        }
-
-        DB::transaction(function () use ($data, $caisse, $devise) {
-            // Débiter la caisse
-            $ancienSoldeCaisse = $caisse->solde;
-            $caisse->solde -= $data['montant'];
-            $caisse->save();
-
-            // Enregistrer la dépense
-            $depense = Depense::create([
-                'caisse_id' => $caisse->id,
-                'categorie' => $data['categorie_depense'],
-                'montant' => $data['montant'],
-                'devise' => $devise,
-                'beneficiaire' => $data['beneficiaire_depense'] ?? 'Bénéficiare non spécifié',
-                'description' => $data['description'] ?? "Dépense diverse - {$data['categorie_depense']}",
-                'operateur_id' => Auth::id(),
-                'date_depense' => now(),
-                'reference' => 'DEP-' . now()->format('YmdHis')
-            ]);
-
-            // Enregistrer le mouvement
-            $mouvement = Mouvement::create([
-                'caisse_id' => $caisse->id,
-                'type' => 'retrait',
-                'type_mouvement' => 'depense_diverse',
-                'montant' => $data['montant'],
-                'solde_avant' => $ancienSoldeCaisse,
-                'solde_apres' => $caisse->solde,
-                'description' => $data['description'] ?? "Dépense diverse - {$data['categorie_depense']} - {$caisse->nom}",
-                'nom_deposant' => $data['beneficiaire_depense'] ?? 'Bénéficiare non spécifié',
-                'devise' => $devise,
-                'operateur_id' => Auth::id(),
-                'numero_compte' => 'DEPENSE',
-                'client_nom' => $data['beneficiaire_depense'] ?? $data['nom_operant'],
-                'date_mouvement' => now()
-            ]);
-
-            // Générer l'écriture comptable
-            self::genererEcritureComptableDepense($mouvement, $depense, $caisse, $data);
-
-            Notification::make()
-                ->title('Dépense enregistrée')
-                ->body("Dépense de {$data['montant']} {$devise} effectuée depuis {$caisse->nom}")
-                ->success()
-                ->send();
-        });
-    }
-
-private static function paiementSalaire(array $data)
+private static function retraitDepuisCompteEpargne(array $data)
 {
-    $compte = Compte::find($data['compte_id']);
+    $compteEpargne = CompteEpargne::find($data['compte_epargne_id']);
     
-    if (!$compte) {
-        throw new \Exception('Compte non trouvé');
+    if (!$compteEpargne) {
+        throw new \Exception('Compte épargne non trouvé');
     }
 
-    $devise = $data['devise_salaire'] ?? 'USD';
+    $grandeCaisse = Caisse::where('type_caisse', 'like', '%grande%')
+                          ->where('devise', $data['devise'])
+                          ->first();
 
-    DB::transaction(function () use ($data, $compte, $devise) {
-        // CRÉDITER le compte du membre pour qu'il puisse retirer l'argent
-        $ancienSoldeCompte = $compte->solde;
-        $nouveauSolde = $ancienSoldeCompte + $data['montant'];
-        
-        $compte->solde = $nouveauSolde; // CRÉDITER le compte
-        $compte->save();
+    if (!$grandeCaisse) {
+        throw new \Exception('Aucune grande caisse trouvée');
+    }
 
-        // CORRECTION : S'assurer que les valeurs sont correctes pour le mouvement
+    // Validation du retrait
+    $soldeMinimum = $compteEpargne->solde_minimum ?? 0;
+    $retraitMaximal = $compteEpargne->solde - $soldeMinimum;
+    
+    if ($data['montant'] > $retraitMaximal) {
+        throw new \Exception('Retrait impossible - Le solde minimum doit être maintenu');
+    }
+
+    if ($data['montant'] > $compteEpargne->solde) {
+        throw new \Exception('Solde insuffisant');
+    }
+
+    DB::transaction(function () use ($data, $compteEpargne, $grandeCaisse) {
+        // Débiter la grande caisse
+        $ancienSoldeCaisse = $grandeCaisse->solde;
+        $grandeCaisse->solde -= $data['montant'];
+        $grandeCaisse->save();
+
+        // Débiter le compte épargne
+        $ancienSoldeEpargne = $compteEpargne->solde;
+        $compteEpargne->solde -= $data['montant'];
+        $compteEpargne->save();
+
+        // Enregistrer le mouvement
         $mouvement = Mouvement::create([
-            'compte_id' => $compte->id,
-            'type' => 'depot', // Type dépôt pour créditer le compte
-            'type_mouvement' => 'paiement_salaire',
+            'compte_epargne_id' => $compteEpargne->id,
+            'caisse_id' => $grandeCaisse->id,
+            'type' => 'retrait',
+            'type_mouvement' => 'retrait_epargne',
             'montant' => $data['montant'],
-            'solde_avant' => (float) $ancienSoldeCompte, // Convertir en float pour être sûr
-            'solde_apres' => (float) $nouveauSolde, // Utiliser la variable calculée
-            'description' => $data['description'] ?? "Paiement {$data['type_charge']} - {$data['periode_paiement']}",
-            'nom_deposant' => $data['client_nom_complet'] ?? self::getNomCompletClient($compte),
-            'devise' => $devise,
+            'solde_avant' => $ancienSoldeEpargne,
+            'solde_apres' => $compteEpargne->solde,
+            'description' => $data['description'] ?? "Retrait depuis compte épargne",
+            'nom_deposant' => $data['nom_retirant'],
+            'devise' => $data['devise'],
             'operateur_id' => Auth::id(),
-            'numero_compte' => $compte->numero_compte,
-            'client_nom' => $data['client_nom_complet'] ?? self::getNomCompletClient($compte),
+            'numero_compte' => $compteEpargne->numero_compte,
+            'client_nom' => $data['client_epargne_nom_complet'] ?? self::getNomCompletCompteEpargne($compteEpargne),
             'date_mouvement' => now()
         ]);
 
-        // Enregistrer la transaction de paiement de salaire (sans caisse_id)
-        $paiementSalaire = PaiementSalaire::create([
-            'compte_id' => $compte->id,
-            'type_charge' => $data['type_charge'],
-            'montant' => $data['montant'],
-            'devise' => $devise,
-            'periode' => $data['periode_paiement'],
-            'beneficiaire' => $data['client_nom_complet'] ?? $compte->nom,
-            'description' => $data['description'] ?? "Paiement {$data['type_charge']} - {$data['periode_paiement']}",
-            'operateur_id' => Auth::id(),
-            'date_paiement' => now(),
-            'reference' => 'SAL-' . now()->format('YmdHis')
-        ]);
-
-        // Générer l'écriture comptable avec les comptes 66 et 422
-        self::genererEcritureComptableSalaire($mouvement, $compte, $data);
-
-        // LOG pour vérification
-        logger("=== VÉRIFICATION PAIEMENT SALAIRE ===");
-        logger("Compte: {$compte->numero_compte}");
-        logger("Ancien solde: {$ancienSoldeCompte}");
-        logger("Montant crédité: {$data['montant']}");
-        logger("Nouveau solde calculé: {$nouveauSolde}");
-        logger("Solde compte après save: {$compte->solde}");
-        logger("Mouvement - solde_avant: {$mouvement->solde_avant}");
-        logger("Mouvement - solde_apres: {$mouvement->solde_apres}");
+        // Générer l'écriture comptable
+        self::genererEcritureComptableRetraitEpargne($mouvement, $compteEpargne, $grandeCaisse, $data);
 
         Notification::make()
-            ->title('Paiement de salaire effectué')
-            ->body("Paiement de {$data['montant']} {$devise} crédité sur le compte {$compte->numero_compte} ({$compte->nom}) - Nouveau solde: {$nouveauSolde} {$devise}")
+            ->title('Retrait épargne réussi')
+            ->body("Retrait de {$data['montant']} {$data['devise']} effectué depuis le compte épargne {$compteEpargne->numero_compte}")
             ->success()
             ->send();
     });
 }
+
+private static function genererEcritureComptableRetraitEpargne($mouvement, $compteEpargne, $caisse, $data)
+{
+    $journal = JournalComptable::where('type_journal', 'caisse')->first();
+    
+    if (!$journal) {
+        throw new \Exception('Journal de caisse non trouvé');
+    }
+
+    $reference = 'RET-EP-' . now()->format('Ymd-His');
+
+    // Débit: Compte épargne (compte 109)
+    EcritureComptable::create([
+        'journal_comptable_id' => $journal->id,
+        'reference_operation' => $reference,
+        'type_operation' => 'retrait_epargne',
+        'compte_number' => '412000', // Compte épargne
+        'libelle' => "Retrait compte épargne {$compteEpargne->numero_compte} - {$data['description']}",
+        'montant_debit' => $data['montant'],
+        'montant_credit' => 0,
+        'date_ecriture' => now(),
+        'date_valeur' => now(),
+        'devise' => $data['devise'],
+        'statut' => 'comptabilise',
+        'created_by' => Auth::id(),
+    ]);
+
+    // Crédit: Compte de la caisse
+    EcritureComptable::create([
+        'journal_comptable_id' => $journal->id,
+        'reference_operation' => $reference,
+        'type_operation' => 'retrait_epargne',
+        'compte_number' => '571100', // Compte caisse
+        'libelle' => "Retrait compte épargne {$compteEpargne->numero_compte} - {$data['description']}",
+        'montant_debit' => 0,
+        'montant_credit' => $data['montant'],
+        'date_ecriture' => now(),
+        'date_valeur' => now(),
+        'devise' => $data['devise'],
+        'statut' => 'comptabilise',
+        'created_by' => Auth::id(),
+    ]);
+}
+
+private static function getNomCompletCompteEpargne(CompteEpargne $compteEpargne): string
+{
+    if ($compteEpargne->type_compte === 'groupe_solidaire') {
+        return $compteEpargne->groupeSolidaire->nom_groupe ?? $compteEpargne->numero_compte . ' (Groupe)';
+    } else {
+        return $compteEpargne->client->nom_complet ?? $compteEpargne->numero_compte . ' (Individuel)';
+    }
+}
+
+
    private static function achatCarnetLivre(array $data)
 {
     $devise = $data['devise_achat'] ?? 'USD';
@@ -1588,8 +1829,54 @@ private static function paiementSalaire(array $data)
     });
 }
 
+// Vérifier que cette méthode existe dans ManageTresorerie
+
     // MÉTHODES POUR GÉNÉRER LES ÉCRITURES COMPTABLES
 
+
+    // Vérifier que cette méthode existe aussi
+private static function genererEcritureComptableAchat($mouvement, $achat, $caisse, $data)
+{
+    $journal = JournalComptable::where('type_journal', 'caisse')->first();
+    
+    if (!$journal) {
+        throw new \Exception('Journal de caisse non trouvé');
+    }
+
+    $reference = 'ACH-' . now()->format('Ymd-His');
+
+    // Débit: Compte de la caisse
+    EcritureComptable::create([
+        'journal_comptable_id' => $journal->id,
+        'reference_operation' => $reference,
+        'type_operation' => 'achat_carnet_livre',
+        'compte_number' => '571100', // Compte caisse
+        'libelle' => "Achat {$data['type_achat']} - {$data['description']}",
+        'montant_debit' => $data['montant'],
+        'montant_credit' => 0,
+        'date_ecriture' => now(),
+        'date_valeur' => now(),
+        'devise' => $data['devise_achat'],
+        'statut' => 'comptabilise',
+        'created_by' => Auth::id(),
+    ]);
+
+    // Crédit: Compte de revenus achats
+    EcritureComptable::create([
+        'journal_comptable_id' => $journal->id,
+        'reference_operation' => $reference,
+        'type_operation' => 'achat_carnet_livre',
+        'compte_number' => '701000', // Compte revenus achats
+        'libelle' => "Achat {$data['type_achat']} - {$data['description']}",
+        'montant_debit' => 0,
+        'montant_credit' => $data['montant'],
+        'date_ecriture' => now(),
+        'date_valeur' => now(),
+        'devise' => $data['devise_achat'],
+        'statut' => 'comptabilise',
+        'created_by' => Auth::id(),
+    ]);
+}
     private static function genererEcritureComptableDepot($mouvement, $compte, $caisse, $data)
     {
         $journal = JournalComptable::where('type_journal', 'caisse')->first();
@@ -1805,158 +2092,51 @@ private static function paiementSalaire(array $data)
         ]);
     }
 
-    private static function genererEcritureComptableDepense($mouvement, $depense, $caisse, $data)
-    {
-        $journal = JournalComptable::where('type_journal', 'caisse')->first();
+
+
+
+    // private static function genererEcritureComptableAchat($mouvement, $achat, $caisse, $data)
+    // {
+    //     $journal = JournalComptable::where('type_journal', 'caisse')->first();
         
-        if (!$journal) {
-            throw new \Exception('Journal de caisse non trouvé');
-        }
+    //     if (!$journal) {
+    //         throw new \Exception('Journal de caisse non trouvé');
+    //     }
 
-        $reference = 'DEP-' . now()->format('Ymd-His');
-        $categorieCompte = match($data['categorie_depense']) {
-            'frais_bureau' => '613100',
-            'transport' => '613200',
-            'communication' => '613300',
-            'entretien' => '613400',
-            'fournitures' => '613500',
-            default => '613600' // autres
-        };
+    //     $reference = 'ACH-' . now()->format('Ymd-His');
 
-        // Débit: Compte de dépense
-        EcritureComptable::create([
-            'journal_comptable_id' => $journal->id,
-            'reference_operation' => $reference,
-            'type_operation' => 'depense_diverse',
-            'compte_number' => $categorieCompte,
-            'libelle' => "Dépense {$data['categorie_depense']} - {$data['description']}",
-            'montant_debit' => $data['montant'],
-            'montant_credit' => 0,
-            'date_ecriture' => now(),
-            'date_valeur' => now(),
-            'devise' => $data['devise_depense'],
-            'statut' => 'comptabilise',
-            'created_by' => Auth::id(),
-        ]);
+    //     // Débit: Compte de la caisse
+    //     EcritureComptable::create([
+    //         'journal_comptable_id' => $journal->id,
+    //         'reference_operation' => $reference,
+    //         'type_operation' => 'achat_carnet_livre',
+    //         'compte_number' => '571100', // Compte caisse
+    //         'libelle' => "Achat {$data['type_achat']} - {$data['description']}",
+    //         'montant_debit' => $data['montant'],
+    //         'montant_credit' => 0,
+    //         'date_ecriture' => now(),
+    //         'date_valeur' => now(),
+    //         'devise' => $data['devise_achat'],
+    //         'statut' => 'comptabilise',
+    //         'created_by' => Auth::id(),
+    //     ]);
 
-        // Crédit: Compte de la caisse
-        EcritureComptable::create([
-            'journal_comptable_id' => $journal->id,
-            'reference_operation' => $reference,
-            'type_operation' => 'depense_diverse',
-            'compte_number' => '571100', // Compte caisse
-            'libelle' => "Dépense {$data['categorie_depense']} - {$data['description']}",
-            'montant_debit' => 0,
-            'montant_credit' => $data['montant'],
-            'date_ecriture' => now(),
-            'date_valeur' => now(),
-            'devise' => $data['devise_depense'],
-            'statut' => 'comptabilise',
-            'created_by' => Auth::id(),
-        ]);
-    }
-
-private static function genererEcritureComptableSalaire($mouvement, $compte, $data)
-{
-    $journal = JournalComptable::where('type_journal', 'caisse')->first();
-    
-    if (!$journal) {
-        throw new \Exception('Journal de caisse non trouvé');
-    }
-
-    $reference = 'SAL-' . now()->format('Ymd-His');
-    
-    // Déterminer le compte de charges selon le type de charge
-    $compteCharge = self::getCompteChargeSalaire($data['type_charge']);
-    
-    // ÉCRITURE 1: Débit des charges de personnel (compte 66)
-    EcritureComptable::create([
-        'journal_comptable_id' => $journal->id,
-        'reference_operation' => $reference,
-        'type_operation' => 'paiement_salaire',
-        'compte_number' => $compteCharge, // Compte 66xxx
-        'libelle' => "Paiement {$data['type_charge']} - {$data['periode_paiement']} - {$compte->nom}",
-        'montant_debit' => $data['montant'],
-        'montant_credit' => 0,
-        'date_ecriture' => now(),
-        'date_valeur' => now(),
-        'devise' => $data['devise_salaire'],
-        'statut' => 'comptabilise',
-        'created_by' => Auth::id(),
-    ]);
-
-    // ÉCRITURE 2: Crédit du compte personnel (compte 422)
-    EcritureComptable::create([
-        'journal_comptable_id' => $journal->id,
-        'reference_operation' => $reference,
-        'type_operation' => 'paiement_salaire',
-        'compte_number' => '422000', // Compte 422 - Personnel, rémunérations dues
-        'libelle' => "Paiement {$data['type_charge']} - {$data['periode_paiement']} - {$compte->nom}",
-        'montant_debit' => 0,
-        'montant_credit' => $data['montant'],
-        'date_ecriture' => now(),
-        'date_valeur' => now(),
-        'devise' => $data['devise_salaire'],
-        'statut' => 'comptabilise',
-        'created_by' => Auth::id(),
-    ]);
-}
-
-private static function getCompteChargeSalaire(string $typeCharge): string
-{
-    return match($typeCharge) {
-        'salaire' => '661100', // Appointements, salaires et commissions
-        'transport' => '661800', // Autres rémunérations directes
-        'communication' => '661800', // Autres rémunérations directes  
-        'prime' => '661200', // Primes et gratifications
-        'avance' => '661800', // Autres rémunérations directes
-        'autres' => '661800', // Autres rémunérations directes
-        default => '661100' // Par défaut salaires
-    };
-}
-
-    private static function genererEcritureComptableAchat($mouvement, $achat, $caisse, $data)
-    {
-        $journal = JournalComptable::where('type_journal', 'caisse')->first();
-        
-        if (!$journal) {
-            throw new \Exception('Journal de caisse non trouvé');
-        }
-
-        $reference = 'ACH-' . now()->format('Ymd-His');
-
-        // Débit: Compte de la caisse
-        EcritureComptable::create([
-            'journal_comptable_id' => $journal->id,
-            'reference_operation' => $reference,
-            'type_operation' => 'achat_carnet_livre',
-            'compte_number' => '571100', // Compte caisse
-            'libelle' => "Achat {$data['type_achat']} - {$data['description']}",
-            'montant_debit' => $data['montant'],
-            'montant_credit' => 0,
-            'date_ecriture' => now(),
-            'date_valeur' => now(),
-            'devise' => $data['devise_achat'],
-            'statut' => 'comptabilise',
-            'created_by' => Auth::id(),
-        ]);
-
-        // Crédit: Compte de revenus achats
-        EcritureComptable::create([
-            'journal_comptable_id' => $journal->id,
-            'reference_operation' => $reference,
-            'type_operation' => 'achat_carnet_livre',
-            'compte_number' => '701000', // Compte revenus achats
-            'libelle' => "Achat {$data['type_achat']} - {$data['description']}",
-            'montant_debit' => 0,
-            'montant_credit' => $data['montant'],
-            'date_ecriture' => now(),
-            'date_valeur' => now(),
-            'devise' => $data['devise_achat'],
-            'statut' => 'comptabilise',
-            'created_by' => Auth::id(),
-        ]);
-    }
+    //     // Crédit: Compte de revenus achats
+    //     EcritureComptable::create([
+    //         'journal_comptable_id' => $journal->id,
+    //         'reference_operation' => $reference,
+    //         'type_operation' => 'achat_carnet_livre',
+    //         'compte_number' => '701000', // Compte revenus achats
+    //         'libelle' => "Achat {$data['type_achat']} - {$data['description']}",
+    //         'montant_debit' => 0,
+    //         'montant_credit' => $data['montant'],
+    //         'date_ecriture' => now(),
+    //         'date_valeur' => now(),
+    //         'devise' => $data['devise_achat'],
+    //         'statut' => 'comptabilise',
+    //         'created_by' => Auth::id(),
+    //     ]);
+    // }
 
     private static function genererEcritureComptableDelaisage($montant, $devise, $reference, $motif)
     {
@@ -2013,6 +2193,171 @@ private static function getCompteChargeSalaire(string $typeCharge): string
         }
         return $nomComplet;
     }
+
+
+// MODIFIEZ LA MÉTHODE effectuerConversionDevises AVEC DES LOGS
+private static function effectuerConversionDevises(array $data)
+{
+    Log::info('=== DÉBUT CONVERSION DEVISES ===');
+    Log::info('Données reçues:', $data);
+    
+    $caisseSource = Caisse::find($data['caisse_source_id']);
+    $caisseDestination = Caisse::find($data['caisse_destination_id']);
+
+    if (!$caisseSource || !$caisseDestination) {
+        throw new \Exception('Caisse source ou destination non trouvée');
+    }
+
+    // VALIDATION DU SOLDE SOURCE
+    if ($caisseSource->solde < $data['montant_source']) {
+        Log::error('Solde insuffisant:', [
+            'solde_caisse_source' => $caisseSource->solde,
+            'montant_source' => $data['montant_source']
+        ]);
+        throw new \Exception('Solde insuffisant dans la caisse source');
+    }
+
+    if ($caisseSource->devise === $caisseDestination->devise) {
+        throw new \Exception('Les devises source et destination doivent être différentes');
+    }
+
+    DB::transaction(function () use ($data, $caisseSource, $caisseDestination) {
+        $montantSource = $data['montant_source'];
+        $montantDestination = $data['montant_destination_value'];
+        $reference = 'CONV-' . now()->format('Ymd-His');
+
+        Log::info('Avant transaction:', [
+            'solde_source_avant' => $caisseSource->solde,
+            'solde_dest_avant' => $caisseDestination->solde,
+            'montant_source' => $montantSource,
+            'montant_destination' => $montantDestination,
+            'operation' => "{$caisseSource->devise} -> {$caisseDestination->devise}"
+        ]);
+
+        // DÉBITER LA CAISSE SOURCE
+        $ancienSoldeSource = $caisseSource->solde;
+        $caisseSource->solde -= $montantSource;
+        $caisseSource->save();
+
+        // CRÉDITER LA CAISSE DESTINATION
+        $ancienSoldeDest = $caisseDestination->solde;
+        $caisseDestination->solde += $montantDestination;
+        $caisseDestination->save();
+
+        Log::info('Après transaction:', [
+            'solde_source_apres' => $caisseSource->solde,
+            'solde_dest_apres' => $caisseDestination->solde
+        ]);
+
+        // Enregistrer les mouvements
+        $mouvementSource = Mouvement::create([
+            'caisse_id' => $caisseSource->id,
+            'type' => 'retrait',
+            'type_mouvement' => 'conversion_devise_sortant',
+            'montant' => $montantSource,
+            'solde_avant' => $ancienSoldeSource,
+            'solde_apres' => $caisseSource->solde,
+            'description' => "Conversion vers {$caisseDestination->devise} - Taux: {$data['taux_change']} - {$data['motif_conversion']}",
+            'nom_deposant' => 'Système Conversion',
+            'devise' => $caisseSource->devise,
+            'operateur_id' => Auth::id(),
+            'numero_compte' => $caisseSource->type_caisse,
+            'client_nom' => 'Conversion devises',
+            'date_mouvement' => now()
+        ]);
+
+        $mouvementDest = Mouvement::create([
+            'caisse_id' => $caisseDestination->id,
+            'type' => 'depot',
+            'type_mouvement' => 'conversion_devise_entrant',
+            'montant' => $montantDestination,
+            'solde_avant' => $ancienSoldeDest,
+            'solde_apres' => $caisseDestination->solde,
+            'description' => "Conversion depuis {$caisseSource->devise} - Taux: {$data['taux_change']} - {$data['motif_conversion']}",
+            'nom_deposant' => 'Système Conversion',
+            'devise' => $caisseDestination->devise,
+            'operateur_id' => Auth::id(),
+            'numero_compte' => $caisseDestination->type_caisse,
+            'client_nom' => 'Conversion devises',
+            'date_mouvement' => now()
+        ]);
+
+        // Générer l'écriture comptable (APPEL CORRIGÉ)
+        self::genererEcritureComptableConversion($mouvementSource, $mouvementDest, $caisseSource, $caisseDestination, $data);
+        
+        Log::info('=== FIN CONVERSION DEVISES - SUCCÈS ===');
+    });
+}
+
+
+    // NOUVELLE MÉTHODE POUR GÉNÉRER L'ÉCRITURE COMPTABLE DE CONVERSION
+private static function genererEcritureComptableConversion($mouvementSource, $mouvementDest, $caisseSource, $caisseDestination, $data)
+{
+    $journal = JournalComptable::where('type_journal', 'caisse')->first();
+    
+    if (!$journal) {
+        throw new \Exception('Journal de caisse non trouvé');
+    }
+
+    $reference = 'CONV-' . now()->format('Ymd-His');
+    $montantSource = $data['montant_source'];
+    $montantDestination = $data['montant_destination_value'];
+    $tauxChange = $data['taux_change']; // Récupéré depuis $data
+
+    // Débit: Compte caisse destination (dans sa devise)
+    EcritureComptable::create([
+        'journal_comptable_id' => $journal->id,
+        'reference_operation' => $reference,
+        'type_operation' => 'conversion_devise',
+        'compte_number' => '571100', // Compte caisse destination
+        'libelle' => "Conversion {$caisseSource->devise}->{$caisseDestination->devise} - Taux: {$tauxChange} - {$data['motif_conversion']}",
+        'montant_debit' => $montantDestination,
+        'montant_credit' => 0,
+        'date_ecriture' => now(),
+        'date_valeur' => now(),
+        'devise' => $caisseDestination->devise,
+        'taux_change' => $tauxChange,
+        'statut' => 'comptabilise',
+        'created_by' => Auth::id(),
+    ]);
+
+    // Crédit: Compte caisse source (dans sa devise)
+    EcritureComptable::create([
+        'journal_comptable_id' => $journal->id,
+        'reference_operation' => $reference,
+        'type_operation' => 'conversion_devise',
+        'compte_number' => '571100', // Compte caisse source
+        'libelle' => "Conversion {$caisseSource->devise}->{$caisseDestination->devise} - Taux: {$tauxChange} - {$data['motif_conversion']}",
+        'montant_debit' => 0,
+        'montant_credit' => $montantSource,
+        'date_ecriture' => now(),
+        'date_valeur' => now(),
+        'devise' => $caisseSource->devise,
+        'taux_change' => $tauxChange,
+        'statut' => 'comptabilise',
+        'created_by' => Auth::id(),
+    ]);
+
+    // Écriture pour les différences de change si nécessaire
+    $difference = abs(($montantSource * $tauxChange) - $montantDestination);
+    if ($difference > 0.01) {
+        EcritureComptable::create([
+            'journal_comptable_id' => $journal->id,
+            'reference_operation' => $reference,
+            'type_operation' => 'difference_change',
+            'compte_number' => '668000', // Compte différences de change
+            'libelle' => "Différence de change conversion {$caisseSource->devise}->{$caisseDestination->devise}",
+            'montant_debit' => $difference,
+            'montant_credit' => 0,
+            'date_ecriture' => now(),
+            'date_valeur' => now(),
+            'devise' => $caisseDestination->devise,
+            'statut' => 'comptabilise',
+            'created_by' => Auth::id(),
+        ]);
+    }
+}
+
 
     private static function notifierComptabilite(array $data)
     {

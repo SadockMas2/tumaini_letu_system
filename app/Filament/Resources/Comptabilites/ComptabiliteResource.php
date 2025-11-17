@@ -61,7 +61,7 @@ protected static ?string $model = EcritureComptable::class;
     {
         /** @var \App\Models\User|null $user */
         $user = Auth::user();
-        return $user && $user->can('create_compte');
+        return $user && $user->can('view_caissecomptable');
     }
 
 }

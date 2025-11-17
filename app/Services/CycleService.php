@@ -41,11 +41,11 @@ class CycleService
         }
         
         // Créditer le compte spécial UNIQUEMENT ici
-        if ($cycle->solde_initial > 0) {
-            Log::info('Début crédit compte spécial', ['montant' => $cycle->solde_initial]);
-            $cycle->crediterCompteSpecial();
-            Log::info('Crédit compte spécial terminé');
-        }
+        // if ($cycle->solde_initial > 0) {
+        //     Log::info('Début crédit compte spécial', ['montant' => $cycle->solde_initial]);
+        //     $cycle->crediterCompteSpecial();
+        //     Log::info('Crédit compte spécial terminé');
+        // }
         
         // ✅ NOUVEAU : Enregistrer l'écriture comptable
         $comptabilityService = app(ComptabilityService::class);

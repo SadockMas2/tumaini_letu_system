@@ -35,11 +35,21 @@ class CompteEpargnesTable
                         'groupe_solidaire' => 'primary',
                     }),
                     
-                TextColumn::make('client.nom_complet')
-                    ->label('Client')
-                    ->visible(fn ($record) => $record && $record->type_compte === 'individuel')
+                    
+                // Colonne unique pour afficher le nom complet selon le type de compte
+                TextColumn::make('nom_complet')
+                    ->label('Titulaire')
+                    ->getStateUsing(function (CompteEpargne $record) {
+                        if ($record->type_compte === 'individuel' && $record->client) {
+                            return $record->client->nom_complet;
+                        } elseif ($record->type_compte === 'groupe_solidaire' && $record->groupeSolidaire) {
+                            return $record->groupeSolidaire->nom_groupe . ' (Groupe)';
+                        }
+                        return 'N/A';
+                    })
                     ->sortable()
                     ->searchable(),
+
                     
                 TextColumn::make('groupeSolidaire.nom_groupe')
                     ->label('Groupe')
@@ -96,7 +106,7 @@ class CompteEpargnesTable
                     ]),
             ])
             ->recordActions([
-                ViewAction::make(),
+                
                 
                 // Action::make('depot')
                 //     ->label('Dépôt')
@@ -161,7 +171,7 @@ class CompteEpargnesTable
             ])
             ->toolbarActions([
                 BulkActionGroup::make([
-                    DeleteBulkAction::make(),
+                    
                 ]),
             ]);
     }

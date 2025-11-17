@@ -6,6 +6,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Auth;
 
 class Caisse extends Model
 {
@@ -47,6 +48,10 @@ class Caisse extends Model
         return $this->belongsTo(Agence::class);
     }
 
+       public function mouvements(): HasMany
+    {
+        return $this->hasMany(Mouvement::class);
+    }
     public function depenses(): HasMany
     {
         return $this->hasMany(Depense::class);
@@ -70,7 +75,7 @@ class Caisse extends Model
             'montant' => $montant,
             'devise' => $this->devise,
             'date_depense' => now(),
-            'created_by' => auth()->id(),
+            'created_by' => Auth::id(),
             'reference' => 'DEP-' . now()->format('YmdHis')
         ]));
     }
@@ -90,4 +95,6 @@ class Caisse extends Model
             default => $this->type_caisse
         };
     }
+
+
 }

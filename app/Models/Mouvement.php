@@ -12,24 +12,26 @@ class Mouvement extends Model
     protected $fillable = [
         'caisse_id',
         'compte_id',
+        'compte_epargne_id',
         'numero_compte',
         'client_nom',
         'nom_deposant',
         'type',
         'montant',
+        'solde_avant',
         'solde_apres',
         'description',
         'operateur_id',
         'type_mouvement',
         'reference',
-         'compte_number',
+        'compte_number',
         'date_mouvement',
         'devise',
-        
     ];
 
     protected $casts = [
         'montant' => 'decimal:2',
+        'solde_avant' => 'decimal:2',
         'solde_apres' => 'decimal:2',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
@@ -45,8 +47,7 @@ class Mouvement extends Model
         return $this->belongsTo(User::class, 'operateur_id');
     }
 
-    
- protected static function boot()
+    protected static function boot()
     {
         parent::boot();
 
@@ -78,12 +79,61 @@ class Mouvement extends Model
             // Remplir automatiquement les informations
             self::remplirInfosAutomatiques($mouvement, $compte);
 
-            // Mettre à jour le solde du compte
-            self::mettreAJourSolde($mouvement, $compte, $montant);
+            // CORRECTION : NE PAS mettre à jour le solde ici pour les types spécifiques
+            // Le solde est déjà mis à jour dans les contrôleurs
+            self::enregistrerMouvementSansDoubleComptage($mouvement, $compte, $montant);
         });
     }
 
-     private static function determinerDevise($mouvement)
+    /**
+     * NOUVELLE MÉTHODE : Enregistrer le mouvement sans double comptage
+     */
+    private static function enregistrerMouvementSansDoubleComptage($mouvement, $compte, $montant)
+    {
+        $soldeActuel = (float) $compte->solde;
+        
+        // Types de mouvements où le solde a DÉJÀ été mis à jour
+        $typesSoldeDejaMisAJour = [
+            'credit_octroye',
+            'credit_octroye_groupe', 
+            'paiement_salaire',
+            'paiement_salaire_charge',
+            'depense_comptabilite',
+            'depense_diverse_comptabilite'
+        ];
+
+        if (in_array($mouvement->type_mouvement, $typesSoldeDejaMisAJour)) {
+            // Pour ces types, utiliser simplement le solde actuel
+            $mouvement->solde_avant = $soldeActuel - ($mouvement->type === 'depot' ? $montant : -$montant);
+            $mouvement->solde_apres = $soldeActuel;
+        } else {
+            // Pour les autres types, appliquer la logique normale
+            self::appliquerMouvementSolde($mouvement, $compte, $montant, $soldeActuel);
+        }
+    }
+
+    /**
+     * Appliquer le mouvement au solde (pour les types normaux)
+     */
+    private static function appliquerMouvementSolde($mouvement, $compte, $montant, $soldeActuel)
+    {
+        $nouveauSolde = $soldeActuel;
+
+        if ($mouvement->type === 'depot') {
+            $nouveauSolde = $soldeActuel + $montant;
+        } elseif ($mouvement->type === 'retrait') {
+            $nouveauSolde = $soldeActuel - $montant;
+        }
+
+        // Mettre à jour le compte seulement pour les types normaux
+        $compte->solde = $nouveauSolde;
+        $compte->save();
+
+        $mouvement->solde_avant = $soldeActuel;
+        $mouvement->solde_apres = $nouveauSolde;
+    }
+
+    private static function determinerDevise($mouvement)
     {
         // Si la devise est déjà définie, la conserver
         if (!empty($mouvement->devise)) {
@@ -120,82 +170,78 @@ class Mouvement extends Model
     /**
      * VALIDATION STRICTE - EMPÊCHER TOUT RETRAIT QUI TOUCHE À LA CAUTION
      */
-// Dans App\Models\Mouvement
+    private static function aCreditsActifs($compteId)
+    {
+        $creditsIndividuelsActifs = Credit::where('compte_id', $compteId)
+            ->where('statut_demande', 'approuve')
+            ->where('montant_total', '>', 0)
+            ->exists();
 
-/**
- * VALIDATION STRICTE - EMPÊCHER TOUT RETRAIT QUI TOUCHE À LA CAUTION
- */
-private static function aCreditsActifs($compteId)
-{
-    $creditsIndividuelsActifs = Credit::where('compte_id', $compteId)
-        ->where('statut_demande', 'approuve')
-        ->where('montant_total', '>', 0)
-        ->exists();
+        $creditsGroupeActifs = CreditGroupe::where('compte_id', $compteId)
+            ->where('statut_demande', 'approuve')
+            ->where('montant_total', '>', 0)
+            ->exists();
 
-    $creditsGroupeActifs = CreditGroupe::where('compte_id', $compteId)
-        ->where('statut_demande', 'approuve')
-        ->where('montant_total', '>', 0)
-        ->exists();
-
-    return $creditsIndividuelsActifs || $creditsGroupeActifs;
-}
-private static function validerRetraitStrict(Compte $compte, $montantRetrait)
-{
-    // Convertir en float
-    $soldeActuel = (float) $compte->solde;
-    $montantRetrait = (float) $montantRetrait;
-
-    // Vérification basique du solde
-    if ($soldeActuel < $montantRetrait) {
-        throw new \Exception('Solde insuffisant pour ce retrait. Solde actuel: ' . number_format($soldeActuel, 2) . ' USD');
+        return $creditsIndividuelsActifs || $creditsGroupeActifs;
     }
 
-    // Vérifier si le compte a des crédits actifs
-  $creditsActifs = self::aCreditsActifs($compte->id);
+    private static function validerRetraitStrict(Compte $compte, $montantRetrait)
+    {
+        // Convertir en float
+        $soldeActuel = (float) $compte->solde;
+        $montantRetrait = (float) $montantRetrait;
 
-    if ($creditsActifs) {
-        // Calculer la caution totale bloquée
-        $cautionTotale = self::getCautionBloquee($compte->id);
-
-        // Calculer le solde disponible (solde total - caution bloquée)
-        $soldeDisponible = self::getSoldeDisponible($compte->id);
-
-        // VALIDATION 1: Empêcher tout retrait qui dépasse le solde disponible
-        if ($montantRetrait > $soldeDisponible) {
-            throw new \Exception(
-                "RETRAIT REFUSÉ ❌\n\n" .
-                "Vous avez des crédits actifs. La caution est bloquée.\n" .
-                "Solde total: " . number_format($soldeActuel, 2) . " USD\n" .
-                "Caution bloquée: " . number_format($cautionTotale, 2) . " USD\n" .
-                "Solde disponible: " . number_format($soldeDisponible, 2) . " USD\n\n" .
-                "Montant maximum autorisé: " . number_format($soldeDisponible, 2) . " USD"
-            );
+        // Vérification basique du solde
+        if ($soldeActuel < $montantRetrait) {
+            throw new \Exception('Solde insuffisant pour ce retrait. Solde actuel: ' . number_format($soldeActuel, 2) . ' USD');
         }
 
-        // VALIDATION 2: Empêcher le retrait si le solde après serait inférieur à la caution
-        $soldeApresRetrait = $soldeActuel - $montantRetrait;
-        if ($soldeApresRetrait < $cautionTotale) {
-            $maxRetrait = $soldeActuel - $cautionTotale;
-            throw new \Exception(
-                "RETRAIT REFUSÉ ❌\n\n" .
-                "Ce retrait toucherait à la caution bloquée.\n" .
-                "Solde après retrait: " . number_format($soldeApresRetrait, 2) . " USD\n" .
-                "Caution à maintenir: " . number_format($cautionTotale, 2) . " USD\n\n" .
-                "Montant maximum autorisé: " . number_format($maxRetrait, 2) . " USD"
-            );
-        }
+        // Vérifier si le compte a des crédits actifs
+        $creditsActifs = self::aCreditsActifs($compte->id);
 
-        // VALIDATION 3: Empêcher le retrait total (laisser au moins 1 USD)
-        if ($soldeApresRetrait <= 1) {
-            throw new \Exception(
-                "RETRAIT REFUSÉ ❌\n\n" .
-                "Vous ne pouvez pas vider complètement le compte.\n" .
-                "Un solde minimum doit être maintenu.\n" .
-                "Montant maximum: " . number_format($soldeActuel - 1, 2) . " USD"
-            );
+        if ($creditsActifs) {
+            // Calculer la caution totale bloquée
+            $cautionTotale = self::getCautionBloquee($compte->id);
+
+            // Calculer le solde disponible (solde total - caution bloquée)
+            $soldeDisponible = self::getSoldeDisponible($compte->id);
+
+            // VALIDATION 1: Empêcher tout retrait qui dépasse le solde disponible
+            if ($montantRetrait > $soldeDisponible) {
+                throw new \Exception(
+                    "RETRAIT REFUSÉ ❌\n\n" .
+                    "Vous avez des crédits actifs. La caution est bloquée.\n" .
+                    "Solde total: " . number_format($soldeActuel, 2) . " USD\n" .
+                    "Caution bloquée: " . number_format($cautionTotale, 2) . " USD\n" .
+                    "Solde disponible: " . number_format($soldeDisponible, 2) . " USD\n\n" .
+                    "Montant maximum autorisé: " . number_format($soldeDisponible, 2) . " USD"
+                );
+            }
+
+            // VALIDATION 2: Empêcher le retrait si le solde après serait inférieur à la caution
+            $soldeApresRetrait = $soldeActuel - $montantRetrait;
+            if ($soldeApresRetrait < $cautionTotale) {
+                $maxRetrait = $soldeActuel - $cautionTotale;
+                throw new \Exception(
+                    "RETRAIT REFUSÉ ❌\n\n" .
+                    "Ce retrait toucherait à la caution bloquée.\n" .
+                    "Solde après retrait: " . number_format($soldeApresRetrait, 2) . " USD\n" .
+                    "Caution à maintenir: " . number_format($cautionTotale, 2) . " USD\n\n" .
+                    "Montant maximum autorisé: " . number_format($maxRetrait, 2) . " USD"
+                );
+            }
+
+            // VALIDATION 3: Empêcher le retrait total (laisser au moins 1 USD)
+            if ($soldeApresRetrait <= 1) {
+                throw new \Exception(
+                    "RETRAIT REFUSÉ ❌\n\n" .
+                    "Vous ne pouvez pas vider complètement le compte.\n" .
+                    "Un solde minimum doit être maintenu.\n" .
+                    "Montant maximum: " . number_format($soldeActuel - 1, 2) . " USD"
+                );
+            }
         }
     }
-}
 
     /**
      * Remplir automatiquement les informations du mouvement
@@ -222,48 +268,6 @@ private static function validerRetraitStrict(Compte $compte, $montantRetrait)
     }
 
     /**
-     * Mettre à jour le solde du compte - VERSION CORRIGÉE
-     */
-/**
- * Mettre à jour le solde du compte - VERSION CORRIGÉE
- */
-private static function mettreAJourSolde($mouvement, $compte, $montant)
-{
-
-    if ($mouvement->type_mouvement === 'credit_octroye' || 
-        $mouvement->type_mouvement === 'credit_octroye_groupe') {
-        // Pour les crédits octroyés, on utilise les valeurs déjà calculées
-        // Le solde a déjà été mis à jour dans CreditController
-        $mouvement->solde_apres = $compte->solde; // Utiliser le solde actuel du compte
-        return;
-    }
-      if ($mouvement->type_mouvement === 'paiement_salaire') {
-        // Pour les paiements de salaire, on utilise les valeurs déjà calculées
-        // Le solde a déjà été mis à jour dans paiementSalaire
-        $mouvement->solde_apres = $compte->solde; // Utiliser le solde actuel du compte
-        return;
-    }
-
-    // Pour les autres types de mouvements, continuer la logique normale
-    $soldeActuel = (float) $compte->solde;
-    $nouveauSolde = $soldeActuel;
-
-    if ($mouvement->type === 'depot') {
-        $nouveauSolde = $soldeActuel + $montant;
-    } elseif ($mouvement->type === 'retrait') {
-        $nouveauSolde = $soldeActuel - $montant;
-    } else {
-        // Pour les autres types de mouvements spécifiques
-        $nouveauSolde = $soldeActuel + $montant;
-    }
-
-    // Mettre à jour le compte
-    $compte->solde = $nouveauSolde;
-    $mouvement->solde_apres = $nouveauSolde;
-    $compte->save();
-}
-
-    /**
      * Méthode pour obtenir le solde disponible (hors caution bloquée)
      */
     public static function getSoldeDisponible($compteId)
@@ -280,21 +284,20 @@ private static function mettreAJourSolde($mouvement, $compte, $montant)
     /**
      * Méthode pour obtenir le montant de la caution bloquée
      */
-public static function getCautionBloquee($compteId)
-{
-    // Vérifier d'abord si la table cautions existe
-    if (!\Illuminate\Support\Facades\Schema::hasTable('cautions')) {
-        return 0;
+    public static function getCautionBloquee($compteId)
+    {
+        // Vérifier d'abord si la table cautions existe
+        if (!\Illuminate\Support\Facades\Schema::hasTable('cautions')) {
+            return 0;
+        }
+
+        $caution = DB::table('cautions')
+            ->where('compte_id', $compteId)
+            ->where('statut', 'bloquee')
+            ->sum('montant');
+
+        return (float) $caution;
     }
-
-    $caution = DB::table('cautions')
-        ->where('compte_id', $compteId)
-        ->where('statut', 'bloquee')
-        ->sum('montant');
-
-    return (float) $caution;
-}
-
 
     /**
      * Débloquer automatiquement les cautions quand le crédit est remboursé
