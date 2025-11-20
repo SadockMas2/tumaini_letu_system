@@ -16,4 +16,5 @@ class ListCoffres extends ListRecords
             CreateAction::make(),
         ];
     }
+
 }

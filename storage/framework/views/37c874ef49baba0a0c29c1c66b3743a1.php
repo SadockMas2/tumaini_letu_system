@@ -163,6 +163,10 @@
         .devise-cdf { font-weight: bold; }
         .mouvement-depot { font-weight: bold; }
         .mouvement-retrait { font-weight: bold; }
+        .delaisage { 
+            font-weight: bold; 
+            color: #d9534f; /* Rouge pour mettre en évidence */
+        }
     </style>
 </head>
 <body>
@@ -176,7 +180,7 @@
             <div>Siège social 005, avenue du port, quartier les volcans - Goma - Rd Congo</div>
             <div>NUM BED : 14453756111</div>
             <div>Tel : +243982618321</div>
-            <div>Email : tumailetu@gmail.com</div>
+            <div>Email : tumainiletu@gmail.com</div>
         </div>
     </div>
 
@@ -194,8 +198,8 @@
     <!-- Titre du rapport -->
     <div class="section">
         <div style="text-align: center; margin-bottom: 15px;">
-            <h2 style="font-size: 16px; font-weight: bold; color: #000;">RAPPORT DE TRÉSORERIE INSTANTANÉ</h2>
-            <p style="font-size: 12px; color: #000;">Synthèse des opérations de caisse - Direction Financière</p>
+            <h2 style="font-size: 16px; font-weight: bold; color: #000;">RAPPORT DE TRÉSORERIE </h2>
+            <p style="font-size: 12px; color: #000;">Synthèse des opérations de caisse </p>
         </div>
     </div>
 
@@ -212,18 +216,49 @@
                 <div class="total-value devise-cdf montant"><?php echo e(number_format($rapport['cdf']['solde_total'], 2)); ?> FC</div>
             </div>
             <div class="total-card">
-                <div class="total-label">DÉPÔTS JOUR</div>
-                <div class="total-value mouvement-depot montant">
-                    <?php echo e(number_format($rapport['usd']['depots'] + $rapport['cdf']['depots'], 2)); ?>
-
+                <div class="total-label">DÉPÔTS USD</div>
+                <div class="total-value mouvement-depot montant devise-usd">
+                    <?php echo e(number_format($rapport['usd']['depots'], 2)); ?> $
                 </div>
             </div>
             <div class="total-card">
-                <div class="total-label">RETRAITS JOUR</div>
-                <div class="total-value mouvement-retrait montant">
-                    <?php echo e(number_format($rapport['usd']['retraits'] + $rapport['cdf']['retraits'], 2)); ?>
-
+                <div class="total-label">RETRAITS USD</div>
+                <div class="total-value mouvement-retrait montant devise-usd">
+                    <?php echo e(number_format($rapport['usd']['retraits'], 2)); ?> $
                 </div>
+            </div>
+            <div class="total-card">
+                <div class="total-label">DÉPÔTS CDF</div>
+                <div class="total-value mouvement-depot montant devise-cdf">
+                    <?php echo e(number_format($rapport['cdf']['depots'], 2)); ?> FC
+                </div>
+            </div>
+            <div class="total-card">
+                <div class="total-label">RETRAITS CDF</div>
+                <div class="total-value mouvement-retrait montant devise-cdf">
+                    <?php echo e(number_format($rapport['cdf']['retraits'], 2)); ?> FC
+                </div>
+            </div>
+            <!-- NOUVEAU : Total des délaistages -->
+            <div class="total-card">
+                <div class="total-label">DÉLAISTAGES USD</div>
+                <div class="total-value delaisage montant">
+                    <?php echo e(number_format($rapport['usd']['delaistages'] ?? 0, 2)); ?> $
+                </div>
+            </div>
+            <div class="total-card">
+                <div class="total-label">DÉLAISTAGES CDF</div>
+                <div class="total-value delaisage montant">
+                    <?php echo e(number_format($rapport['cdf']['delaistages'] ?? 0, 2)); ?> FC
+                </div>
+            </div>
+            <div class="total-card">
+                <div class="total-label">OPÉRATIONS USD</div>
+                <div class="total-value"><?php echo e($rapport['usd']['operations']); ?></div>
+            </div>
+            <div class="total-card">
+                <div class="total-label">OPÉRATIONS CDF</div>
+                <div class="total-value"><?php echo e($rapport['cdf']['operations']); ?></div>
             </div>
         </div>
     </div>

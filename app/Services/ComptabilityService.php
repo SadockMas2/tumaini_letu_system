@@ -8,11 +8,14 @@ use App\Models\Cycle;
 use App\Models\EcritureComptable;
 use App\Models\Epargne;
 use App\Models\JournalComptable;
+use App\Models\Mouvement;
 use App\Models\MouvementCoffre;
 use App\Models\Caisse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+
+use Carbon\Carbon;
 
 class ComptabilityService
 {
@@ -297,7 +300,7 @@ class ComptabilityService
                     Log::info("Écriture créée pour caisse");
 
                     // Enregistrer le mouvement dans la caisse
-                    \App\Models\Mouvement::create([
+                    Mouvement::create([
                         'caisse_id' => $caisse->id,
                         'type' => 'depot',
                         'montant' => $montant,

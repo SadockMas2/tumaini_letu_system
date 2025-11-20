@@ -9,19 +9,39 @@ use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Auth;
 
 class CompteTransitoiresTable
 {
     public static function configure(Table $table): Table
     {
+        /** @var \App\Models\User|null $user */
+        $user = Auth::user();
+        
         return $table
-            ->query(CompteTransitoire::query()) // Afficher tous les comptes transitoires
+            ->query(function () use ($user) {
+                $query = CompteTransitoire::query();
+                
+                // Si l'utilisateur a le rôle super_admin ou ChefBureau, voir tous les comptes
+                if ($user && ($user->hasRole('super_admin') || $user->hasRole('ChefBureau'))) {
+                    return $query;
+                }
+                
+                // Sinon, filtrer pour afficher seulement le compte de l'utilisateur connecté
+                if ($user) {
+                    return $query->where('agent_nom', $user->name);
+                }
+                
+                // Si aucun utilisateur n'est connecté, ne rien afficher
+                return $query->where('id', 0);
+            })
             ->columns([
                 TextColumn::make('user.name')
                     ->label('Agent')
                     ->sortable()
-                    ->searchable(),
+                    ->searchable()
+                    ->visible(fn () => Auth::user()?->hasRole('super_admin') || Auth::user()?->hasRole('ChefBureau')),
                 
                 TextColumn::make('agent_nom')
                     ->label('Nom Agent')
@@ -72,10 +92,17 @@ class CompteTransitoiresTable
                 Action::make('create')
                     ->label('Nouveau Compte Agent')
                     ->icon('heroicon-o-user-plus')
-                    ->url(route('filament.admin.resources.compte-transitoires.create')),
+                    ->url(route('filament.admin.resources.compte-transitoires.create'))
+                    ->visible(fn () => Auth::user()?->hasRole('super_admin') || Auth::user()?->hasRole('ChefBureau')),
             ])
             ->recordActions([
-                EditAction::make(),
+                EditAction::make()
+                    ->visible(fn ($record) => 
+                        Auth::user()?->hasRole('super_admin') || 
+                        Auth::user()?->hasRole('ChefBureau') ||
+                        $record->agent_nom === Auth::user()?->name
+                    ),
+                
                 // Action pour voir les mouvements de l'agent
                 Action::make('voir_mouvements')
                     ->label('Mouvements')
@@ -84,7 +111,8 @@ class CompteTransitoiresTable
             ])
             ->toolbarActions([
                 BulkActionGroup::make([
-                    DeleteBulkAction::make(),
+                    DeleteBulkAction::make()
+                        ->visible(fn () => Auth::user()?->hasRole('super_admin') || Auth::user()?->hasRole('ChefBureau')),
                 ]),
             ]);
     }

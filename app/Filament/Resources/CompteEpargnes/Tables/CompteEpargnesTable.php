@@ -15,6 +15,7 @@ use Filament\Notifications\Notification;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Support\Facades\Auth;
 
 class CompteEpargnesTable
 {
@@ -22,7 +23,7 @@ class CompteEpargnesTable
     {
         return $table
             ->columns([
-            TextColumn::make('numero_compte')
+                TextColumn::make('numero_compte')
                     ->label('Numéro Compte')
                     ->searchable()
                     ->sortable(),
@@ -34,7 +35,6 @@ class CompteEpargnesTable
                         'individuel' => 'success',
                         'groupe_solidaire' => 'primary',
                     }),
-                    
                     
                 // Colonne unique pour afficher le nom complet selon le type de compte
                 TextColumn::make('nom_complet')
@@ -50,7 +50,6 @@ class CompteEpargnesTable
                     ->sortable()
                     ->searchable(),
 
-                    
                 TextColumn::make('groupeSolidaire.nom_groupe')
                     ->label('Groupe')
                     ->visible(fn ($record) => $record && $record->type_compte === 'groupe_solidaire')
@@ -65,11 +64,6 @@ class CompteEpargnesTable
                 TextColumn::make('devise')
                     ->label('Devise')
                     ->sortable(),
-                    
-                // TextColumn::make('taux_interet')
-                //     ->label('Taux %')
-                //     ->suffix('%')
-                //     ->sortable(),
                     
                 TextColumn::make('statut')
                     ->badge()
@@ -106,72 +100,27 @@ class CompteEpargnesTable
                     ]),
             ])
             ->recordActions([
-                
-                
-                // Action::make('depot')
-                //     ->label('Dépôt')
-                //     ->icon('heroicon-o-plus')
-                //     ->color('success')
-                //      ->action(function (CompteEpargne $record, array $data) {
-                //         if ($record->crediter($data['montant'], $data['description'])) {
-                //             // Message de succès
-                //            Notification::make()
-                //                 ->title('Dépôt réussi')
-                //                 ->body("Le montant de {$data['montant']} {$record->devise} a été crédité sur le compte {$record->numero_compte}")
-                //                 ->success()
-                //                 ->send();
-                //         } else {
-                //             // Message d'erreur
-                //            Notification::make()
-                //                 ->title('Erreur de dépôt')
-                //                 ->body('Impossible d\'effectuer le dépôt')
-                //                 ->danger()
-                //                 ->send();
-                //         }
-                //     })
-                //     ->schema([
-                //         TextInput::make('montant')
-                //             ->numeric()
-                //             ->required()
-                //             ->minValue(0.01),
-                //         Textarea::make('description')
-                //             ->label('Description'),
-                //     ]),
-                    
-                // Action::make('retrait')
-                //     ->label('Retrait')
-                //     ->icon('heroicon-o-minus')
-                //     ->color('warning')
-                //     ->action(function (CompteEpargne $record, array $data) {
-                //         if ($record->debiter($data['montant'], $data['description'])) {
-                //             // Message de succès
-                //           Notification::make()
-                //                 ->title('Retrait réussi')
-                //                 ->body("Le montant de {$data['montant']} {$record->devise} a été retiré du compte {$record->numero_compte}")
-                //                 ->success()
-                //                 ->send();
-                //         } else {
-                //             // Message d'erreur
-                //         Notification::make()
-                //                 ->title('Erreur de retrait')
-                //                 ->body('Impossible d\'effectuer le retrait - solde insuffisant ou compte inactif')
-                //                 ->danger()
-                //                 ->send();
-                //         }
-                //     })
-                //     ->schema([
-                //         TextInput::make('montant')
-                //             ->numeric()
-                //             ->required()
-                //             ->minValue(0.01)
-                //              ->maxValue(fn (CompteEpargne $record) => $record->solde),
-                //         Textarea::make('description')
-                //             ->label('Description'),
-                //     ]),
+                // Action pour voir les détails du compte épargne
+                Action::make('voir_details_epargne')
+                    ->label('Détails')
+                    ->icon('heroicon-o-eye')
+                    ->color('info')
+                    ->url(fn ($record) => route('comptes-epargne.details', ['compte_epargne_id' => $record->id]))
+                    ->visible(fn () => Auth::user()?->can('view_comptetransitoire')),
+
+                // // Action pour voir les mouvements du compte épargne
+                // Action::make('voir_mouvements_epargne')
+                //     ->label('Relevé')
+                //     ->icon('heroicon-o-document-text')
+                //     ->color('primary')
+                //     ->url(fn ($record) => route('comptes-epargne.mouvements', ['compte_epargne_id' => $record->id]))
+                //     ->visible(fn () => Auth::user()?->can('view_comptetransitoire')),
+
+         
             ])
             ->toolbarActions([
                 BulkActionGroup::make([
-                    
+               
                 ]),
             ]);
     }

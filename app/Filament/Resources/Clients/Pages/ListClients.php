@@ -16,4 +16,9 @@ class ListClients extends ListRecords
             CreateAction::make(),
         ];
     }
+
+     public function getTitle(): string
+    {
+        return 'Tous les membres';
+    }
 }

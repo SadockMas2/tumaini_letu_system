@@ -110,92 +110,69 @@ class TresorerieService
     /**
      * Générer un rapport instantané (sans sauvegarde en base)
      */
-    public function rapportInstantanee($date = null)
-    {
-        $date = $date ? Carbon::parse($date) : Carbon::now();
+/**
+ * Générer un rapport instantané (sans sauvegarde en base)
+ */
+public function rapportInstantanee($date = null)
+{
+    $date = $date ? Carbon::parse($date) : Carbon::now();
+    
+    // Récupérer uniquement les grandes caisses
+    $grandesCaisses = Caisse::where('type_caisse', 'like', '%grande%')
+        ->with(['mouvements' => function($query) use ($date) {
+            $query->whereDate('created_at', $date)
+                  ->orderBy('created_at', 'asc');
+        }])
+        ->get();
+
+    $rapport = [
+        'date_rapport' => $date->format('d/m/Y'),
+        'date_generation' => Carbon::now()->format('d/m/Y H:i:s'),
+        'logo_base64' => $this->getLogoBase64(),
+        'type' => 'instantanee',
+        'usd' => [
+            'solde_total' => 0,
+            'depots' => 0,
+            'retraits' => 0,
+            'delaistages' => 0, // NOUVEAU: compteur spécifique pour délaistages
+            'operations' => 0,
+            'caisses' => []
+        ],
+        'cdf' => [
+            'solde_total' => 0,
+            'depots' => 0,
+            'retraits' => 0,
+            'delaistages' => 0, // NOUVEAU: compteur spécifique pour délaistages
+            'operations' => 0,
+            'caisses' => []
+        ],
+        'mouvements_detail' => []
+    ];
+
+    foreach ($grandesCaisses as $caisse) {
+        $mouvements = $caisse->mouvements;
         
-        // Récupérer uniquement les grandes caisses
-        $grandesCaisses = Caisse::where('type_caisse', 'like', '%grande%')
-            ->with(['mouvements' => function($query) use ($date) {
-                $query->whereDate('created_at', $date)
-                      ->orderBy('created_at', 'asc');
-            }])
-            ->get();
+        $depots = $mouvements->where('type', 'depot')->sum('montant');
+        $retraits = $mouvements->where('type', 'retrait')->sum('montant');
+        
+        // NOUVEAU: Calcul spécifique des délaistages
+        $delaistages = $mouvements->where('type_mouvement', 'delaisage_comptabilite')->sum('montant');
+        
+        $operations = $mouvements->count();
 
-        $rapport = [
-            'date_rapport' => $date->format('d/m/Y'),
-            'date_generation' => Carbon::now()->format('d/m/Y H:i:s'),
-            'logo_base64' => $this->getLogoBase64(),
-            'type' => 'instantanee',
-            'usd' => [
-                'solde_total' => 0,
-                'depots' => 0,
-                'retraits' => 0,
-                'operations' => 0,
-                'caisses' => []
-            ],
-            'cdf' => [
-                'solde_total' => 0,
-                'depots' => 0,
-                'retraits' => 0,
-                'operations' => 0,
-                'caisses' => []
-            ],
-            'mouvements_detail' => []
-        ];
+        $mouvementsJour = $depots - $retraits;
+        $soldeInitial = $caisse->solde - $mouvementsJour;
 
-        foreach ($grandesCaisses as $caisse) {
-            $mouvements = $caisse->mouvements;
-            
-            $depots = $mouvements->where('type', 'depot')->sum('montant');
-            $retraits = $mouvements->where('type', 'retrait')->sum('montant');
-            $operations = $mouvements->count();
-
-            $mouvementsJour = $depots - $retraits;
-            $soldeInitial = $caisse->solde - $mouvementsJour;
-
-            $caisseData = [
-                'nom' => $caisse->nom,
-                'solde_initial' => $soldeInitial,
-                'solde_final' => $caisse->solde,
-                'depots' => $depots,
-                'retraits' => $retraits,
-                'operations' => $operations,
-                'mouvements' => $mouvements->map(function($mouvement) {
-                    return [
-                        'type' => $mouvement->type,
-                        'type_mouvement' => $mouvement->type_mouvement,
-                        'montant' => $mouvement->montant,
-                        'description' => $mouvement->description,
-                        'nom_deposant' => $mouvement->nom_deposant,
-                        'client_nom' => $mouvement->client_nom,
-                        'operateur' => $mouvement->operateur->name ?? 'N/A',
-                        'heure' => $mouvement->created_at->format('H:i:s'),
-                        'solde_avant' => $mouvement->solde_avant,
-                        'solde_apres' => $mouvement->solde_apres
-                    ];
-                })->values()
-            ];
-
-            if ($caisse->devise === 'USD') {
-                $rapport['usd']['solde_total'] += $caisse->solde;
-                $rapport['usd']['depots'] += $depots;
-                $rapport['usd']['retraits'] += $retraits;
-                $rapport['usd']['operations'] += $operations;
-                $rapport['usd']['caisses'][] = $caisseData;
-            } elseif ($caisse->devise === 'CDF') {
-                $rapport['cdf']['solde_total'] += $caisse->solde;
-                $rapport['cdf']['depots'] += $depots;
-                $rapport['cdf']['retraits'] += $retraits;
-                $rapport['cdf']['operations'] += $operations;
-                $rapport['cdf']['caisses'][] = $caisseData;
-            }
-
-            // Ajouter aux mouvements détaillés
-            foreach ($mouvements as $mouvement) {
-                $rapport['mouvements_detail'][] = [
-                    'caisse' => $caisse->nom,
-                    'devise' => $caisse->devise,
+        $caisseData = [
+            'nom' => $caisse->nom,
+            'solde_initial' => $soldeInitial,
+            'solde_final' => $caisse->solde,
+            'depots' => $depots,
+            'retraits' => $retraits,
+            'delaistages' => $delaistages, // NOUVEAU: inclure les délaistages par caisse
+            'operations' => $operations,
+            'mouvements' => $mouvements->map(function($mouvement) {
+                return [
                     'type' => $mouvement->type,
                     'type_mouvement' => $mouvement->type_mouvement,
                     'montant' => $mouvement->montant,
@@ -207,16 +184,51 @@ class TresorerieService
                     'solde_avant' => $mouvement->solde_avant,
                     'solde_apres' => $mouvement->solde_apres
                 ];
-            }
+            })->values()
+        ];
+
+        if ($caisse->devise === 'USD') {
+            $rapport['usd']['solde_total'] += $caisse->solde;
+            $rapport['usd']['depots'] += $depots;
+            $rapport['usd']['retraits'] += $retraits;
+            $rapport['usd']['delaistages'] += $delaistages; // NOUVEAU: cumul des délaistages USD
+            $rapport['usd']['operations'] += $operations;
+            $rapport['usd']['caisses'][] = $caisseData;
+        } elseif ($caisse->devise === 'CDF') {
+            $rapport['cdf']['solde_total'] += $caisse->solde;
+            $rapport['cdf']['depots'] += $depots;
+            $rapport['cdf']['retraits'] += $retraits;
+            $rapport['cdf']['delaistages'] += $delaistages; // NOUVEAU: cumul des délaistages CDF
+            $rapport['cdf']['operations'] += $operations;
+            $rapport['cdf']['caisses'][] = $caisseData;
         }
 
-        // Trier les mouvements par heure
-        usort($rapport['mouvements_detail'], function($a, $b) {
-            return strtotime($a['heure']) - strtotime($b['heure']);
-        });
-
-        return $rapport;
+        // Ajouter aux mouvements détaillés
+        foreach ($mouvements as $mouvement) {
+            $rapport['mouvements_detail'][] = [
+                'caisse' => $caisse->nom,
+                'devise' => $caisse->devise,
+                'type' => $mouvement->type,
+                'type_mouvement' => $mouvement->type_mouvement,
+                'montant' => $mouvement->montant,
+                'description' => $mouvement->description,
+                'nom_deposant' => $mouvement->nom_deposant,
+                'client_nom' => $mouvement->client_nom,
+                'operateur' => $mouvement->operateur->name ?? 'N/A',
+                'heure' => $mouvement->created_at->format('H:i:s'),
+                'solde_avant' => $mouvement->solde_avant,
+                'solde_apres' => $mouvement->solde_apres
+            ];
+        }
     }
+
+    // Trier les mouvements par heure
+    usort($rapport['mouvements_detail'], function($a, $b) {
+        return strtotime($a['heure']) - strtotime($b['heure']);
+    });
+
+    return $rapport;
+}
 
     /**
      * Générer un rapport pour une période spécifique

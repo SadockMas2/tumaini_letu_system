@@ -37,9 +37,15 @@ class CompteEpargne extends Model
      * Relation avec le client (pour comptes individuels)
      */
     public function client(): BelongsTo
-    {
+    { 
         return $this->belongsTo(Client::class);
     }
+
+  
+        public function mouvements()
+        {
+            return $this->hasMany(Mouvement::class, 'compte_epargne_id');
+        }
 
     /**
      * Relation avec le groupe solidaire (pour comptes de groupe)

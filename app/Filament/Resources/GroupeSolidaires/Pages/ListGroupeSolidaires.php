@@ -24,4 +24,9 @@ class ListGroupeSolidaires extends ListRecords
         $this->dispatchBrowserEvent('notify', ['message' => 'Membre supprimé']);
     }
 
+    public function getTitle(): string
+    {
+        return ' Groupes Solidaires';
+    }
+
 }

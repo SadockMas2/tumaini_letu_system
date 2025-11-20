@@ -90,4 +90,36 @@ public function compteTransitoires()
     {
         return $this->hasMany(\App\Models\Epargne::class);
     }
+
+        
+    public function creditsAgent()
+    {
+        return $this->hasMany(Credit::class, 'agent_id');
+    }
+
+    public function creditsSupervises()
+    {
+        return $this->hasMany(Credit::class, 'superviseur_id');
+    }
+
+    public function creditsGroupesAgent()
+    {
+        return $this->hasMany(CreditGroupe::class, 'agent_id');
+    }
+
+    public function creditsGroupesSupervises()
+    {
+        return $this->hasMany(CreditGroupe::class, 'superviseur_id');
+    }
+
+    // Scope pour les agents de crédit
+    public function scopeAgentsCredit($query)
+    {
+        return $query->where('role', 'agent_credit');
+    }
+
+    public function scopeSuperviseursCredit($query)
+    {
+        return $query->where('role', 'superviseur_credit');
+    }
 }

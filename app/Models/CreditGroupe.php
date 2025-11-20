@@ -15,7 +15,8 @@ class CreditGroupe extends Model
         'compte_id', 'montant_demande', 'montant_accorde', 'montant_total',
         'frais_dossier', 'frais_alerte', 'frais_carnet', 'frais_adhesion',
         'caution_totale', 'remboursement_hebdo_total', 'statut_demande',
-        'date_demande', 'date_octroi', 'date_echeance', 'repartition_membres', 'montants_membres'
+        'date_demande', 'date_octroi', 'date_echeance',     'agent_id', 
+        'superviseur_id', 'repartition_membres', 'montants_membres'
     ];
 
     protected $casts = [
@@ -32,6 +33,15 @@ class CreditGroupe extends Model
     public function creditsIndividuels()
     {
         return $this->hasMany(Credit::class, 'credit_groupe_id');
+    }
+       public function agent()
+    {
+        return $this->belongsTo(User::class, 'agent_id');
+    }
+
+    public function superviseur()
+    {
+        return $this->belongsTo(User::class, 'superviseur_id');
     }
 
     // Récupérer les membres via groupes_membres
@@ -306,4 +316,6 @@ public function creerEcheanciersMembres()
 
             return $membresCredites;
         }
+
+        
 }

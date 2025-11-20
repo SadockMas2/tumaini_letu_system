@@ -2,10 +2,12 @@
 
 use App\Http\Controllers\CompteController;
 use App\Http\Controllers\CreditController;
+use App\Http\Controllers\DashboardCreditController;
 use App\Http\Controllers\EtatTresorerieController;
 use App\Http\Controllers\MouvementController;
 use App\Http\Controllers\PaiementController;
 use App\Http\Controllers\RapportTresorerieController;
+use App\Http\Controllers\CompteEpargneController;
 use App\Services\CycleService;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
@@ -272,11 +274,26 @@ Route::prefix('etats-tresorerie')->group(function () {
     Route::get('/export-pdf', [EtatTresorerieController::class, 'exportPdfEtatSortie']);
 });
 
-// routes/api.php
+
 
 Route::prefix('rapports-tresorerie')->group(function () {
     Route::get('/pdf', [RapportTresorerieController::class, 'genererRapportPDF']);
     Route::get('/apercu-pdf', [RapportTresorerieController::class, 'apercuRapportPDF']);
     Route::get('/synthese', [RapportTresorerieController::class, 'rapportSynthese']);
     Route::get('/donnees', [RapportTresorerieController::class, 'donneesRapport']);
+});
+
+
+// Routes pour les comptes épargne
+Route::get('comptes-epargne/{compte_epargne_id}/details', [CompteEpargneController::class, 'details'])->name('comptes-epargne.details');
+Route::get('comptes-epargne/{compte_epargne_id}/mouvements', [CompteEpargneController::class, 'mouvements'])->name('comptes-epargne.mouvements');
+Route::get('comptes-epargne/{compte_epargne_id}/export-releve', [CompteEpargneController::class, 'exportReleve'])->name('comptes-epargne.export-releve');
+
+
+Route::prefix('credits')->group(function () {
+    Route::get('/tableau-de-bord', [DashboardCreditController::class, 'tableauDeBordComplet'])
+        ->name('credits.dashboard');
+    
+    Route::get('/details/{id}/{type}', [DashboardCreditController::class, 'detailsCredit'])
+        ->name('credits.details');
 });

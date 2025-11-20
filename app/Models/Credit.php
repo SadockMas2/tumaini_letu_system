@@ -11,6 +11,8 @@ class Credit extends Model
 
     protected $fillable = [
         'compte_id',
+         'agent_id', 
+        'superviseur_id', 
         'type_credit',
         'montant_demande',
         'montant_accorde',
@@ -172,6 +174,15 @@ public function historiqueCompteSpecial()
     return $this->hasOne(HistoriqueCompteSpecial::class, 'credit_id');
 }
 
+    public function agent()
+    {
+        return $this->belongsTo(User::class, 'agent_id');
+    }
+
+    public function superviseur()
+    {
+        return $this->belongsTo(User::class, 'superviseur_id');
+    }
 /**
  * Relation avec Mouvement pour les frais
  */

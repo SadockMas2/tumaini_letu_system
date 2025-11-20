@@ -140,4 +140,12 @@ class Epargne extends Model
     {
         return $this->belongsTo(User::class, 'user_id');
     }
+
+
+public function compteEpargne()
+{
+    return $this->belongsTo(CompteEpargne::class);
+}
+
+
 }

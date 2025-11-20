@@ -2,9 +2,11 @@
 
 namespace App\Providers\Filament;
 
+use App\Filament\Widgets\CreditEvolutionChart;
+use App\Filament\Widgets\CreditRepartitionChart;
 use App\Filament\Widgets\DateTimeWidget;
 use App\Filament\Widgets\HeaderThemeSwitcher;
-use Filament\Navigation\MenuItem;
+use App\Filament\Widgets\MicrofinanceStatsOverview;
 use Filament\Actions\Action;
 // use BezhanSalleh\FilamentShield\FilamentShieldPlugin;
 use Filament\Navigation\UserMenuItem; // ✅ IMPORT CORRECT
@@ -38,6 +40,7 @@ class AdminPanelProvider extends PanelProvider
             ->brandName('TUMAINI LETU SYSTEM')
             ->brandLogo(fn () => view('vendor.filament-panels.components.logo'))
             ->login()
+            //   ->domain('admin.tumainiletu.com')
             ->registration()
             ->passwordReset()
             ->colors([
@@ -62,9 +65,8 @@ class AdminPanelProvider extends PanelProvider
             ])
             ->widgets([
                 DateTimeWidget::class,
-                // AccountWidget::class,
-                // FilamentInfoWidget::class,
                 HeaderThemeSwitcher::class,
+              
 ])
             // ✅ APPROCHE SIMPLIFIÉE - SUPPRIMEZ LE USER MENU ITEM POUR L'INSTANT
             ->middleware([
