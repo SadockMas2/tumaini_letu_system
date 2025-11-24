@@ -10,6 +10,16 @@ use Filament\Widgets\StatsOverviewWidget\Stat;
 
 class StatsOverview extends BaseWidget
 {
+
+
+    //     public static function canView(): bool
+    // {
+    //     // Le widget ne sera affiché que dans les pages de rapports
+    //     return request()->routeIs('filament.admin.pages.rapports-microfinance') || 
+    //            request()->routeIs('filament.admin.resources.microfinance-overviews.rapports');
+    // }
+
+    
     protected  ?string $pollingInterval = '10s';
     
     protected function getStats(): array

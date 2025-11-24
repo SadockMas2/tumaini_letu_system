@@ -55,10 +55,12 @@ class CompteEpargneResource extends Resource
         ];
     }
 
-              public static function canViewAny(): bool
+    public static function canViewAny(): bool
     {
         /** @var \App\Models\User|null $user */
         $user = Auth::user();
         return $user && $user->can('view_epargne');
     }
+
+    
 }

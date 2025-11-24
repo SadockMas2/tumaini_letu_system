@@ -161,50 +161,50 @@ unset($__defined_vars, $__key, $__value); ?>
             ->color(LinkComponent::class, $color)); ?>
 
 >
-    <?php if($iconPosition === IconPosition::Before): ?>
-        <?php if($icon): ?>
+    <!--[if BLOCK]><![endif]--><?php if($iconPosition === IconPosition::Before): ?>
+        <!--[if BLOCK]><![endif]--><?php if($icon): ?>
             <?php echo e(\Filament\Support\generate_icon_html($icon, $iconAlias, (new \Illuminate\View\ComponentAttributeBag([
                     'wire:loading.remove.delay.' . config('filament.livewire_loading_delay', 'default') => $hasLoadingIndicator,
                     'wire:target' => $hasLoadingIndicator ? $loadingIndicatorTarget : false,
                 ])), size: $iconSize)); ?>
 
-        <?php endif; ?>
+        <?php endif; ?><!--[if ENDBLOCK]><![endif]-->
 
-        <?php if($hasLoadingIndicator): ?>
+        <!--[if BLOCK]><![endif]--><?php if($hasLoadingIndicator): ?>
             <?php echo e(\Filament\Support\generate_loading_indicator_html((new \Illuminate\View\ComponentAttributeBag([
                     'wire:loading.delay.' . config('filament.livewire_loading_delay', 'default') => '',
                     'wire:target' => $loadingIndicatorTarget,
                 ])), size: $iconSize)); ?>
 
-        <?php endif; ?>
-    <?php endif; ?>
+        <?php endif; ?><!--[if ENDBLOCK]><![endif]-->
+    <?php endif; ?><!--[if ENDBLOCK]><![endif]-->
 
-    <?php if(! $labelSrOnly): ?>
+    <!--[if BLOCK]><![endif]--><?php if(! $labelSrOnly): ?>
         <?php echo e($slot); ?>
 
-    <?php endif; ?>
+    <?php endif; ?><!--[if ENDBLOCK]><![endif]-->
 
-    <?php if($iconPosition === IconPosition::After): ?>
-        <?php if($icon): ?>
+    <!--[if BLOCK]><![endif]--><?php if($iconPosition === IconPosition::After): ?>
+        <!--[if BLOCK]><![endif]--><?php if($icon): ?>
             <?php echo e(\Filament\Support\generate_icon_html($icon, $iconAlias, (new \Illuminate\View\ComponentAttributeBag([
                     'wire:loading.remove.delay.' . config('filament.livewire_loading_delay', 'default') => $hasLoadingIndicator,
                     'wire:target' => $hasLoadingIndicator ? $loadingIndicatorTarget : false,
                 ])), size: $iconSize)); ?>
 
-        <?php endif; ?>
+        <?php endif; ?><!--[if ENDBLOCK]><![endif]-->
 
-        <?php if($hasLoadingIndicator): ?>
+        <!--[if BLOCK]><![endif]--><?php if($hasLoadingIndicator): ?>
             <?php echo e(\Filament\Support\generate_loading_indicator_html((new \Illuminate\View\ComponentAttributeBag([
                     'wire:loading.delay.' . config('filament.livewire_loading_delay', 'default') => '',
                     'wire:target' => $loadingIndicatorTarget,
                 ])), size: $iconSize)); ?>
 
-        <?php endif; ?>
-    <?php endif; ?>
+        <?php endif; ?><!--[if ENDBLOCK]><![endif]-->
+    <?php endif; ?><!--[if ENDBLOCK]><![endif]-->
 
-    <?php if(filled($badge)): ?>
+    <!--[if BLOCK]><![endif]--><?php if(filled($badge)): ?>
         <div class="fi-link-badge-ctn">
-            <?php if($badge instanceof \Illuminate\View\ComponentSlot): ?>
+            <!--[if BLOCK]><![endif]--><?php if($badge instanceof \Illuminate\View\ComponentSlot): ?>
                 <?php echo e($badge); ?>
 
             <?php else: ?>
@@ -218,7 +218,7 @@ unset($__defined_vars, $__key, $__value); ?>
                     <?php echo e($badge); ?>
 
                 </span>
-            <?php endif; ?>
+            <?php endif; ?><!--[if ENDBLOCK]><![endif]-->
         </div>
-    <?php endif; ?>
+    <?php endif; ?><!--[if ENDBLOCK]><![endif]-->
 </<?php echo e($tag); ?>><?php /**PATH D:\APP\TUMAINI LETU\tumainiletusystem2.0\resources\views/vendor/filament/components/link.blade.php ENDPATH**/ ?>

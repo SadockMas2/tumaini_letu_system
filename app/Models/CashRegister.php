@@ -5,6 +5,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Auth;
 
 class CashRegister extends Model
 {
@@ -54,7 +55,7 @@ class CashRegister extends Model
             'reference' => $reference,
             'description' => $description ?? "Alimentation depuis {$source}",
             'date_mouvement' => now(),
-            'operateur_id' => auth()->id()
+            'operateur_id' => Auth::id()
         ]);
     }
 
@@ -76,7 +77,7 @@ class CashRegister extends Model
             'reference' => 'TRANSF-COMPT-' . now()->format('YmdHis'),
             'description' => "Transfert vers comptabilité - {$motif}",
             'date_mouvement' => now(),
-            'operateur_id' => auth()->id()
+            'operateur_id' => Auth::id()
         ]);
     }
 }

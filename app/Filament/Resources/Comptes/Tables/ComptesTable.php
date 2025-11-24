@@ -2,12 +2,14 @@
 
 namespace App\Filament\Resources\Comptes\Tables;
 
+use App\Filament\Exports\CompteExporter;
 use App\Models\User;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
+use Filament\Actions\ExportAction;
 use Filament\Actions\ViewAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
@@ -272,6 +274,13 @@ class ComptesTable
                         return $user && $user->can('create_compte');
                     })
                     ->url(route('filament.admin.resources.comptes.create')),
+
+              
+                ExportAction::make()
+                    ->exporter(CompteExporter::class)
+                    ->label('Exporter')
+                    ->icon('heroicon-o-arrow-down-tray'),
+          
             ])
             ->toolbarActions([
                 BulkActionGroup::make([

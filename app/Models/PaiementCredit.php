@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use App\Enums\TypePaiement;
 
 class PaiementCredit extends Model
 {
@@ -16,12 +17,17 @@ class PaiementCredit extends Model
         'date_paiement',
         'type_paiement',
         'reference',
-        'statut'
+        'statut',
+        'capital_rembourse',
+        'interets_payes'
     ];
 
     protected $casts = [
         'date_paiement' => 'datetime',
         'montant_paye' => 'decimal:2',
+        'capital_rembourse' => 'decimal:2',
+        'interets_payes' => 'decimal:2',
+        'type_paiement' => TypePaiement::class,
     ];
 
     public function credit()

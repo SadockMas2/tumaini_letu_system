@@ -621,7 +621,7 @@ class ManageComptabilite extends ManageRecords
 
                     Action::make('gestion_depenses')
                         ->label('Délaistage Petite Caisse')
-                        ->icon('heroicon-o-arrow-right-circle')
+                        ->icon('heroicon-o-arrow-left-circle')
                         ->color('warning')
                         ->schema([
                             Select::make('devise_delaisage')

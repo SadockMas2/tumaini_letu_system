@@ -2,12 +2,14 @@
 
 namespace App\Filament\Resources\CompteEpargnes\Tables;
 
+use App\Filament\Exports\CompteEpargneExporter;
 use App\Models\CompteEpargne;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
+use Filament\Actions\ExportAction;
 use Filament\Actions\ViewAction;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -99,6 +101,13 @@ class CompteEpargnesTable
                         'suspendu' => 'Suspendu',
                     ]),
             ])
+               ->headerActions([
+                // Action d'export en haut à droite
+                ExportAction::make()
+                    ->exporter(CompteEpargneExporter::class)
+                    ->label('Exporter')
+                    ->icon('heroicon-o-arrow-down-tray'),
+            ])
             ->recordActions([
                 // Action pour voir les détails du compte épargne
                 Action::make('voir_details_epargne')
@@ -120,6 +129,8 @@ class CompteEpargnesTable
             ])
             ->toolbarActions([
                 BulkActionGroup::make([
+                    ExportAction::make()
+                    ->exporter(CompteEpargneExporter::class)
                
                 ]),
             ]);

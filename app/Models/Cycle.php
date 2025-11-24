@@ -52,7 +52,7 @@ class Cycle extends Model
         return $this->belongsTo(User::class, 'user_id');
     }
 
-    protected static function boot(): void
+     protected static function boot(): void
     {
         parent::boot();
 
@@ -63,8 +63,9 @@ class Cycle extends Model
                 $cycle->client_nom = $client ? "{$client->nom} {$client->postnom} {$client->prenom}" : 'Inconnu';
                 $cycle->type_cycle = 'individuel';
 
-                // Déterminer le numéro du cycle automatiquement
+                // ✅ NOUVEAU : Déterminer le numéro du cycle par devise
                 $dernierCycle = self::where('client_id', $cycle->client_id)
+                    ->where('devise', $cycle->devise) // Filtrer par devise
                     ->orderBy('numero_cycle', 'desc')
                     ->first();
                 $cycle->numero_cycle = $dernierCycle ? $dernierCycle->numero_cycle + 1 : 1;
@@ -75,20 +76,18 @@ class Cycle extends Model
                 $cycle->client_nom = $groupe ? $groupe->nom_groupe : 'Groupe Inconnu';
                 $cycle->type_cycle = 'groupe_solidaire';
 
-                // Déterminer le numéro du cycle automatiquement pour le groupe
+                // ✅ NOUVEAU : Déterminer le numéro du cycle par devise
                 $dernierCycle = self::where('groupe_solidaire_id', $cycle->groupe_solidaire_id)
+                    ->where('devise', $cycle->devise) // Filtrer par devise
                     ->orderBy('numero_cycle', 'desc')
                     ->first();
                 $cycle->numero_cycle = $dernierCycle ? $dernierCycle->numero_cycle + 1 : 1;
             }
 
-            // Définir le statut initial
+            // Le reste de votre code existant reste inchangé...
             $cycle->statut = 'ouvert';
-
-            // Si devise ou solde initial non fournis, prendre des valeurs par défaut
             $cycle->devise = $cycle->devise ?: 'CDF';
             $cycle->solde_initial = $cycle->solde_initial ?: 0;
-
             $cycle->nombre_max_epargnes = $cycle->nombre_max_epargnes ?: 30;
             $cycle->nombre_epargnes_actuel = 0;
         });
@@ -102,6 +101,12 @@ class Cycle extends Model
     {
         return $this->statut === 'ouvert' && 
                $this->nombre_epargnes_actuel < $this->nombre_max_epargnes;
+    }
+
+    // Dans votre modèle Cycle, ajoutez cette méthode
+    public function scopeParDevise($query, string $devise)
+    {
+        return $query->where('devise', $devise);
     }
 
     /**

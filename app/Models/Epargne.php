@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use App\Models\Compte;
 use App\Models\CompteTransitoire;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 
 class Epargne extends Model
@@ -58,7 +59,7 @@ class Epargne extends Model
         return $this->belongsTo(Cycle::class, 'cycle_id');
     }
 
-    protected static function boot()
+     protected static function boot()
     {
         parent::boot();
 
@@ -92,16 +93,14 @@ class Epargne extends Model
             // Statut initial
             $epargne->statut = 'en_attente_dispatch';
 
-            // ✅ SUPPRIMER le crédit du compte transitoire
-            // L'agent doit déjà avoir les fonds dans son compte transitoire
-            // avant de pouvoir créer une épargne
-
             Log::info("Création épargne sans crédit compte transitoire", [
                 'epargne_id' => $epargne->id,
                 'agent_id' => $epargne->user_id,
                 'montant' => $epargne->montant,
                 'devise' => $epargne->devise
             ]);
+
+            // ✅ SUPPRIMEZ TOUT CE QUI EST ENTRE LES LIGNES 114-127 ET GARDEZ SEULEMENT CE BLOC :
 
             // Gestion du compte selon le type (individuel ou groupe)
             if ($isGroupe) {
@@ -115,13 +114,20 @@ class Epargne extends Model
                     throw new \Exception('Compte groupe solidaire introuvable');
                 }
             } else {
-                // Pour les clients individuels
+                // ✅ UNIQUEMENT CE BLOC DOIT RESTER
                 $compte = Compte::firstOrCreate(
-                    ['client_id' => $epargne->client_id, 'devise' => $epargne->devise],
+                    [
+                        'client_id' => $epargne->client_id, 
+                        'devise' => $epargne->devise
+                    ],
                     [
                         'solde' => 0, 
-                        'numero_compte' => 'C'.str_pad($epargne->client_id, 6, '0', STR_PAD_LEFT),
-                        'type_compte' => 'individuel'
+                        'numero_compte' => self::genererNumeroCompteParDevise($epargne->devise),
+                        'type_compte' => 'individuel',
+                        'nom' => $client->nom ?? '',
+                        'postnom' => $client->postnom ?? '',
+                        'prenom' => $client->prenom ?? '',
+                        'numero_membre' => $client->numero_membre ?? null
                     ]
                 );
             }
@@ -135,7 +141,6 @@ class Epargne extends Model
             ]);
         });
     }
-
     public function user()
     {
         return $this->belongsTo(User::class, 'user_id');
@@ -146,6 +151,26 @@ public function compteEpargne()
 {
     return $this->belongsTo(CompteEpargne::class);
 }
+
+     private static function genererNumeroCompteParDevise($devise)
+    {
+        // Trouver le dernier numéro de compte TOUT CONFONDU
+        $lastCompte = Compte::where('type_compte', 'individuel')
+            ->orderBy('id', 'desc')
+            ->first();
+
+        $nextNumber = 1;
+        
+        if ($lastCompte) {
+            // Extraire le numéro du dernier compte (ex: "C000167" -> 167)
+            preg_match('/C(\d+)/', $lastCompte->numero_compte, $matches);
+            if (isset($matches[1])) {
+                $nextNumber = (int)$matches[1] + 1;
+            }
+        }
+
+        return 'C' . str_pad($nextNumber, 6, '0', STR_PAD_LEFT);
+    }
 
 
 }

@@ -82,6 +82,28 @@ class CompteEpargne extends Model
         });
     }
 
+    public static function genererNumeroCompteParDevise(string $typeCompte, string $devise): string
+    {
+        $prefix = $typeCompte === 'groupe_solidaire' ? 'CEG' : 'CEM';
+        
+        // Trouver le dernier numéro pour cette devise
+        $lastCompte = self::where('devise', $devise)
+            ->orderBy('id', 'desc')
+            ->first();
+            
+        if ($lastCompte) {
+            // Extraire le numéro du dernier compte (ex: "CEM000167" -> 167)
+            preg_match('/'.$prefix.'(\d+)/', $lastCompte->numero_compte, $matches);
+            $lastNumber = isset($matches[1]) ? (int)$matches[1] : 0;
+            $nextNumber = $lastNumber + 1;
+        } else {
+            $nextNumber = 1;
+        }
+            
+        return $prefix . str_pad($nextNumber, 6, '0', STR_PAD_LEFT);
+    }
+
+
     /**
      * Génère le numéro de compte selon le type
      */

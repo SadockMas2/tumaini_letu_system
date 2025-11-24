@@ -24,7 +24,7 @@ class CompteTransitoiresTable
                 $query = CompteTransitoire::query();
                 
                 // Si l'utilisateur a le rôle super_admin ou ChefBureau, voir tous les comptes
-                if ($user && ($user->hasRole('super_admin') || $user->hasRole('ChefBureau'))) {
+                if ($user && ($user->hasRole('super_admin') || $user && ($user->hasRole('ControleurAuditeur') ||  $user->hasRole('ChefBureau')))) {
                     return $query;
                 }
                 

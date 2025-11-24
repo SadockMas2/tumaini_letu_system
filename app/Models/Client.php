@@ -48,6 +48,21 @@ class Client extends Model
             });
         }
 
+        // Dans votre modèle Client, ajoutez cette méthode
+        public function getCompteParDevise(string $devise)
+        {
+            return Compte::where('client_id', $this->id)
+                ->where('devise', $devise)
+                ->first();
+        }
+
+        public function getCompteEpargneParDevise(string $devise)
+        {
+            return CompteEpargne::where('client_id', $this->id)
+                ->where('devise', $devise)
+                ->first();
+        }
+
         public function groupesSolidaires()
         {
             return $this->belongsToMany(GroupeSolidaire::class, 'groupes_membres', 'client_id', 'groupe_solidaire_id');

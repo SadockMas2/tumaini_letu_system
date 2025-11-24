@@ -2,6 +2,7 @@
 
 namespace App\Filament\Widgets;
 
+use App\Helpers\CurrencyHelper;
 use Filament\Widgets\StatsOverviewWidget as BaseWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
 use App\Models\Credit;
@@ -10,6 +11,15 @@ use App\Models\PaiementCredit;
 
 class RapportStatsWidget extends BaseWidget
 {
+
+        public static function canView(): bool
+    {
+        // Le widget ne sera affiché que dans les pages de rapports
+        return request()->routeIs('filament.admin.pages.rapports-microfinance') || 
+               request()->routeIs('filament.admin.resources.microfinance-overviews.rapports');
+    }
+
+
     protected function getStats(): array
     {
         $creditsIndividuels = Credit::where('statut_demande', 'approuve')->get();
@@ -25,12 +35,12 @@ class RapportStatsWidget extends BaseWidget
 
         return [
             Stat::make('Crédits Individuels', $creditsIndividuels->count())
-                ->description(\App\Helpers\CurrencyHelper::format($creditsIndividuels->sum('montant_accorde')) . ' accordés')
+                ->description(CurrencyHelper::format($creditsIndividuels->sum('montant_accorde')) . ' accordés')
                 ->descriptionIcon('heroicon-m-user')
                 ->color('success'),
 
             Stat::make('Crédits Groupe', $creditsGroupe->count())
-                ->description(\App\Helpers\CurrencyHelper::format($creditsGroupe->sum('montant_accorde')) . ' accordés')
+                ->description(CurrencyHelper::format($creditsGroupe->sum('montant_accorde')) . ' accordés')
                 ->descriptionIcon('heroicon-m-user-group')
                 ->color('primary'),
 
@@ -39,17 +49,17 @@ class RapportStatsWidget extends BaseWidget
                 ->descriptionIcon('heroicon-m-document-currency-dollar')
                 ->color('warning'),
 
-            Stat::make('Portefeuille Capital', \App\Helpers\CurrencyHelper::format($totalMontantAccorde))
+            Stat::make('Portefeuille Capital', CurrencyHelper::format($totalMontantAccorde))
                 ->description('Sans intérêts')
                 ->descriptionIcon('heroicon-m-banknotes')
                 ->color('info'),
 
-            Stat::make('Portefeuille Total', \App\Helpers\CurrencyHelper::format($totalMontantTotal))
+            Stat::make('Portefeuille Total', CurrencyHelper::format($totalMontantTotal))
                 ->description('Capital + intérêts')
                 ->descriptionIcon('heroicon-m-currency-dollar')
                 ->color('primary'),
 
-            Stat::make('Intérêts Attendus', \App\Helpers\CurrencyHelper::format($totalInteretsAttendus))
+            Stat::make('Intérêts Attendus', CurrencyHelper::format($totalInteretsAttendus))
                 ->description('Revenus potentiels')
                 ->descriptionIcon('heroicon-m-chart-bar')
                 ->color('warning'),
@@ -59,7 +69,7 @@ class RapportStatsWidget extends BaseWidget
                 ->descriptionIcon('heroicon-m-check-badge')
                 ->color($tauxRemboursement > 90 ? 'success' : ($tauxRemboursement > 70 ? 'warning' : 'danger')),
 
-            Stat::make('Montant Collecté', \App\Helpers\CurrencyHelper::format($totalPaiements))
+            Stat::make('Montant Collecté', CurrencyHelper::format($totalPaiements))
                 ->description('Total des paiements')
                 ->descriptionIcon('heroicon-m-arrow-trending-up')
                 ->color('success'),

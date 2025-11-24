@@ -40,13 +40,14 @@ class AdminPanelProvider extends PanelProvider
             ->brandName('TUMAINI LETU SYSTEM')
             ->brandLogo(fn () => view('vendor.filament-panels.components.logo'))
             ->login()
-            //   ->domain('admin.tumainiletu.com')
+            ->globalSearchKeyBindings(['command+k', 'ctrl+k'])
+       
             ->registration()
             ->passwordReset()
             ->colors([
                 'primary' => Color::Emerald,
             ])
-            ->globalSearchKeyBindings(['command+k', 'ctrl+k'])
+          
             
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\\Filament\\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\\Filament\\Pages')
