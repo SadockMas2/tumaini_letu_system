@@ -1,16 +1,22 @@
 <?php
 
+use App\Filament\Resources\Clients\Pages\GalerieClients;
 use App\Http\Controllers\CompteController;
 use App\Http\Controllers\CreditController;
 use App\Http\Controllers\DashboardCreditController;
 use App\Http\Controllers\EtatTresorerieController;
+use App\Http\Controllers\GalerieClientsController;
 use App\Http\Controllers\MouvementController;
 use App\Http\Controllers\PaiementController;
+use App\Http\Controllers\PaiementGroupeController;
 use App\Http\Controllers\RapportTresorerieController;
 use App\Http\Controllers\CompteEpargneController;
+use App\Models\Client;
 use App\Services\CycleService;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Request;
 use Illuminate\Support\Facades\DB;
 use App\Models\Mouvement;
 
@@ -297,3 +303,29 @@ Route::prefix('credits')->group(function () {
     Route::get('/details/{id}/{type}', [DashboardCreditController::class, 'detailsCredit'])
         ->name('credits.details');
 });
+
+
+Route::get('/galerie-clients', [GalerieClientsController::class, 'index'])
+    ->name('galerie.clients')
+    ->middleware(['auth']);
+
+Route::get('/galerie-clients/{id}', [GalerieClientsController::class, 'show'])
+    ->name('galerie.clients.show')
+    ->middleware(['auth']);
+
+    // Route pour servir les images des clients
+Route::get('/client-image/{filename}', function ($filename) {
+    $path = storage_path('app/public/clients/' . $filename);
+    
+    if (!file_exists($path)) {
+        abort(404);
+    }
+
+    $file = file_get_contents($path);
+    $type = mime_content_type($path);
+
+    return response($file, 200)->header('Content-Type', $type);
+})->name('client.image')->middleware('auth');
+
+Route::get('/paiement-credits-groupe', [PaiementGroupeController::class, 'index'])->name('paiement.credits.groupe');
+Route::post('/paiement-credits-groupe/processer', [PaiementGroupeController::class, 'processerPaiements'])->name('paiement.credits.groupe.processer');

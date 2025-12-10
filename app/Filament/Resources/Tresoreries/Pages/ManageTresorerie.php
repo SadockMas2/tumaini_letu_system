@@ -85,6 +85,18 @@ Action::make('rapport_instantanee')
     }
 }),
 
+   Action::make('paiement_groupes')
+                    ->label('Paiement Crédits Groupe')
+                    ->color('info')
+                    ->icon('heroicon-m-users')
+                    ->action(function () {
+                        // Éventuellement des logs ou préparation de données
+                        Log::info('Redirection vers la page de paiement groupe');
+                        
+                        // Redirection vers la page dédiée
+                        return redirect()->route('paiement.credits.groupe');
+                    }),
+
 Action::make('rapport_periode')
     ->label('Rapport Période')
     ->icon('heroicon-o-calendar')
@@ -559,6 +571,10 @@ Section::make('Montants à Convertir')
                                 case 'retrait_epargne': // NOUVEAU
                                 self::retraitDepuisCompteEpargne($data);
                                 break;
+
+                                  case 'frais_adhesion': // NOUVEAU
+                                self::prelevementFraisAdhesion($data);
+                                break;
                             }
 
                             // Notifier la comptabilité
@@ -627,6 +643,7 @@ Section::make('Montants à Convertir')
                             'versement_agent' => 'Versement Agent Collecteur',
                             'transfert_caisse' => 'Transfert entre Caisses',
                             'achat_carnet_livre' => 'Achat Carnet et Livres',
+                            'frais_adhesion' => 'Frais d\'Adhésion',
                           
                           
                         ])
@@ -1181,35 +1198,132 @@ Section::make('Montants à Convertir')
                     return $get('type_operation') === 'achat_carnet_livre';
                 }),
 
-            // Section pour les détails de l'opération - MODIFIÉE
-           // Section pour les détails de l'opération - MODIFIÉE
+
+                 Section::make('Frais d\'Adhésion')
+                    ->schema([
+                        TextInput::make('compte_numero_adhesion')
+                            ->label('Numéro de Compte Membre')
+                            ->required(function ($get) {
+                                return $get('type_operation') === 'frais_adhesion';
+                            })
+                            ->live()
+                            ->afterStateUpdated(function ($set, $state) {
+                                if ($state) {
+                                    $compte = Compte::where('numero_compte', $state)->first();
+                                    if ($compte) {
+                                        $nomComplet = self::getNomCompletClient($compte);
+                                        $set('client_nom_complet_adhesion', $nomComplet);
+                                        $set('solde_total_display_adhesion', number_format($compte->solde, 2) . ' ' . $compte->devise);
+                                        $set('solde_disponible_display_adhesion', number_format(Mouvement::getSoldeDisponible($compte->id), 2) . ' ' . $compte->devise);
+                                        $set('devise', $compte->devise);
+                                        $set('compte_id_adhesion', $compte->id);
+                                    } else {
+                                        $set('client_nom_complet_adhesion', 'Compte non trouvé');
+                                        $set('solde_total_display_adhesion', '0.00 USD');
+                                        $set('solde_disponible_display_adhesion', '0.00 USD');
+                                        $set('compte_id_adhesion', null);
+                                    }
+                                }
+                            })
+                            ->placeholder('Saisir le numéro de compte')
+                            ->visible(function ($get) {
+                                return $get('type_operation') === 'frais_adhesion';
+                            }),
+
+                        TextInput::make('client_nom_complet_adhesion')
+                            ->label('Nom du Client')
+                            ->disabled()
+                            ->dehydrated(false)
+                            ->default('')
+                            ->visible(function ($get) {
+                                return $get('type_operation') === 'frais_adhesion' && $get('compte_numero_adhesion');
+                            }),
+
+                        Grid::make(2)
+                            ->schema([
+                                TextInput::make('solde_total_display_adhesion')
+                                    ->label('Solde Total')
+                                    ->disabled()
+                                    ->dehydrated(false)
+                                    ->default('0.00 USD'),
+                                
+                                TextInput::make('solde_disponible_display_adhesion')
+                                    ->label('Solde Disponible')
+                                    ->disabled()
+                                    ->dehydrated(false)
+                                    ->default('0.00 USD'),
+                            ])
+                            ->visible(function ($get) {
+                                return $get('type_operation') === 'frais_adhesion' && $get('compte_numero_adhesion');
+                            }),
+
+                        TextInput::make('montant_frais_adhesion')
+                            ->label('Montant des Frais d\'Adhésion')
+                            ->numeric()
+                            ->required(function ($get) {
+                                return $get('type_operation') === 'frais_adhesion';
+                            })
+                            ->minValue(0.01)
+                            ->step(0.01)
+                            ->default(5.00) // Montant par défaut
+                            ->live()
+                            ->afterStateUpdated(function ($set, $state, $get) {
+                                if ($state) {
+                                    $compteId = $get('compte_id_adhesion');
+                                    if ($compteId) {
+                                        $soldeDisponible = Mouvement::getSoldeDisponible($compteId);
+                                        if ($state > $soldeDisponible) {
+                                            $set('validation_frais_adhesion', 'Solde disponible insuffisant');
+                                        } else {
+                                            $set('validation_frais_adhesion', '');
+                                        }
+                                    }
+                                }
+                            })
+                            ->visible(function ($get) {
+                                return $get('type_operation') === 'frais_adhesion';
+                            }),
+
+                        TextInput::make('validation_frais_adhesion')
+                            ->label('Validation')
+                            ->disabled()
+                            ->dehydrated(false)
+                            ->extraAttributes(['class' => 'text-danger-600 font-medium'])
+                            ->visible(function ($get) {
+                                return $get('type_operation') === 'frais_adhesion' && !empty($get('validation_frais_adhesion'));
+                            }),
+
+                        Hidden::make('compte_id_adhesion'),
+                    ])
+                    ->visible(function ($get) {
+                        return $get('type_operation') === 'frais_adhesion';
+                    }),
+
+           // Section pour les détails de l'opération 
+// Section pour les détails de l'opération - CORRIGÉE
 Section::make('Détails de l\'Opération')
     ->schema([
-        // CHAMP POUR LE NOM DU DÉPOSANT (visible pour dépôt et versement agent)
-        TextInput::make('nom_deposant')
-            ->label('Nom du Déposant')
+
+        // CHAMP POUR LE NOM DU CLIENT (visible pour frais d'adhésion)
+        TextInput::make('nom_client_adhesion')
+            ->label('Nom du Client')
             ->required(function ($get) {
-                return in_array($get('type_operation'), ['depot_compte', 'versement_agent']);
+                return $get('type_operation') === 'frais_adhesion';
             })
-            ->placeholder('Saisir le nom de la personne qui dépose')
+            ->placeholder('Saisir le nom du client')
             ->visible(function ($get) {
-                return in_array($get('type_operation'), ['depot_compte', 'versement_agent']);
+                return $get('type_operation') === 'frais_adhesion';
             }),
 
-        // CHAMP POUR LE NOM DU RETIRANT (visible pour retrait et paiement crédit)
-        TextInput::make('nom_retirant')
-            ->label('Nom du Retirant')
-            ->required(function ($get) {
-                return in_array($get('type_operation'), ['retrait_compte', 'paiement_credit', 'retrait_epargne']);
-            })
-            ->placeholder('Saisir le nom de la personne qui retire')
-            ->visible(function ($get) {
-                return in_array($get('type_operation'), ['retrait_compte', 'paiement_credit','retrait_epargne']);
-            }),
-
+        // CHAMP MONTANT UNIQUE - SUPPRIMER LE DUPLICATA
         TextInput::make('montant')
             ->label(function ($get) {
                 $devise = $get('devise') ?? 'USD';
+                $typeOperation = $get('type_operation');
+                
+                if ($typeOperation === 'frais_adhesion') {
+                    return "Montant des Frais ($devise)";
+                }
                 return "Montant ($devise)";
             })
             ->numeric()
@@ -1223,8 +1337,18 @@ Section::make('Détails de l\'Opération')
 
                         $typeOperation = $get('type_operation');
 
-                  
-                        
+                        // Validation pour frais d'adhésion
+                        if ($typeOperation === 'frais_adhesion') {
+                            $compteId = $get('compte_id_adhesion');
+                            if ($compteId) {
+                                $soldeDisponible = Mouvement::getSoldeDisponible($compteId);
+                                if ($value > $soldeDisponible) {
+                                    $fail("Solde disponible insuffisant. Maximum: " . number_format($soldeDisponible, 2) . " USD");
+                                }
+                            }
+                        }
+
+                        // Validations existantes pour autres opérations
                         if ($typeOperation === 'retrait_compte') {
                             $compteId = $get('compte_id');
                             if ($compteId) {
@@ -1277,6 +1401,41 @@ Section::make('Détails de l\'Opération')
                 }
             ]),
 
+        // CHAMP POUR LE NOM DU DÉPOSANT (visible pour dépôt et versement agent)
+        TextInput::make('nom_deposant')
+            ->label('Nom du Déposant')
+            ->required(function ($get) {
+                return in_array($get('type_operation'), ['depot_compte', 'versement_agent']);
+            })
+            ->placeholder('Saisir le nom de la personne qui dépose')
+            ->visible(function ($get) {
+                return in_array($get('type_operation'), ['depot_compte', 'versement_agent']);
+            }),
+
+        // CHAMP POUR LE NOM DU RETIRANT (caché pour frais d'adhésion)
+        TextInput::make('nom_retirant')
+            ->label('Nom du Retirant')
+            ->required(function ($get) {
+                return in_array($get('type_operation'), ['retrait_compte', 'paiement_credit', 'retrait_epargne', 'frais_adhesion']);
+            })
+            ->placeholder('Saisir le nom de la personne qui retire')
+            ->default('TUMAINI LETU FINANCE') // Valeur par défaut
+            ->visible(function ($get) {
+                $typeOperation = $get('type_operation');
+                // Cacher pour frais d'adhésion, montrer pour les autres
+                return in_array($typeOperation, ['retrait_compte', 'paiement_credit', 'retrait_epargne']) && $typeOperation !== 'frais_adhesion';
+            })
+            ->hidden(function ($get) {
+                return $get('type_operation') === 'frais_adhesion';
+            }),
+
+        // Champ caché pour frais d'adhésion avec valeur fixe
+        Hidden::make('nom_retirant_adhesion')
+            ->default('TUMAINI LETU FINANCE')
+            ->visible(function ($get) {
+                return $get('type_operation') === 'frais_adhesion';
+            }),
+
         Textarea::make('description')
             ->label('Description')
             ->nullable()
@@ -1289,8 +1448,7 @@ Section::make('Détails de l\'Opération')
                     'paiement_credit' => 'Paiement de crédit',
                     'versement_agent' => 'Versement agent collecteur',
                     'transfert_caisse' => 'Transfert entre caisses',
-               
-                 
+                    'frais_adhesion' => 'Frais d\'adhésion - TUMAINI LETU FINANCE',
                     default => 'Description de l\'opération'
                 };
             }),
@@ -2290,6 +2448,100 @@ private static function effectuerConversionDevises(array $data)
 }
 
 
+private static function prelevementFraisAdhesion(array $data)
+{
+    $compte = Compte::find($data['compte_id_adhesion']);
+    
+    if (!$compte) {
+        throw new \Exception('Compte non trouvé');
+    }
+
+    // Validation du solde disponible
+    $soldeDisponible = Mouvement::getSoldeDisponible($compte->id);
+    if ($data['montant'] > $soldeDisponible) {
+        throw new \Exception('Solde disponible insuffisant pour les frais d\'adhésion');
+    }
+
+    DB::transaction(function () use ($data, $compte) {
+        // Débiter le compte membre
+        $ancienSolde = $compte->solde;
+        $compte->solde -= $data['montant'];
+        $compte->save();
+
+        // Enregistrer le mouvement (sans affecter la caisse)
+        $mouvement = Mouvement::create([
+            'compte_id' => $compte->id,
+            'type' => 'retrait',
+            'type_mouvement' => 'frais_adhesion',
+            'montant' => $data['montant'],
+            'solde_avant' => $ancienSolde,
+            'solde_apres' => $compte->solde,
+            'description' => $data['description'] ?? "Frais d'adhésion - TUMAINI LETU FINANCE",
+            'nom_deposant' => 'TUMAINI LETU FINANCE', // Nom fixe
+            'devise' => $data['devise'],
+            'operateur_id' => Auth::id(),
+            'numero_compte' => $compte->numero_compte,
+            'client_nom' => $data['client_nom_complet_adhesion'] ?? self::getNomCompletClient($compte),
+            'date_mouvement' => now()
+        ]);
+
+        // Créditer le compte spécial
+        self::crediterCompteSpecialAdhesion($data['montant'], $data['devise'], $compte, $data);
+
+        // Générer l'écriture comptable
+        self::genererEcritureComptableFraisAdhesion($mouvement, $compte, $data);
+
+        Notification::make()
+            ->title('Frais d\'adhésion prélevés')
+            ->body("Frais d'adhésion de {$data['montant']} {$data['devise']} prélevés du compte {$compte->numero_compte}")
+            ->success()
+            ->send();
+    });
+}
+
+private static function genererEcritureComptableFraisAdhesion($mouvement, $compte, $data)
+{
+    $journal = JournalComptable::where('type_journal', 'caisse')->first();
+    
+    if (!$journal) {
+        throw new \Exception('Journal de caisse non trouvé');
+    }
+
+    $reference = 'FRA-ADH-' . now()->format('Ymd-His');
+
+    // Débit: Compte frais d'adhésion (compte de produits)
+    EcritureComptable::create([
+        'journal_comptable_id' => $journal->id,
+        'reference_operation' => $reference,
+        'type_operation' => 'frais_adhesion',
+        'compte_number' => '701100', // Compte produits - frais d'adhésion
+        'libelle' => "Frais d'adhésion - {$compte->numero_compte} - {$data['description']}",
+        'montant_debit' => $data['montant'],
+        'montant_credit' => 0,
+        'date_ecriture' => now(),
+        'date_valeur' => now(),
+        'devise' => $data['devise'],
+        'statut' => 'comptabilise',
+        'created_by' => Auth::id(),
+    ]);
+
+    // Crédit: Compte du membre
+    EcritureComptable::create([
+        'journal_comptable_id' => $journal->id,
+        'reference_operation' => $reference,
+        'type_operation' => 'frais_adhesion',
+        'compte_number' => '411000', // Compte membres
+        'libelle' => "Frais d'adhésion - {$compte->numero_compte} - {$data['description']}",
+        'montant_debit' => 0,
+        'montant_credit' => $data['montant'],
+        'date_ecriture' => now(),
+        'date_valeur' => now(),
+        'devise' => $data['devise'],
+        'statut' => 'comptabilise',
+        'created_by' => Auth::id(),
+    ]);
+}
+
     // NOUVELLE MÉTHODE POUR GÉNÉRER L'ÉCRITURE COMPTABLE DE CONVERSION
 private static function genererEcritureComptableConversion($mouvementSource, $mouvementDest, $caisseSource, $caisseDestination, $data)
 {
@@ -2358,6 +2610,38 @@ private static function genererEcritureComptableConversion($mouvementSource, $mo
     }
 }
 
+private static function crediterCompteSpecialAdhesion($montant, $devise, $compte, $data)
+{
+    // Trouver ou créer le compte spécial pour les frais d'adhésion
+    $compteSpecial = \App\Models\CompteSpecial::where('nom', 'like', '%adhesion%')
+        ->where('devise', $devise)
+        ->first();
+
+    if (!$compteSpecial) {
+        $compteSpecial = \App\Models\CompteSpecial::create([
+            'nom' => 'Compte Frais d\'Adhésion',
+            'solde' => 0,
+            'devise' => $devise
+        ]);
+    }
+
+    // Créditer le compte spécial
+    $ancienSoldeSpecial = $compteSpecial->solde;
+    $compteSpecial->solde += $montant;
+    $compteSpecial->save();
+
+    // Enregistrer dans l'historique du compte spécial
+    \App\Models\HistoriqueCompteSpecial::create([
+        'client_nom' => $data['nom_client_adhesion'] ?? $data['client_nom_complet_adhesion'] ?? self::getNomCompletClient($compte),
+        'montant' => $montant,
+        'devise' => $devise,
+        'description' => $data['description'] ?? "Frais d'adhésion - Compte: {$compte->numero_compte} - TUMAINI LETU FINANCE",
+        'created_at' => now(),
+        'updated_at' => now()
+    ]);
+
+    return $compteSpecial;
+}
 
     private static function notifierComptabilite(array $data)
     {

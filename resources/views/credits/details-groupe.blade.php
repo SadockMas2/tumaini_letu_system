@@ -172,11 +172,22 @@
                         État du Remboursement
                     </h3>
                     
-                    @php
-                        $montantDejaRembourse = $credit->montant_accorde - $credit->montant_total;
-                        $progress = ($montantDejaRembourse / $credit->montant_accorde) * 100;
-                        $progress = max(0, min(100, $progress));
-                    @endphp
+                   @php
+    // Calculer le montant déjà remboursé à partir des paiements réels
+    $totalPaiementsGroupe = \App\Models\PaiementCredit::where('credit_groupe_id', $credit->id)
+        ->where('type_paiement', \App\Enums\TypePaiement::GROUPE->value)
+        ->sum('montant_paye');
+    
+    $montantDejaRembourse = $totalPaiementsGroupe;
+    
+    // Calculer la progression basée sur les paiements réels
+    $progress = ($credit->montant_accorde > 0) ? 
+        ($montantDejaRembourse / $credit->montant_accorde) * 100 : 0;
+    $progress = max(0, min(100, $progress));
+    
+    // Calculer le reste à payer
+    $resteAPayer = max(0, $credit->montant_total - $montantDejaRembourse);
+@endphp
                     
                     <div class="mb-4">
                         <div class="flex justify-between text-sm text-gray-600 mb-2">
@@ -197,8 +208,8 @@
                         </div>
                         <div class="bg-white rounded-lg p-3 border border-gray-200">
                             <p class="text-sm text-gray-600">Reste à Payer</p>
-                            <p class="text-lg font-bold text-orange-600">
-                                {{ number_format($credit->montant_total, 2, ',', ' ') }} {{ $credit->compte->devise }}
+                           <p class="text-lg font-bold text-orange-600">
+                                {{ number_format($resteAPayer, 2, ',', ' ') }} {{ $credit->compte->devise }}
                             </p>
                         </div>
                     </div>
@@ -238,45 +249,82 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                @foreach($credit->repartition_membres as $membreId => $details)
-                                    @php
-                                        $compteMembre = \App\Models\Compte::where('client_id', $membreId)->first();
-                                        $creditMembre = \App\Models\Credit::where('credit_groupe_id', $credit->id)
-                                            ->where('compte_id', $compteMembre->id ?? null)
-                                            ->first();
-                                    @endphp
-                                    @if($compteMembre)
-                                        <tr class="border-b border-green-100 hover:bg-green-50 transition-colors">
-                                            <td class="px-4 py-3">
-                                                <div class="font-medium text-gray-800">{{ $compteMembre->nom }} {{ $compteMembre->prenom }}</div>
-                                                <div class="text-xs text-gray-500">{{ $compteMembre->numero_compte }}</div>
-                                            </td>
-                                            <td class="px-4 py-3 text-right font-semibold text-green-600">
-                                                {{ number_format($details['montant_accorde'], 2, ',', ' ') }} {{ $credit->compte->devise }}
-                                            </td>
-                                            <td class="px-4 py-3 text-right text-gray-600">
-                                                {{ number_format($details['remboursement_hebdo'], 2, ',', ' ') }} {{ $credit->compte->devise }}
-                                            </td>
-                                            <td class="px-4 py-3 text-right text-orange-600">
-                                                {{ number_format($details['caution'], 2, ',', ' ') }} {{ $credit->compte->devise }}
-                                            </td>
-                                            <td class="px-4 py-3 text-right font-semibold text-purple-600">
-                                                {{ number_format($details['montant_total'], 2, ',', ' ') }} {{ $credit->compte->devise }}
-                                            </td>
-                                            <td class="px-4 py-3 text-center">
-                                                @if($creditMembre && $creditMembre->montant_total > 0)
-                                                    <span class="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-800">
-                                                        En cours
-                                                    </span>
-                                                @else
-                                                    <span class="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">
-                                                        Remboursé
-                                                    </span>
-                                                @endif
-                                            </td>
-                                        </tr>
-                                    @endif
-                                @endforeach
+                            @foreach($credit->repartition_membres as $membreId => $details)
+    @php
+        $compteMembre = \App\Models\Compte::where('client_id', $membreId)->first();
+        
+        // Calculer les paiements de ce membre pour ce crédit groupe
+        $montantPayeParMembre = 0;
+        if ($compteMembre) {
+            $montantPayeParMembre = \App\Models\PaiementCredit::where('compte_id', $compteMembre->id)
+                ->where('credit_groupe_id', $credit->id)
+                ->sum('montant_paye');
+        }
+        
+        // CORRECTION : Utiliser les bonnes valeurs
+        $montantAccordeMembre = $details['montant_accorde'] ?? 0;
+        $montantTotalDuMembre = $details['montant_total'] ?? 0;
+        $remboursementHebdoMembre = $details['remboursement_hebdo'] ?? 0;
+        $cautionMembre = $details['caution'] ?? 0;
+        
+        // Calculer la progression
+        $montantRestantMembre = max(0, $montantTotalDuMembre - $montantPayeParMembre);
+        $progressionMembre = ($montantTotalDuMembre > 0) 
+            ? ($montantPayeParMembre / $montantTotalDuMembre) * 100 
+            : 0;
+        $progressionMembre = min(100, max(0, $progressionMembre));
+        
+        // Debug info
+        // dd([
+        //     'membre' => $membreId,
+        //     'montant_paye' => $montantPayeParMembre,
+        //     'montant_total' => $montantTotalDuMembre,
+        //     'progression' => $progressionMembre
+        // ]);
+    @endphp
+    
+    @if($compteMembre)
+        <tr class="border-b border-green-100 hover:bg-green-50 transition-colors">
+            <td class="px-4 py-3">
+                <div class="font-medium text-gray-800">{{ $compteMembre->nom }} {{ $compteMembre->prenom }}</div>
+                <div class="text-xs text-gray-500">{{ $compteMembre->numero_compte }}</div>
+            </td>
+            <td class="px-4 py-3 text-right">
+                {{ number_format($montantAccordeMembre, 2, ',', ' ') }} {{ $credit->compte->devise }}
+            </td>
+            <td class="px-4 py-3 text-right">
+                {{ number_format($remboursementHebdoMembre, 2, ',', ' ') }} {{ $credit->compte->devise }}
+            </td>
+            <td class="px-4 py-3 text-right">
+                {{ number_format($cautionMembre, 2, ',', ' ') }} {{ $credit->compte->devise }}
+            </td>
+            <td class="px-4 py-3 text-right">
+                {{ number_format($montantTotalDuMembre, 2, ',', ' ') }} {{ $credit->compte->devise }}
+                <div class="w-full bg-gray-200 rounded-full h-2 mt-1">
+                    <div class="bg-green-500 h-2 rounded-full" style="width: {{ $progressionMembre }}%"></div>
+                </div>
+                <div class="text-xs text-gray-500 mt-1">
+                    {{ number_format($progressionMembre, 1) }}% (Payé: {{ number_format($montantPayeParMembre, 2, ',', ' ') }})
+                </div>
+            </td>
+            <td class="px-4 py-3 text-center">
+                @if($montantRestantMembre <= 0)
+                    <span class="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">
+                        <i class="fas fa-check mr-1"></i> Payé
+                    </span>
+                @elseif($montantPayeParMembre > 0)
+                    <span class="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800">
+                        <i class="fas fa-clock mr-1"></i> Partiel
+                    </span>
+                @else
+                    <span class="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-800">
+                        <i class="fas fa-clock mr-1"></i> En attente
+                    </span>
+                @endif
+            </td>
+        </tr>
+    @endif
+@endforeach
                             </tbody>
                             <tfoot>
                                 <tr class="bg-green-100">

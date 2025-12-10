@@ -41,6 +41,8 @@ public function credit()
         return $this->belongsTo(Cycle::class);
     }
 
+    
+
     protected static function booted()
     {
         static::creating(function ($model) {

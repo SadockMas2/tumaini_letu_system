@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Filament\Schemas\Schema;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use App\Enums\TypePaiement;
@@ -12,6 +13,7 @@ class PaiementCredit extends Model
 
     protected $fillable = [
         'credit_id',
+        'credit_groupe_id', 
         'compte_id',
         'montant_paye',
         'date_paiement',
@@ -35,6 +37,17 @@ class PaiementCredit extends Model
         return $this->belongsTo(Credit::class);
     }
 
+    // AJOUT: Relation avec CreditGroupe
+    public function creditGroupe()
+{
+    // Si la colonne existe
+    if (Schema::hasColumn('paiement_credits', 'credit_groupe_id')) {
+        return $this->belongsTo(CreditGroupe::class, 'credit_groupe_id');
+    }
+    
+    // Sinon utiliser compte_id
+    return $this->belongsTo(CreditGroupe::class, 'compte_id', 'compte_id');
+}
     public function compte()
     {
         return $this->belongsTo(Compte::class);
@@ -44,4 +57,5 @@ class PaiementCredit extends Model
     {
         return $this->hasOne(Mouvement::class, 'reference', 'reference');
     }
+    
 }

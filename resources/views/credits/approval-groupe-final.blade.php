@@ -327,6 +327,77 @@
                     </div>
                 </div>
 
+                           <!-- Section : Personnel en charge -->
+<div class="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-200 mb-6">
+    <label class="block text-lg font-semibold text-gray-700 mb-4">
+        <i class="fas fa-user-tie mr-2 text-blue-500"></i>
+        Personnel en charge du crédit groupe
+    </label>
+    
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- Agent -->
+        <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">
+                Agent en charge du groupe *
+            </label>
+            <select 
+                name="agent_id" 
+                class="block w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                required
+            >
+                <option value="">Sélectionner un agent...</option>
+                @foreach($agents as $agent)
+                    <option value="{{ $agent->id }}" 
+                        @if(old('agent_id', $credit->agent_id) == $agent->id) selected @endif>
+                        {{ $agent->name }} - {{ $agent->email }}
+                    </option>
+                @endforeach
+            </select>
+            <p class="mt-1 text-xs text-gray-500">
+                Agent responsable du suivi du groupe
+            </p>
+        </div>
+        
+        <!-- Superviseur -->
+        <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">
+                Superviseur en charge *
+            </label>
+            <select 
+                name="superviseur_id" 
+                class="block w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                required
+            >
+                <option value="">Sélectionner un superviseur...</option>
+                @foreach($superviseurs as $superviseur)
+                    <option value="{{ $superviseur->id }}"
+                        @if(old('superviseur_id', $credit->superviseur_id) == $superviseur->id) selected @endif>
+                        {{ $superviseur->name }} - {{ $superviseur->email }}
+                    </option>
+                @endforeach
+            </select>
+            <p class="mt-1 text-xs text-gray-500">
+                Superviseur responsable du dossier groupe
+            </p>
+        </div>
+    </div>
+    
+    <!-- Information pour le groupe -->
+    <div class="mt-4 bg-blue-100 border border-blue-200 rounded-lg p-3">
+        <div class="flex items-center">
+            <i class="fas fa-users text-blue-500 mr-2"></i>
+            <div class="text-sm text-blue-800">
+                <p class="font-semibold">Note pour le crédit groupe :</p>
+                <p class="mt-1">L'agent sera responsable du suivi des réunions hebdomadaires du groupe. 
+                Le superviseur supervisera l'ensemble du dossier et les rapports de remboursement.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
+
                 <!-- Boutons d'action -->
                 <div class="flex flex-col sm:flex-row gap-4 mt-8">
                     <button 
@@ -383,6 +454,7 @@
                 </div>
             </form>
 
+ 
             <!-- Action Buttons -->
             <div class="flex flex-col sm:flex-row gap-4 mt-8 pt-6 border-t border-gray-200">
                 <a 
@@ -682,5 +754,182 @@
         calculerTotaux();
     });
 </script>
+
+<script>
+// Validation améliorée pour la sélection du personnel
+function validatePersonnelSelection() {
+    const agentSelect = document.querySelector('select[name="agent_id"]');
+    const superviseurSelect = document.querySelector('select[name="superviseur_id"]');
+    
+    if (!agentSelect.value) {
+        alert('❌ Veuillez sélectionner un agent en charge.');
+        agentSelect.focus();
+        return false;
+    }
+    
+    if (!superviseurSelect.value) {
+        alert('❌ Veuillez sélectionner un superviseur en charge.');
+        superviseurSelect.focus();
+        return false;
+    }
+    
+    // Empêcher la même personne d'être agent et superviseur
+    if (agentSelect.value === superviseurSelect.value) {
+        alert('❌ Une même personne ne peut pas être à la fois agent et superviseur.');
+        return false;
+    }
+    
+    return true;
+}
+
+// Modifiez la fonction de validation existante pour inclure cette validation
+function validateApproval() {
+    // Validation du montant
+    const montantAccorde = document.getElementById('montant_accorde').value;
+    if (!montantAccorde || parseFloat(montantAccorde) <= 0) {
+        alert('❌ Veuillez saisir un montant valide à accorder.');
+        return false;
+    }
+    
+    // Validation du personnel
+    if (!validatePersonnelSelection()) {
+        return false;
+    }
+    
+    // Confirmation finale
+    const agentName = document.querySelector('select[name="agent_id"] option:checked').text;
+    const superviseurName = document.querySelector('select[name="superviseur_id"] option:checked').text;
+    
+    const confirmationMessage = `
+Êtes-vous sûr de vouloir approuver ce crédit ?
+
+📊 Détails :
+• Montant : ${parseFloat(montantAccorde).toFixed(2)} ${devise}
+• Agent en charge : ${agentName.split(' - ')[0]}
+• Superviseur : ${superviseurName.split(' - ')[0]}
+
+⚠️ Cette action est irréversible.
+    `.trim();
+    
+    return confirm(confirmationMessage);
+}
+
+// Pour le crédit groupe
+function validateApprovalGroupe() {
+    // ... validation existante du montant et de la répartition ...
+    
+    // Ajouter la validation du personnel
+    if (!validatePersonnelSelection()) {
+        return false;
+    }
+    
+    // Récupérer les noms
+    const agentName = document.querySelector('select[name="agent_id"] option:checked').text;
+    const superviseurName = document.querySelector('select[name="superviseur_id"] option:checked').text;
+    
+    // Ajouter au message de confirmation
+    const messageConfirmation += 
+        `\n👤 Personnel en charge :` +
+        `\n• Agent : ${agentName.split(' - ')[0]}` +
+        `\n• Superviseur : ${superviseurName.split(' - ')[0]}`;
+    
+    return confirm(messageConfirmation);
+}
+
+// Ajoutez ces écouteurs d'événements
+document.addEventListener('DOMContentLoaded', function() {
+    // Écouter la soumission du formulaire
+    const form = document.getElementById('approval-form');
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            // Vérifier si c'est un bouton d'approbation qui a déclenché la soumission
+            const submitter = e.submitter;
+            if (submitter && submitter.value === 'approuver') {
+                // Empêcher la soumission si validation échoue
+                if (!validateApproval()) {
+                    e.preventDefault();
+                }
+            }
+        });
+    }
+});
+</script>
+
+<style>
+/* Style pour les sélecteurs Agent/Superviseur */
+.personnel-select {
+    transition: all 0.3s ease;
+    background: white;
+    border: 2px solid #e2e8f0;
+}
+
+.personnel-select:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    outline: none;
+}
+
+.personnel-select:hover {
+    border-color: #93c5fd;
+}
+
+/* Style pour les options */
+.personnel-select option {
+    padding: 10px;
+    background: white;
+}
+
+.personnel-select option:checked {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    font-weight: bold;
+}
+
+/* Carte de personnel */
+.personnel-card {
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+    border-left: 4px solid #3b82f6;
+    transition: all 0.3s ease;
+}
+
+.personnel-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+}
+
+/* Badge pour le rôle */
+.role-badge {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    margin-left: 8px;
+}
+
+.role-agent {
+    background: #dbeafe;
+    color: #1e40af;
+    border: 1px solid #93c5fd;
+}
+
+.role-superviseur {
+    background: #fef3c7;
+    color: #92400e;
+    border: 1px solid #fbbf24;
+}
+
+/* Animation pour la sélection */
+@keyframes pulse-select {
+    0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4); }
+    70% { box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+}
+
+.select-animate {
+    animation: pulse-select 1.5s infinite;
+}
+</style>
 </body>
 </html>

@@ -335,36 +335,102 @@
             @if($credit->statut_demande === 'en_attente')
             <form action="{{ route('credits.process-approval', $credit->id) }}" method="POST" class="space-y-6" id="approval-form">
                 @csrf
-                
-                <!-- Montant Accordé -->
-                <div class="bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl p-6 border border-gray-200">
-                    <label class="block text-lg font-semibold text-gray-700 mb-4">
-                        <i class="fas fa-edit mr-2 text-indigo-500"></i>
-                        Montant à Accorder
-                    </label>
-                    
-                    <div class="relative">
-                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <span class="text-gray-500 font-medium">{{ $credit->compte->devise }}</span>
-                        </div>
-                        <input 
-                            type="number" 
-                            name="montant_accorde" 
-                            step="0.01"
-                            min="0.01"
-                            value="{{ $credit->montant_demande }}"
-                            class="block w-full pl-16 pr-4 py-4 text-lg border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
-                            placeholder="0.00"
-                            required
-                            id="montant_accorde"
-                        >
-                    </div>
-                    
-                    <div class="mt-3 text-sm text-gray-500">
-                        <i class="fas fa-info-circle mr-1 text-blue-500"></i>
-                        Vous pouvez modifier le montant à accorder
-                    </div>
-                </div>
+
+              <!-- NOUVELLE SECTION : Sélection Agent et Superviseur -->
+    <div class="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-200">
+        <label class="block text-lg font-semibold text-gray-700 mb-4">
+            <i class="fas fa-user-tie mr-2 text-blue-500"></i>
+            Personnel en charge du crédit
+        </label>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- Agent -->
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">
+                    Agent en charge *
+                </label>
+                <select 
+                    name="agent_id" 
+                    class="block w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                    required
+                >
+                    <option value="">Sélectionner un agent...</option>
+                    @foreach($agents as $agent)
+                        <option value="{{ $agent->id }}" 
+                            @if(old('agent_id') == $agent->id || $credit->agent_id == $agent->id) selected @endif>
+                            {{ $agent->name }} - {{ $agent->email }}
+                        </option>
+                    @endforeach
+                </select>
+                <p class="mt-1 text-xs text-gray-500">
+                    Agent qui suivra ce crédit
+                </p>
+            </div>
+            
+            <!-- Superviseur -->
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">
+                    Superviseur en charge *
+                </label>
+                <select 
+                    name="superviseur_id" 
+                    class="block w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                    required
+                >
+                    <option value="">Sélectionner un superviseur...</option>
+                    @foreach($superviseurs as $superviseur)
+                        <option value="{{ $superviseur->id }}"
+                            @if(old('superviseur_id') == $superviseur->id || $credit->superviseur_id == $superviseur->id) selected @endif>
+                            {{ $superviseur->name }} - {{ $superviseur->email }}
+                        </option>
+                    @endforeach
+                </select>
+                <p class="mt-1 text-xs text-gray-500">
+                    Superviseur responsable du suivi
+                </p>
+            </div>
+        </div>
+        
+        <!-- Information supplémentaire -->
+        <div class="mt-4 bg-blue-100 border border-blue-200 rounded-lg p-3">
+            <div class="flex items-center">
+                <i class="fas fa-info-circle text-blue-500 mr-2"></i>
+                <p class="text-sm text-blue-800">
+                    L'agent sera responsable du suivi hebdomadaire. Le superviseur supervisera l'ensemble du dossier.
+                </p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Montant Accordé (section existante) -->
+    <div class="bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl p-6 border border-gray-200">
+        <label class="block text-lg font-semibold text-gray-700 mb-4">
+            <i class="fas fa-edit mr-2 text-indigo-500"></i>
+            Montant à Accorder
+        </label>
+        
+        <div class="relative">
+            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <span class="text-gray-500 font-medium">{{ $credit->compte->devise }}</span>
+            </div>
+            <input 
+                type="number" 
+                name="montant_accorde" 
+                step="0.01"
+                min="0.01"
+                value="{{ $credit->montant_demande }}"
+                class="block w-full pl-16 pr-4 py-4 text-lg border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
+                placeholder="0.00"
+                required
+                id="montant_accorde"
+            >
+        </div>
+        
+        <div class="mt-3 text-sm text-gray-500">
+            <i class="fas fa-info-circle mr-1 text-blue-500"></i>
+            Vous pouvez modifier le montant à accorder
+        </div>
+    </div>
 
                 <!-- Actions -->
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -623,5 +689,182 @@ console.log('=== FIN DÉBOGAGE ===');
 
 
 </script>
+
+<script>
+// Validation améliorée pour la sélection du personnel
+function validatePersonnelSelection() {
+    const agentSelect = document.querySelector('select[name="agent_id"]');
+    const superviseurSelect = document.querySelector('select[name="superviseur_id"]');
+    
+    if (!agentSelect.value) {
+        alert('❌ Veuillez sélectionner un agent en charge.');
+        agentSelect.focus();
+        return false;
+    }
+    
+    if (!superviseurSelect.value) {
+        alert('❌ Veuillez sélectionner un superviseur en charge.');
+        superviseurSelect.focus();
+        return false;
+    }
+    
+    // Empêcher la même personne d'être agent et superviseur
+    if (agentSelect.value === superviseurSelect.value) {
+        alert('❌ Une même personne ne peut pas être à la fois agent et superviseur.');
+        return false;
+    }
+    
+    return true;
+}
+
+// Modifiez la fonction de validation existante pour inclure cette validation
+function validateApproval() {
+    // Validation du montant
+    const montantAccorde = document.getElementById('montant_accorde').value;
+    if (!montantAccorde || parseFloat(montantAccorde) <= 0) {
+        alert('❌ Veuillez saisir un montant valide à accorder.');
+        return false;
+    }
+    
+    // Validation du personnel
+    if (!validatePersonnelSelection()) {
+        return false;
+    }
+    
+    // Confirmation finale
+    const agentName = document.querySelector('select[name="agent_id"] option:checked').text;
+    const superviseurName = document.querySelector('select[name="superviseur_id"] option:checked').text;
+    
+    const confirmationMessage = `
+Êtes-vous sûr de vouloir approuver ce crédit ?
+
+📊 Détails :
+• Montant : ${parseFloat(montantAccorde).toFixed(2)} ${devise}
+• Agent en charge : ${agentName.split(' - ')[0]}
+• Superviseur : ${superviseurName.split(' - ')[0]}
+
+⚠️ Cette action est irréversible.
+    `.trim();
+    
+    return confirm(confirmationMessage);
+}
+
+// Pour le crédit groupe
+function validateApprovalGroupe() {
+    // ... validation existante du montant et de la répartition ...
+    
+    // Ajouter la validation du personnel
+    if (!validatePersonnelSelection()) {
+        return false;
+    }
+    
+    // Récupérer les noms
+    const agentName = document.querySelector('select[name="agent_id"] option:checked').text;
+    const superviseurName = document.querySelector('select[name="superviseur_id"] option:checked').text;
+    
+    // Ajouter au message de confirmation
+    const messageConfirmation += 
+        `\n👤 Personnel en charge :` +
+        `\n• Agent : ${agentName.split(' - ')[0]}` +
+        `\n• Superviseur : ${superviseurName.split(' - ')[0]}`;
+    
+    return confirm(messageConfirmation);
+}
+
+// Ajoutez ces écouteurs d'événements
+document.addEventListener('DOMContentLoaded', function() {
+    // Écouter la soumission du formulaire
+    const form = document.getElementById('approval-form');
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            // Vérifier si c'est un bouton d'approbation qui a déclenché la soumission
+            const submitter = e.submitter;
+            if (submitter && submitter.value === 'approuver') {
+                // Empêcher la soumission si validation échoue
+                if (!validateApproval()) {
+                    e.preventDefault();
+                }
+            }
+        });
+    }
+});
+</script>
+
+<style>
+/* Style pour les sélecteurs Agent/Superviseur */
+.personnel-select {
+    transition: all 0.3s ease;
+    background: white;
+    border: 2px solid #e2e8f0;
+}
+
+.personnel-select:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    outline: none;
+}
+
+.personnel-select:hover {
+    border-color: #93c5fd;
+}
+
+/* Style pour les options */
+.personnel-select option {
+    padding: 10px;
+    background: white;
+}
+
+.personnel-select option:checked {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    font-weight: bold;
+}
+
+/* Carte de personnel */
+.personnel-card {
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+    border-left: 4px solid #3b82f6;
+    transition: all 0.3s ease;
+}
+
+.personnel-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+}
+
+/* Badge pour le rôle */
+.role-badge {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    margin-left: 8px;
+}
+
+.role-agent {
+    background: #dbeafe;
+    color: #1e40af;
+    border: 1px solid #93c5fd;
+}
+
+.role-superviseur {
+    background: #fef3c7;
+    color: #92400e;
+    border: 1px solid #fbbf24;
+}
+
+/* Animation pour la sélection */
+@keyframes pulse-select {
+    0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4); }
+    70% { box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+}
+
+.select-animate {
+    animation: pulse-select 1.5s infinite;
+}
+</style>
 </body>
 </html>

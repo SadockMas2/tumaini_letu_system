@@ -13,7 +13,7 @@ use Filament\Forms\Components\TextInput;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Columns\BadgeColumn;
+
 use Illuminate\Support\Facades\Auth;
 
 class EpargnesTable

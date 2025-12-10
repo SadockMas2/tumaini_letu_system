@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Clients\Tables;
 
+use App\Models\Client;
 use App\Models\TypeCompte;
 use App\Models\User;
 use Filament\Actions\Action;
@@ -12,6 +13,7 @@ use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
 use Filament\Forms\Components\Select;
+use Filament\Tables\Columns\ImageColumn;
 use Filament\Tables\Columns\SelectColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
@@ -32,9 +34,10 @@ class ClientsTable
                 TextColumn::make('prenom')->searchable(),
                 TextColumn::make('date_naissance')->date()->sortable(),
                 TextColumn::make('email')->label('Email')->searchable(),
-                TextColumn::make('image')
-                    ->label('Photo du membre'),
-
+                ImageColumn::make('image')
+                    ->label('Photo du membre')
+                    ->circular()
+                    ->defaultImageUrl(asset('/images/default-avatar.png')),
 
                 TextColumn::make('telephone')->searchable(),
                 TextColumn::make('adresse')->searchable(),
@@ -51,10 +54,10 @@ class ClientsTable
                     ->label('Type de compte')
                     ->sortable()
                     ->searchable(),
-                TextColumn::make('signature')
-                    ->label('Signature'),
+                ImageColumn::make('signature')
+                    ->label('Signature')
+                    ->defaultImageUrl(url('/images/default-signature.png')),
 
-                
                 TextColumn::make('created_at')
                     ->dateTime()
                     ->sortable()
@@ -65,25 +68,56 @@ class ClientsTable
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([])
-              ->headerActions([
-                Action::make('clients.create')
-                ->Label('Ajouter un membre')
-                ->icon('heroicon-o-user-plus')
-                ->visible(function () {
-                    /** @var User|null $user */
-                    $user = Auth::user();
-                    return $user && $user->can('create_client');
-                })
-                 ->url(route('filament.admin.resources.clients.create')),
-            ])
+            ->headerActions([
 
-            
-            ->recordActions([
-               
+     
+     Action::make('galerie_clients')
+    ->label('Galerie des membres')
+    ->icon('heroicon-o-photo')
+    ->url(route('galerie.clients')) // ← Utilisez le nom de route
+    ->openUrlInNewTab() // Recommandé pour ouvrir dans un nouvel onglet
+    ->visible(fn () => Auth::user()?->can('view_client')),
+
+                    
+
+                Action::make('clients.create')
+                    ->label('Ajouter un membre')
+                    ->icon('heroicon-o-user-plus')
+                    ->visible(function () {
+                        /** @var User|null $user */
+                        $user = Auth::user();
+                        return $user && $user->can('create_client');
+                    })
+                    ->url(route('filament.admin.resources.clients.create')),
             ])
-          ->toolbarActions([
+            ->recordActions([
+
+                EditAction::make(),
+
+
+
+                ViewAction::make() 
+                    ->label('Voir détails')
+                    ->icon('heroicon-o-eye')
+                    ->modalHeading(fn ($record) => "Détails du membre: {$record->nom} {$record->prenom}")
+                    ->modalContent(function ($record) {
+                        return view('filament.clients.view-modal', [
+                            'client' => $record
+                        ]);
+                    })
+                    ->modalWidth('4xl')
+                    ->slideOver()
+                    ->visible(function () {
+                        /** @var User|null $user */
+                        $user = Auth::user();
+                        return $user && $user->can('view_client');
+                    }),
+
+                    
+            ])
+            ->toolbarActions([
                 BulkActionGroup::make([
-                    DeleteBulkAction::make(),
+                    // Action::make(),
                 ]),
             ]);
     }

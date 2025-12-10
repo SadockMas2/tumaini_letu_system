@@ -4,6 +4,7 @@ namespace App\Filament\Resources\Clients;
 
 use App\Filament\Resources\Clients\Pages\CreateClient;
 use App\Filament\Resources\Clients\Pages\EditClient;
+use App\Filament\Resources\Clients\Pages\GalerieClients;
 use App\Filament\Resources\Clients\Pages\ListClients;
 use App\Filament\Resources\Clients\Schemas\ClientForm;
 use App\Filament\Resources\Clients\Tables\ClientsTable;
@@ -65,6 +66,7 @@ class ClientResource extends Resource
             'index' => ListClients::route('/'),
             'create' => CreateClient::route('/create'),
             // 'edit' => EditClient::route('/{record}/edit'),
+        
         ];
     }
 
@@ -85,19 +87,13 @@ class ClientResource extends Resource
         return $user && $user->can('view_client');
     }
 
-     public static function canEdit($record = null): bool
-    {
-          /** @var \App\Models\User|null $user */
-        $user = Auth::user();
-        return $user && $user->can('edit_client');
-    }
-
-    public static function canDelete($record = null): bool
-    {
-          /** @var \App\Models\User|null $user */
-        $user = Auth::user();
-        return $user && $user->can('delete_user');
-    }
+    
+    // public static function canEdit($record = null): bool
+    // {
+    //       /** @var \App\Models\User|null $user */
+    //     $user = Auth::user();
+    //     return $user && $user->can('edit_epargne');
+    // }
 
 
     

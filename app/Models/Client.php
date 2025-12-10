@@ -49,14 +49,39 @@ class Client extends Model
         }
 
         // Dans votre modèle Client, ajoutez cette méthode
-        public function getCompteParDevise(string $devise)
-        {
-            return Compte::where('client_id', $this->id)
-                ->where('devise', $devise)
-                ->first();
-        }
+       public function getImageUrl()
+{
+    if (!$this->image) {
+        return $this->getDefaultAvatar();
+    }
+    
+    // Extraire juste le nom du fichier du chemin
+    $filename = basename($this->image);
+    
+    return route('client.image', ['filename' => $filename]);
+}
 
-        public function getCompteEpargneParDevise(string $devise)
+public function getSignatureUrl()
+{
+    if (!$this->signature) {
+        return null;
+    }
+    
+    // Extraire juste le nom du fichier du chemin
+    $filename = basename($this->signature);
+    
+    return route('client.image', ['filename' => $filename]);
+}
+
+    /**
+     * Get default avatar URL
+     */
+    private function getDefaultAvatar()
+    {
+        return 'https://ui-avatars.com/api/?name=' . 
+               urlencode($this->nom . '+' . $this->prenom) . 
+               '&background=667eea&color=fff&size=300';
+    }        public function getCompteEpargneParDevise(string $devise)
         {
             return CompteEpargne::where('client_id', $this->id)
                 ->where('devise', $devise)

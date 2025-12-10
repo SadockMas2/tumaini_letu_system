@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Log;
 
 class Credit extends Model
 {
@@ -161,7 +162,34 @@ public static function boot()
         if ($credit->montant_total <= 0 && $credit->getOriginal('montant_total') > 0) {
             Mouvement::debloquerCautionAutomatique($credit->compte_id);
         }
+
+        
     });
+
+        // Empêche de réduire montant_accorde
+    static::updating(function ($credit) {
+        $original = $credit->getOriginal();
+        
+        // Si on essaie de réduire montant_accorde, annuler
+        if (isset($original['montant_accorde']) && 
+            $credit->montant_accorde < $original['montant_accorde']) {
+            Log::error('Tentative de réduire montant_accorde bloquée', [
+                'credit_id' => $credit->id,
+                'ancien' => $original['montant_accorde'],
+                'nouveau' => $credit->montant_accorde
+            ]);
+            
+            // Restaurer la valeur originale
+            $credit->montant_accorde = $original['montant_accorde'];
+        }
+        
+        // S'assurer que montant_total >= montant_accorde
+        if ($credit->montant_total < $credit->montant_accorde) {
+            $credit->montant_total = $credit->montant_accorde;
+        }
+    });
+
+
 }
 
 // Dans App\Models\Credit

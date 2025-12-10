@@ -11,6 +11,7 @@ use App\Models\HistoriqueCompteSpecial;
 use App\Models\JournalComptable;
 use App\Models\Mouvement;
 use App\Models\PaiementCredit;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -97,17 +98,34 @@ class CreditController extends Controller
     }
 
     // Afficher le formulaire d'approbation pour crédit individuel
-    public function showApproval($credit_id)
-    {
-        $credit = Credit::with('compte')->findOrFail($credit_id);
-        
-        // Calculer les détails du crédit
-        $frais = Credit::calculerFraisIndividuel($credit->montant_demande);
-        $montantTotal = Credit::calculerMontantTotalIndividuel($credit->montant_demande);
-        $remboursementHebdo = Credit::calculerRemboursementHebdo($montantTotal, 'individuel');
+   public function showApproval($credit_id)
+{
+    $credit = Credit::with('compte')->findOrFail($credit_id);
+    
+    // Récupérer les agents (rôle ConseillerMembres)
+    $agents = User::whereHas('roles', function ($query) {
+        $query->where('name', 'ConseillerMembres');
+    })->get();
+    
+    // Récupérer les superviseurs (rôle ChefBureau)
+    $superviseurs = User::whereHas('roles', function ($query) {
+        $query->where('name', 'ChefBureau');
+    })->get();
+    
+    // Calculer les détails du crédit
+    $frais = Credit::calculerFraisIndividuel($credit->montant_demande);
+    $montantTotal = Credit::calculerMontantTotalIndividuel($credit->montant_demande);
+    $remboursementHebdo = Credit::calculerRemboursementHebdo($montantTotal, 'individuel');
 
-        return view('credits.approval', compact('credit', 'frais', 'montantTotal', 'remboursementHebdo'));
-    }
+    return view('credits.approval', [
+        'credit' => $credit,
+        'frais' => $frais,
+        'montantTotal' => $montantTotal,
+        'remboursementHebdo' => $remboursementHebdo,
+        'agents' => $agents,
+        'superviseurs' => $superviseurs,
+    ]);
+}
 
 
 
@@ -117,6 +135,8 @@ public function processApproval(Request $request, $credit_id)
     
     $request->validate([
         'action' => 'required|in:approuver,rejeter',
+         'agent_id' => 'required|exists:users,id',          // ✅ Nouveau
+        'superviseur_id' => 'required|exists:users,id',  
         'montant_accorde' => 'required_if:action,approuver|numeric|min:0.01',
         'motif_rejet' => 'required_if:action,rejeter',
     ]);
@@ -131,6 +151,7 @@ public function processApproval(Request $request, $credit_id)
             
             // Calculer tous les frais et montants
             $frais = Credit::calculerFraisIndividuel($request->montant_accorde);
+            
             $montantTotal = Credit::calculerMontantTotalIndividuel($request->montant_accorde);
             $remboursementHebdo = Credit::calculerRemboursementHebdo($montantTotal, 'individuel');
 
@@ -189,6 +210,8 @@ public function processApproval(Request $request, $credit_id)
                 'frais_alerte' => $frais['alerte'],
                 'caution' => $frais['caution'],
                 'remboursement_hebdo' => $remboursementHebdo,
+                'agent_id' => $request->agent_id,          // ✅ Nouveau
+                'superviseur_id' => $request->superviseur_id, // ✅ Nouveau
                 'duree_mois' => 4,
                 'statut_demande' => 'approuve',
                 'date_octroi' => now(),
@@ -282,6 +305,9 @@ private function transfererFraisVersCompteSpecial($montantFrais, $devise, $credi
     
     return $compteSpecial;
 }
+
+    
+    
 /**
  * Crée l'historique dans le compte spécial - VERSION CORRIGÉE
  */
@@ -297,7 +323,7 @@ private function creerHistoriqueCompteSpecial($montantFrais, $devise, $credit, $
         'client_nom' => $nomClient,
         'montant' => $montantFrais,
         'devise' => $devise,
-        'description' => "Frais crédit groupe payés - Crédit #{$credit->id} - Groupe: {$nomClient}",
+        'description' => "Frais crédit  payés - Crédit #{$credit->id} - membre/Groupe: {$nomClient}",
         'created_at' => now(),
         'updated_at' => now(),
     ]);
@@ -417,22 +443,61 @@ private function creerHistoriqueCompteSpecial($montantFrais, $devise, $credit, $
     }
 
     // Afficher l'approbation pour crédit groupe
-    public function showApprovalGroupe($credit_groupe_id)
-    {
-        try {
-            Log::info('Chargement approbation groupe:', ['id' => $credit_groupe_id]);
-            
-            $credit = CreditGroupe::with('compte')->findOrFail($credit_groupe_id);
-            $compte = $credit->compte;
-            $membres = $credit->membres;
-            
-            return view('credits.approval-groupe-final', compact('credit', 'compte', 'membres'));
-            
-        } catch (\Exception $e) {
-            Log::error('Erreur showApprovalGroupe:', ['error' => $e->getMessage()]);
-            return redirect()->back()->with('error', 'Erreur lors du chargement: ' . $e->getMessage());
-        }
+   // Afficher l'approbation pour crédit groupe - VERSION CORRIGÉE
+// Afficher le formulaire d'approbation pour crédit groupe - VERSION FINALE
+public function showApprovalGroupe($credit_groupe_id)
+{
+    try {
+        Log::info('Chargement approbation groupe:', ['id' => $credit_groupe_id]);
+        
+        // Récupérer le crédit groupe avec son compte
+        $credit = CreditGroupe::with('compte')->findOrFail($credit_groupe_id);
+        $compte = $credit->compte;
+        
+        // Récupérer les membres du groupe
+        $membres = DB::table('groupes_membres')
+            ->join('clients', 'groupes_membres.client_id', '=', 'clients.id')
+            ->join('comptes', 'clients.id', '=', 'comptes.client_id')
+            ->where('groupes_membres.groupe_solidaire_id', $compte->groupe_solidaire_id)
+            ->select('clients.id', 'clients.nom', 'clients.prenom', 'comptes.numero_compte', 'comptes.solde')
+            ->get();
+        
+        // ✅ Récupérer les agents (rôle ConseillerMembres)
+        $agents = User::whereHas('roles', function ($query) {
+            $query->where('name', 'ConseillerMembres');
+        })->get();
+        
+        // ✅ Récupérer les superviseurs (rôle ChefBureau)
+        $superviseurs = User::whereHas('roles', function ($query) {
+            $query->where('name', 'ChefBureau');
+        })->get();
+        
+        Log::info('Données chargées:', [
+            'credit_id' => $credit->id,
+            'compte_id' => $compte->id,
+            'membres_count' => $membres->count(),
+            'agents_count' => $agents->count(),
+            'superviseurs_count' => $superviseurs->count()
+        ]);
+        
+        return view('credits.approval-groupe-final', [
+            'credit' => $credit,
+            'compte' => $compte,
+            'membres' => $membres,
+            'agents' => $agents,              // ✅ Passer aux vues
+            'superviseurs' => $superviseurs,  // ✅ Passer aux vues
+        ]);
+        
+    } catch (\Exception $e) {
+        Log::error('Erreur showApprovalGroupe:', [
+            'error' => $e->getMessage(),
+            'file' => $e->getFile(),
+            'line' => $e->getLine()
+        ]);
+        return redirect()->back()
+            ->with('error', 'Erreur lors du chargement du formulaire d\'approbation: ' . $e->getMessage());
     }
+}
 
 
 
@@ -444,6 +509,8 @@ public function processApprovalGroupe(Request $request, $credit_groupe_id)
     $request->validate([
         'action' => 'required|in:approuver,rejeter',
         'montant_total_groupe' => 'required_if:action,approuver|numeric|min:0.01',
+         'agent_id' => 'required|exists:users,id',          // ✅ Nouveau
+        'superviseur_id' => 'required|exists:users,id',   
         'montants_membres' => 'required_if:action,approuver|array',
         'montants_membres.*' => 'numeric|min:0',
         'motif_rejet' => 'required_if:action,rejeter',
@@ -576,6 +643,8 @@ public function processApprovalGroupe(Request $request, $credit_groupe_id)
                 'remboursement_hebdo_total' => $remboursementHebdoTotal,
                 'repartition_membres' => $this->calculerRepartitionMembres($request->montants_membres),
                 'montants_membres' => $request->montants_membres,
+                'agent_id' => $request->agent_id,          // ✅ Nouveau
+                'superviseur_id' => $request->superviseur_id, // ✅ Nouveau
                 'statut_demande' => 'approuve',
                 'date_octroi' => now(),
                 'date_echeance' => now()->addMonths(4),

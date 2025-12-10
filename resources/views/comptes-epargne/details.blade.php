@@ -60,32 +60,7 @@
         <!-- Main Details Card -->
         <div class="details-card rounded-2xl p-8">
             <!-- Account Header -->
-            <div class="text-center mb-8">
-                <h2 class="text-2xl font-semibold text-gray-800 mb-2">
-                    Compte Épargne <span class="text-green-600">{{ $compte->numero_compte }}</span>
-                </h2>
-                <div class="flex flex-wrap justify-center gap-4 text-sm text-gray-600 mb-4">
-                    <div class="flex items-center bg-blue-50 rounded-full px-4 py-2">
-                        <i class="fas fa-user mr-2 text-blue-500"></i>
-                        <span class="font-medium">{{ $compte->nom_complet }}</span>
-                    </div>
-                    <div class="flex items-center bg-green-50 rounded-full px-4 py-2">
-                        <i class="fas fa-wallet mr-2 text-green-500"></i>
-                        <span class="font-medium">{{ $compte->devise }}</span>
-                    </div>
-                    <div class="flex items-center bg-purple-50 rounded-full px-4 py-2">
-                        <i class="fas fa-tag mr-2 text-purple-500"></i>
-                        <span class="font-medium">{{ ucfirst($compte->type_compte) }}</span>
-                    </div>
-                    @if($compte->type_compte === 'groupe_solidaire')
-                    <div class="flex items-center bg-orange-50 rounded-full px-4 py-2">
-                        <i class="fas fa-users mr-2 text-orange-500"></i>
-                        <span class="font-medium">Compte Groupe</span>
-                    </div>
-                    @endif
-                </div>
-            </div>
-
+            Épargne 
             <!-- Account Information Grid -->
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                 <!-- Solde Actuel -->

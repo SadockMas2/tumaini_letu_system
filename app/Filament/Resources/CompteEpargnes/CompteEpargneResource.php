@@ -12,32 +12,52 @@ use Illuminate\Support\Facades\Auth;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
-use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use Illuminate\Support\Facades\Log;
 use UnitEnum;
 
 class CompteEpargneResource extends Resource
 {
     protected static ?string $model = CompteEpargne::class;
- protected static string|BackedEnum|null $navigationIcon = "heroicon-o-archive-box-arrow-down";
+    protected static string|BackedEnum|null $navigationIcon = "heroicon-o-archive-box-arrow-down";
+    protected static ?string $navigationLabel = 'Comptes Epargnes';
+    protected static string|UnitEnum|null $navigationGroup = '💰 EPARGNES';
 
-        protected static ?string $navigationLabel = 'Comptes Epargnes';
-
-     protected static string|UnitEnum|null $navigationGroup = '💰 EPARGNES';
-
-      public static function getNavigationBadge(): ?string
+    public static function getNavigationBadge(): ?string
     {
         return static::getModel()::count();
-    } 
+    }
+
     public static function form(Schema $schema): Schema
     {
         return CompteEpargneForm::configure($schema);
     }
-
-    public static function table(Table $table): Table
-    {
-        return CompteEpargnesTable::configure($table);
-    }
+   public static function table(Table $table): Table
+{
+    return CompteEpargnesTable::configure($table)
+        // ->searchable(false)
+        ->modifyQueryUsing(function ($query) {
+            Log::info('Search value:', ['search' => request('search')]);
+            
+            $search = request('search');
+            
+            if (!empty($search)) {
+                Log::info('Applying search for:', ['search' => $search]);
+                
+                return $query->where(function ($q) use ($search) {
+                    $q->where('numero_compte', 'like', "%{$search}%")
+                      ->orWhereHas('client', function ($clientQuery) use ($search) {
+                          $clientQuery->where('nom_complet', 'like', "%{$search}%");
+                      })
+                      ->orWhereHas('groupeSolidaire', function ($groupeQuery) use ($search) {
+                          $groupeQuery->where('nom_groupe', 'like', "%{$search}%");
+                      });
+                });
+            }
+            
+            return $query;
+        });
+}
 
     public static function getRelations(): array
     {
@@ -61,6 +81,4 @@ class CompteEpargneResource extends Resource
         $user = Auth::user();
         return $user && $user->can('view_epargne');
     }
-
-    
 }

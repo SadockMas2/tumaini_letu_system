@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\TypePaiement;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -61,6 +62,13 @@ class Mouvement extends Model
                 return;
             }
 
+               if ($mouvement->type_mouvement === 'frais_adhesion') {
+            self::remplirInfosAutomatiques($mouvement, $mouvement->compte);
+            $mouvement->operateur_id = Auth::id();
+            return;
+        }
+
+
             // SINON, c'est un mouvement de COMPTE (logique existante)
             $compte = $mouvement->compte;
 
@@ -84,6 +92,50 @@ class Mouvement extends Model
             self::enregistrerMouvementSansDoubleComptage($mouvement, $compte, $montant);
         });
     }
+
+
+    private function corrigerMouvementsIncorrects()
+{
+    // Trouver tous les paiements avec incohérence
+    $paiements = PaiementCredit::where('type_paiement', TypePaiement::AUTOMATIQUE->value)
+        ->get();
+    
+    foreach ($paiements as $paiement) {
+        // Vérifier si le mouvement et les écritures correspondent
+        $mouvement = Mouvement::where('reference', $paiement->reference)->first();
+        
+        if ($mouvement) {
+            // Extraire les valeurs de capital/intérêts de la description
+            preg_match('/Capital: ([\d.]+) USD.*Intérêts: ([\d.]+) USD/', $mouvement->description, $matches);
+            
+            if (count($matches) === 3) {
+                $capitalMouvement = (float)$matches[1];
+                $interetsMouvement = (float)$matches[2];
+                
+                // Comparer avec les valeurs du paiement
+                if (abs($capitalMouvement - $paiement->capital_rembourse) > 0.01 || 
+                    abs($interetsMouvement - $paiement->interets_payes) > 0.01) {
+                    
+                    Log::warning('INCOHÉRENCE DÉTECTÉE', [
+                        'paiement_id' => $paiement->id,
+                        'reference' => $paiement->reference,
+                        'capital_paiement' => $paiement->capital_rembourse,
+                        'interets_paiement' => $paiement->interets_payes,
+                        'capital_mouvement' => $capitalMouvement,
+                        'interets_mouvement' => $interetsMouvement
+                    ]);
+                    
+                    // Mettre à jour le mouvement pour qu'il corresponde au paiement
+                    $mouvement->description = "Paiement automatique crédit - Capital: " . 
+                        number_format($paiement->capital_rembourse, 2) . 
+                        " USD, Intérêts: " . 
+                        number_format($paiement->interets_payes, 2) . " USD";
+                    $mouvement->save();
+                }
+            }
+        }
+    }
+}
 
     /**
      * NOUVELLE MÉTHODE : Enregistrer le mouvement sans double comptage

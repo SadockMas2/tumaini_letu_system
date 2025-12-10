@@ -9,6 +9,8 @@ enum TypePaiement: string
     case BANCAIRE = 'transfert_bancaire';
     case AUTOMATIQUE = 'auto';
     case CHEQUE = 'cheque';
+     case GROUPE = 'groupe'; // AJOUT DE LA NOUVELLE CONSTANTE
+
     
     public function getLabel(): string
     {
@@ -18,6 +20,8 @@ enum TypePaiement: string
             self::BANCAIRE => 'Transfert Bancaire',
             self::AUTOMATIQUE => 'Prélèvement Automatique',
             self::CHEQUE => 'Chèque',
+            self::GROUPE => 'Paiement Groupe', // AJOUT DU LABEL
+
         };
     }
 }

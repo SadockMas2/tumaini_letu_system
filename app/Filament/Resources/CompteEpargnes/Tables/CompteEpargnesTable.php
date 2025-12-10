@@ -6,14 +6,7 @@ use App\Filament\Exports\CompteEpargneExporter;
 use App\Models\CompteEpargne;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
-use Filament\Actions\DeleteAction;
-use Filament\Actions\DeleteBulkAction;
-use Filament\Actions\EditAction;
 use Filament\Actions\ExportAction;
-use Filament\Actions\ViewAction;
-use Filament\Forms\Components\Textarea;
-use Filament\Forms\Components\TextInput;
-use Filament\Notifications\Notification;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
@@ -27,8 +20,8 @@ class CompteEpargnesTable
             ->columns([
                 TextColumn::make('numero_compte')
                     ->label('Numéro Compte')
-                    ->searchable()
-                    ->sortable(),
+                    
+                    ->sortable(),  // PAS de searchable() ici
                     
                 TextColumn::make('type_compte')
                     ->label('Type')
@@ -38,7 +31,7 @@ class CompteEpargnesTable
                         'groupe_solidaire' => 'primary',
                     }),
                     
-                // Colonne unique pour afficher le nom complet selon le type de compte
+                // Colonne pour afficher le nom complet
                 TextColumn::make('nom_complet')
                     ->label('Titulaire')
                     ->getStateUsing(function (CompteEpargne $record) {
@@ -49,14 +42,12 @@ class CompteEpargnesTable
                         }
                         return 'N/A';
                     })
-                    ->sortable()
-                    ->searchable(),
+                    ->sortable(),  // PAS de searchable() ici
 
                 TextColumn::make('groupeSolidaire.nom_groupe')
                     ->label('Groupe')
                     ->visible(fn ($record) => $record && $record->type_compte === 'groupe_solidaire')
-                    ->sortable()
-                    ->searchable(),
+                    ->sortable(),  // PAS de searchable() ici
                     
                 TextColumn::make('solde')
                     ->label('Solde')
@@ -101,37 +92,24 @@ class CompteEpargnesTable
                         'suspendu' => 'Suspendu',
                     ]),
             ])
-               ->headerActions([
-                // Action d'export en haut à droite
+            ->headerActions([
                 ExportAction::make()
                     ->exporter(CompteEpargneExporter::class)
                     ->label('Exporter')
                     ->icon('heroicon-o-arrow-down-tray'),
             ])
             ->recordActions([
-                // Action pour voir les détails du compte épargne
                 Action::make('voir_details_epargne')
                     ->label('Détails')
                     ->icon('heroicon-o-eye')
                     ->color('info')
                     ->url(fn ($record) => route('comptes-epargne.details', ['compte_epargne_id' => $record->id]))
                     ->visible(fn () => Auth::user()?->can('view_comptetransitoire')),
-
-                // // Action pour voir les mouvements du compte épargne
-                // Action::make('voir_mouvements_epargne')
-                //     ->label('Relevé')
-                //     ->icon('heroicon-o-document-text')
-                //     ->color('primary')
-                //     ->url(fn ($record) => route('comptes-epargne.mouvements', ['compte_epargne_id' => $record->id]))
-                //     ->visible(fn () => Auth::user()?->can('view_comptetransitoire')),
-
-         
             ])
             ->toolbarActions([
                 BulkActionGroup::make([
                     ExportAction::make()
-                    ->exporter(CompteEpargneExporter::class)
-               
+                        ->exporter(CompteEpargneExporter::class)
                 ]),
             ]);
     }
