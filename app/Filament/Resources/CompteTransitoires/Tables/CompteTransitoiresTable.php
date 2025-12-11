@@ -104,10 +104,10 @@ class CompteTransitoiresTable
                     ),
                 
                 // Action pour voir les mouvements de l'agent
-                Action::make('voir_mouvements')
-                    ->label('Mouvements')
-                    ->icon('heroicon-o-document-text')
-                    ->url(fn ($record) => route('filament.admin.resources.mouvements.index', ['tableFilters[compte_transitoire_id]' => $record->id])),
+                // Action::make('voir_mouvements')
+                //     ->label('Mouvements')
+                //     ->icon('heroicon-o-document-text')
+                //     ->url(fn ($record) => route('filament.admin.resources.mouvements.index', ['tableFilters[compte_transitoire_id]' => $record->id])),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([

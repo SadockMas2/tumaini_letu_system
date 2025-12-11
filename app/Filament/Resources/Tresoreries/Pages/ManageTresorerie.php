@@ -22,6 +22,7 @@ use App\Models\EcritureComptable;
 use App\Services\TresorerieService;
 use Filament\Actions;
 use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Select;
@@ -44,8 +45,9 @@ class ManageTresorerie extends ManageRecords
     {
         return [
 
-            // Dans getHeaderActions() - ajoutez ces nouvelles actions
+            ActionGroup::make([
 
+                
 Action::make('rapport_instantanee')
     ->label('Rapport Instantané')
     ->icon('heroicon-o-clock')
@@ -97,40 +99,40 @@ Action::make('rapport_instantanee')
                         return redirect()->route('paiement.credits.groupe');
                     }),
 
-Action::make('rapport_periode')
-    ->label('Rapport Période')
-    ->icon('heroicon-o-calendar')
-    ->color('warning')
-    ->schema([
-        DatePicker::make('date_debut')
-            ->label('Date de début')
-            ->default(now()->subDays(7))
-            ->required(),
-        DatePicker::make('date_fin')
-            ->label('Date de fin')
-            ->default(now())
-            ->required(),
-    ])
-    ->action(function (array $data) {
-        try {
-            $tresorerieService = app(TresorerieService::class);
-            $rapport = $tresorerieService->rapportPeriode($data['date_debut'], $data['date_fin']);
+// Action::make('rapport_periode')
+//     ->label('Rapport Période')
+//     ->icon('heroicon-o-calendar')
+//     ->color('warning')
+//     ->schema([
+//         DatePicker::make('date_debut')
+//             ->label('Date de début')
+//             ->default(now()->subDays(7))
+//             ->required(),
+//         DatePicker::make('date_fin')
+//             ->label('Date de fin')
+//             ->default(now())
+//             ->required(),
+//     ])
+//     ->action(function (array $data) {
+//         try {
+//             $tresorerieService = app(TresorerieService::class);
+//             $rapport = $tresorerieService->rapportPeriode($data['date_debut'], $data['date_fin']);
             
-            $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdf.rapport-periode', compact('rapport'))
-                ->setPaper('A4', 'landscape');
+//             $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdf.rapport-periode', compact('rapport'))
+//                 ->setPaper('A4', 'landscape');
 
-            return response()->streamDownload(function () use ($pdf) {
-                echo $pdf->output();
-            }, 'rapport-tresorerie-periode-' . $data['date_debut'] . '-a-' . $data['date_fin'] . '.pdf');
+//             return response()->streamDownload(function () use ($pdf) {
+//                 echo $pdf->output();
+//             }, 'rapport-tresorerie-periode-' . $data['date_debut'] . '-a-' . $data['date_fin'] . '.pdf');
             
-        } catch (\Exception $e) {
-            Notification::make()
-                ->title('Erreur')
-                ->body('Impossible de générer le rapport: ' . $e->getMessage())
-                ->danger()
-                ->send();
-        }
-    }),
+//         } catch (\Exception $e) {
+//             Notification::make()
+//                 ->title('Erreur')
+//                 ->body('Impossible de générer le rapport: ' . $e->getMessage())
+//                 ->danger()
+//                 ->send();
+//         }
+//     }),
 
 // Modifiez l'action existante pour permettre de forcer la génération
 // Action::make('rapport_journalier')
@@ -625,6 +627,16 @@ Section::make('Montants à Convertir')
             //     ->modalHeading('Générer Rapport Journalier')
             //     ->modalDescription('Êtes-vous sûr de vouloir générer le rapport de fin de journée ?')
             //     ->visible(fn () => Auth::user()->can('view_compte')),
+
+
+            ])
+              ->label('Actions caisse')
+            ->icon('heroicon-o-cog-6-tooth')
+            ->color('primary')
+            ->button(),
+
+            // Dans getHeaderActions() - ajoutez ces nouvelles actions
+
         ];
     }
 
