@@ -92,15 +92,15 @@ class MouvementsTable
                     ->color('info')
                     ->extraAttributes(['class' => 'cursor-default']),
                 
-                Action::make('create_compte')
-                    ->label('Depot / Retrait')
-                    ->icon('heroicon-o-currency-dollar')
-                    ->visible(function () {
-                        /** @var User|null $user */
-                        $user = Auth::user();
-                        return $user && $user->can('create_compte');
-                    })
-                    ->url(route('filament.admin.resources.mouvements.create')),
+                // Action::make('create_compte')
+                //     ->label('Depot / Retrait')
+                //     ->icon('heroicon-o-currency-dollar')
+                //     ->visible(function () {
+                //         /** @var User|null $user */
+                //         $user = Auth::user();
+                //         return $user && $user->can('create_compte');
+                //     })
+                //     ->url(route('filament.admin.resources.mouvements.create')),
                 
                 // Action pour générer le rapport journalier
                 Action::make('rapport_journalier')

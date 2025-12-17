@@ -157,7 +157,59 @@ class RapportsMicrofinance extends ListRecords
 
     
 
-                 TextColumn::make('date_octroi')
+              
+
+                TextColumn::make('total_paiements')
+                    ->label('Montant Payé')
+                    ->formatStateUsing(fn ($state) => CurrencyHelper::format($state))
+                    ->color('success')
+                    ->sortable()
+                    ->getStateUsing(function ($record) {
+                        // Si total_paiements est déjà calculé dans le modèle
+                        if (isset($record->total_paiements)) {
+                            return $record->total_paiements;
+                        }
+                        
+                        // Sinon, calculer
+                        if ($record->type_credit === 'individuel') {
+                            return PaiementCredit::where('credit_id', $record->id)
+                                ->where('type_paiement', '!=', TypePaiement::GROUPE->value)
+                                ->sum('montant_paye');
+                        } else {
+                            $groupeId = $record->id - 100000;
+                            return PaiementCredit::where('credit_groupe_id', $groupeId)
+                                ->where('type_paiement', TypePaiement::GROUPE->value)
+                                ->sum('montant_paye');
+                        }
+                    }),
+
+                // NOUVELLES COLONNES
+                TextColumn::make('capital_deja_rembourse')
+                    ->label('Capital Remboursé')
+                    ->formatStateUsing(fn ($state) => CurrencyHelper::format($state))
+                    ->color('info')
+                    ->getStateUsing(function ($record) {
+                        return $this->calculerCapitalDejaRembourseTable($record);
+                    }),
+
+                TextColumn::make('interets_deja_payes')
+                    ->label('Intérêts Payés')
+                    ->formatStateUsing(fn ($state) => CurrencyHelper::format($state))
+                    ->color('warning')
+                    ->getStateUsing(function ($record) {
+                        return $this->calculerInteretsDejaPayesTable($record);
+                    }),
+
+                TextColumn::make('reste_a_payer')
+                    ->label('Reste à Payer')
+                    ->formatStateUsing(fn ($state) => CurrencyHelper::format($state))
+                    ->color('danger')
+                    ->getStateUsing(function ($record) {
+                        $montantTotal = $record->montant_total;
+                        $totalPaiements = $this->calculerTotalPaiementsPourTable($record);
+                        return max(0, $montantTotal - $totalPaiements);
+                    }),
+                   TextColumn::make('date_octroi')
                     ->label('Date Octroi')
                     ->date()
                     ->sortable(),
@@ -166,6 +218,11 @@ class RapportsMicrofinance extends ListRecords
                     ->label('Date Échéance')
                     ->date()
                     ->color(fn ($record) => $record->date_echeance < now() ? 'danger' : 'success')
+                    ->sortable(),
+
+                TextColumn::make('date_octroi')
+                    ->label('Date Octroi')
+                    ->date()
                     ->sortable(),
 
     
@@ -240,6 +297,222 @@ class RapportsMicrofinance extends ListRecords
             ->recordActions([])
             ->toolbarActions([]);
     }
+/**
+ * Calcule le capital déjà remboursé pour l'affichage dans la table
+ */
+private function calculerCapitalDejaRembourseTable($credit): float
+{
+    if ($credit->type_credit === 'individuel') {
+        // Récupérer tous les paiements
+        $paiements = PaiementCredit::where('credit_id', $credit->id)
+            ->where('type_paiement', '!=', TypePaiement::GROUPE->value)
+            ->get();
+        
+        if ($paiements->isEmpty()) {
+            return 0;
+        }
+        
+        // OPTION 1 : Si vous stockez capital_rembourse dans la table paiements
+        if ($paiements->first()->capital_rembourse !== null) {
+            return $paiements->sum('capital_rembourse');
+        }
+        
+        // OPTION 2 : Calculer selon la formule fixe - CORRIGÉ
+        $montantPaye = $paiements->sum('montant_paye');
+        $remboursementHebdo = $credit->remboursement_hebdo ?? ($credit->montant_total / 16);
+        
+        if ($remboursementHebdo <= 0) return 0;
+        
+        // CORRECTION : Utiliser fmod() au lieu de % pour les décimaux
+        $nombreEcheancesCompletes = floor($montantPaye / $remboursementHebdo);
+        $reste = fmod($montantPaye, $remboursementHebdo);
+        
+        // Capital par échéance = montant_accorde / 16
+        $capitalParEcheance = $credit->montant_accorde / 16;
+        
+        // Calcul du capital pour les échéances complètes
+        $capitalTotal = $nombreEcheancesCompletes * $capitalParEcheance;
+        
+        // Intérêts par échéance
+        $interetParEcheance = $remboursementHebdo - $capitalParEcheance;
+        
+        // Pour le reste, priorité aux intérêts
+        if ($reste > 0) {
+            // D'abord payer les intérêts, puis le capital
+            $interetsDuReste = min($reste, $interetParEcheance);
+            $capitalDuReste = max(0, $reste - $interetsDuReste);
+            $capitalTotal += $capitalDuReste;
+        }
+        
+        // Arrondir à 2 décimales
+        return round($capitalTotal, 2);
+        
+    } else {
+        // Pour les groupes - CORRIGÉ
+        $groupeId = $credit->id - 100000;
+        $paiements = PaiementCredit::where('credit_groupe_id', $groupeId)
+            ->where('type_paiement', TypePaiement::GROUPE->value)
+            ->get();
+        
+        if ($paiements->isEmpty()) {
+            return 0;
+        }
+        
+        $montantPaye = $paiements->sum('montant_paye');
+        $remboursementHebdo = $credit->remboursement_hebdo_total ?? ($credit->montant_total / 16);
+        
+        if ($remboursementHebdo <= 0) return 0;
+        
+        $nombreEcheancesCompletes = floor($montantPaye / $remboursementHebdo);
+        $reste = fmod($montantPaye, $remboursementHebdo);
+        
+        $capitalParEcheance = $credit->montant_accorde / 16;
+        $interetParEcheance = $remboursementHebdo - $capitalParEcheance;
+        
+        $capitalTotal = $nombreEcheancesCompletes * $capitalParEcheance;
+        
+        if ($reste > 0) {
+            $interetsDuReste = min($reste, $interetParEcheance);
+            $capitalDuReste = max(0, $reste - $interetsDuReste);
+            $capitalTotal += $capitalDuReste;
+        }
+        
+        return round($capitalTotal, 2);
+    }
+}
+
+/**
+ * Calcule les intérêts déjà payés pour l'affichage dans la table - CORRIGÉ
+ */
+private function calculerInteretsDejaPayesTable($credit): float
+{
+    if ($credit->type_credit === 'individuel') {
+        // Récupérer tous les paiements
+        $paiements = PaiementCredit::where('credit_id', $credit->id)
+            ->where('type_paiement', '!=', TypePaiement::GROUPE->value)
+            ->get();
+        
+        if ($paiements->isEmpty()) {
+            return 0;
+        }
+        
+        // OPTION 1 : Si vous stockez interets_payes dans la table paiements
+        if ($paiements->first()->interets_payes !== null) {
+            return $paiements->sum('interets_payes');
+        }
+        
+        // OPTION 2 : Calculer selon la formule fixe
+        $montantPaye = $paiements->sum('montant_paye');
+        $remboursementHebdo = $credit->remboursement_hebdo ?? ($credit->montant_total / 16);
+        
+        if ($remboursementHebdo <= 0) return 0;
+        
+        $nombreEcheancesCompletes = floor($montantPaye / $remboursementHebdo);
+        $reste = fmod($montantPaye, $remboursementHebdo);
+        
+        $capitalParEcheance = $credit->montant_accorde / 16;
+        $interetParEcheance = $remboursementHebdo - $capitalParEcheance;
+        
+        // Intérêts pour les échéances complètes
+        $interetsTotaux = $nombreEcheancesCompletes * $interetParEcheance;
+        
+        // Pour le reste, priorité aux intérêts
+        if ($reste > 0) {
+            $interetsDuReste = min($reste, $interetParEcheance);
+            $interetsTotaux += $interetsDuReste;
+        }
+        
+        return round($interetsTotaux, 2);
+        
+    } else {
+        // Pour les groupes
+        $groupeId = $credit->id - 100000;
+        $paiements = PaiementCredit::where('credit_groupe_id', $groupeId)
+            ->where('type_paiement', TypePaiement::GROUPE->value)
+            ->get();
+        
+        if ($paiements->isEmpty()) {
+            return 0;
+        }
+        
+        $montantPaye = $paiements->sum('montant_paye');
+        $remboursementHebdo = $credit->remboursement_hebdo_total ?? ($credit->montant_total / 16);
+        
+        if ($remboursementHebdo <= 0) return 0;
+        
+        $nombreEcheancesCompletes = floor($montantPaye / $remboursementHebdo);
+        $reste = fmod($montantPaye, $remboursementHebdo);
+        
+        $capitalParEcheance = $credit->montant_accorde / 16;
+        $interetParEcheance = $remboursementHebdo - $capitalParEcheance;
+        
+        $interetsTotaux = $nombreEcheancesCompletes * $interetParEcheance;
+        
+        if ($reste > 0) {
+            $interetsDuReste = min($reste, $interetParEcheance);
+            $interetsTotaux += $interetsDuReste;
+        }
+        
+        return round($interetsTotaux, 2);
+    }
+}
+
+/**
+ * Vérifie la cohérence des calculs
+ */
+private function verifierCohérenceCalculs($credit): void
+{
+    $montantPaye = $this->calculerTotalPaiementsPourTable($credit);
+    $capitalCalcule = $this->calculerCapitalDejaRembourseTable($credit);
+    $interetsCalcules = $this->calculerInteretsDejaPayesTable($credit);
+    
+    $somme = $capitalCalcule + $interetsCalcules;
+    $difference = abs($somme - $montantPaye);
+    
+    if ($difference > 0.01) {
+        Log::warning('INCOHÉRENCE DANS LES CALCULS', [
+            'credit_id' => $credit->id,
+            'type' => $credit->type_credit,
+            'montant_paye' => $montantPaye,
+            'capital_calcule' => $capitalCalcule,
+            'interets_calcules' => $interetsCalcules,
+            'somme' => $somme,
+            'difference' => $difference,
+            'montant_accorde' => $credit->montant_accorde,
+            'montant_total' => $credit->montant_total,
+            'remboursement_hebdo' => $credit->type_credit === 'groupe' 
+                ? ($credit->remboursement_hebdo_total ?? $credit->montant_total / 16)
+                : $credit->remboursement_hebdo,
+        ]);
+        
+        // Correction automatique : ajuster les intérêts pour équilibrer
+        if ($somme > $montantPaye) {
+            // Si la somme dépasse, réduire les intérêts
+            $interetsCorriges = max(0, $interetsCalcules - $difference);
+            Log::info('Correction automatique appliquée', [
+                'ancien_interets' => $interetsCalcules,
+                'nouveaux_interets' => $interetsCorriges
+            ]);
+        }
+    }
+}
+
+/**
+ * Calcule le total des paiements pour l'affichage dans la table
+ */
+private function calculerTotalPaiementsPourTable($credit): float
+{
+    if ($credit->type_credit === 'individuel') {
+        return PaiementCredit::where('credit_id', $credit->id)
+            ->where('type_paiement', '!=', TypePaiement::GROUPE->value)
+            ->sum('montant_paye');
+    } else {
+        $groupeId = $credit->id - 100000;
+        return PaiementCredit::where('credit_groupe_id', $groupeId)
+            ->where('type_paiement', TypePaiement::GROUPE->value)
+            ->sum('montant_paye');
+    }
+}
 
     // Créer une méthode pour récupérer les données combinées sous forme de modèles Eloquent
     private function getCombinedCredits(): Collection
@@ -1408,6 +1681,31 @@ private function effectuerPaiementGroupe($creditGroupe, $montantTotal, $datePaie
             ->send();
     }
 
+    private function verifierCalculCapitalInterets($credit, $montantPaye)
+{
+    $remboursementHebdo = $credit->remboursement_hebdo ?? ($credit->montant_total / 16);
+    $capitalHebdo = $credit->montant_accorde / 16;
+    $interetHebdo = $remboursementHebdo - $capitalHebdo;
+    
+    Log::info('VÉRIFICATION CALCUL', [
+        'credit_id' => $credit->id,
+        'montant_accorde' => $credit->montant_accorde,
+        'montant_total' => $credit->montant_total,
+        'remboursement_hebdo' => $remboursementHebdo,
+        'capital_hebdo' => $capitalHebdo,
+        'interet_hebdo' => $interetHebdo,
+        'montant_paye_a_repartir' => $montantPaye,
+        
+        // Calcul du nombre d'échéances complètes
+        'nombre_echeances_completes' => floor($montantPaye / $remboursementHebdo),
+        'reste' => fmod($montantPaye, $remboursementHebdo),
+        
+        // Calcul détaillé
+        'capital_total' => floor($montantPaye / $remboursementHebdo) * $capitalHebdo,
+        'interets_total' => floor($montantPaye / $remboursementHebdo) * $interetHebdo,
+    ]);
+}
+
 
 /**
  * Calcule la répartition correcte capital/intérêts
@@ -1419,33 +1717,27 @@ private function repartirCapitalInterets($credit, $montantPaiement)
 {
     // Pour les crédits individuels
     if ($credit instanceof Credit && $credit->type_credit === 'individuel') {
-        $montantAccorde = $credit->montant_accorde; // TOUJOURS LE MÊME
+        $montantAccorde = $credit->montant_accorde;
         
-        // Calculer le remboursement hebdo selon VOS formules
-        $remboursementHebdo = $credit->remboursement_hebdo;
-        if (!$remboursementHebdo) {
-            // Si pas défini, calculer selon vos formules exactes
-            $remboursementHebdo = $this->calculerRemboursementHebdoIndividuel($credit);
-        }
+        // Vérifier et corriger le remboursement hebdo
+        $remboursementHebdo = $this->verifierEtCorrigerRemboursementHebdo($credit);
         
-        // Calculer le capital hebdomadaire FIXE
-        // Le capital total à rembourser = montantAccorde
-        // Sur 16 semaines : capitalHebdo = montantAccorde / 16
+        // Capital hebdomadaire FIXE = montantAccorde / 16
         $capitalHebdomadaire = $montantAccorde / 16;
         
         // Intérêts hebdo = remboursementHebdo - capitalHebdo
         $interetHebdomadaire = $remboursementHebdo - $capitalHebdomadaire;
         
-        Log::info('RÉPARTITION - Capital fixe', [
-            'credit_id' => $credit->id,
-            'montant_accorde_fixe' => $montantAccorde,
-            'montant_total_actuel' => $credit->montant_total,
-            'remboursement_hebdo' => $remboursementHebdo,
-            'capital_hebdo_fixe' => $capitalHebdomadaire,
-            'interets_hebdo' => $interetHebdomadaire
-        ]);
+        // Calculer les montants déjà payés
+        $paiements = PaiementCredit::where('credit_id', $credit->id)
+            ->where('type_paiement', '!=', TypePaiement::GROUPE->value)
+            ->get();
         
-        // Pour paiement complet
+        $montantDejaPaye = $paiements->sum('montant_paye');
+        $nombreEcheancesCompletes = floor($montantDejaPaye / $remboursementHebdo);
+        $resteDejaPaye = fmod($montantDejaPaye, $remboursementHebdo);
+        
+        // Si c'est un paiement complet d'une échéance
         if ($montantPaiement >= $remboursementHebdo) {
             return [
                 'capital' => $capitalHebdomadaire,
@@ -1453,8 +1745,17 @@ private function repartirCapitalInterets($credit, $montantPaiement)
             ];
         }
         
-        // Pour paiement partiel : priorité aux intérêts
-        $interetsAPayer = min($montantPaiement, $interetHebdomadaire);
+        // Pour paiement partiel : priorité aux intérêts de l'échéance courante
+        $interetsEcheanceCourante = $interetHebdomadaire;
+        
+        // Si le reste déjà payé a déjà couvert une partie des intérêts
+        if ($resteDejaPaye > 0) {
+            $interetsDejaCouverts = min($resteDejaPaye, $interetHebdomadaire);
+            $interetsEcheanceCourante = max(0, $interetHebdomadaire - $interetsDejaCouverts);
+        }
+        
+        // D'abord payer les intérêts restants, puis le capital
+        $interetsAPayer = min($montantPaiement, $interetsEcheanceCourante);
         $capitalAPayer = max(0, $montantPaiement - $interetsAPayer);
         
         return [
@@ -1463,24 +1764,22 @@ private function repartirCapitalInterets($credit, $montantPaiement)
         ];
     }
     
-    // Pour les groupes (logique simplifiée)
+    // Pour les groupes
     if ($credit instanceof CreditGroupe) {
         $montantAccorde = $credit->montant_accorde;
-        $montantTotal = $credit->montant_total;
-        $remboursementHebdo = $credit->remboursement_hebdo_total ?? ($montantTotal / 16);
+        $remboursementHebdo = $credit->remboursement_hebdo_total ?? ($credit->montant_total / 16);
         
-        $interetsTotaux = $montantTotal - $montantAccorde;
-        $interetHebdo = $interetsTotaux / 16;
-        $capitalHebdo = $remboursementHebdo - $interetHebdo;
+        $capitalHebdomadaire = $montantAccorde / 16;
+        $interetHebdomadaire = $remboursementHebdo - $capitalHebdomadaire;
         
         if ($montantPaiement >= $remboursementHebdo) {
             return [
-                'capital' => $capitalHebdo,
-                'interets' => $interetHebdo
+                'capital' => $capitalHebdomadaire,
+                'interets' => $interetHebdomadaire
             ];
         }
         
-        $interetsAPayer = min($montantPaiement, $interetHebdo);
+        $interetsAPayer = min($montantPaiement, $interetHebdomadaire);
         $capitalAPayer = max(0, $montantPaiement - $interetsAPayer);
         
         return [
@@ -1495,7 +1794,6 @@ private function repartirCapitalInterets($credit, $montantPaiement)
         'interets' => 0
     ];
 }
-
 
 private function verifierCapitalFixe(Credit $credit)
 {

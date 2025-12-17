@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Client extends Model
 {
@@ -101,6 +102,11 @@ public function getSignatureUrl()
         public function transactions()
         {
             return $this->hasMany(Transaction::class);
+        }
+
+         public function smslog()
+        {
+            return $this->hasMany(SmsLog::class);
         }
 
         public function credits()

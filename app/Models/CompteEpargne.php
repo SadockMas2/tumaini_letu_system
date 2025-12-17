@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 
 class CompteEpargne extends Model
 {
@@ -176,5 +177,137 @@ class CompteEpargne extends Model
     }
     
     return 'N/A';
+}
+
+
+/**
+ * Vérifier et corriger les soldes des comptes épargne
+ */
+public static function verifierEtCorrigerSolder()
+{
+    $comptes = self::with(['mouvements' => function($query) {
+        $query->where('statut', 'completed')
+              ->orderBy('created_at');
+    }])->get();
+
+    $corrections = [];
+    
+    foreach ($comptes as $compte) {
+        // Calculer le solde théorique à partir des mouvements
+        $soldeTheorique = 0;
+        $mouvements = $compte->mouvements;
+        
+        foreach ($mouvements as $mouvement) {
+            if ($mouvement->type === 'depot') {
+                $soldeTheorique += $mouvement->montant;
+            } elseif ($mouvement->type === 'retrait') {
+                $soldeTheorique -= $mouvement->montant;
+            }
+        }
+        
+        // Vérifier l'incohérence
+        if (abs($compte->solde - $soldeTheorique) > 0.01) {
+            $corrections[] = [
+                'compte_id' => $compte->id,
+                'numero_compte' => $compte->numero_compte,
+                'solde_actuel' => $compte->solde,
+                'solde_theorique' => $soldeTheorique,
+                'difference' => $compte->solde - $soldeTheorique
+            ];
+            
+            // Corriger le solde
+            $compte->solde = $soldeTheorique;
+            $compte->save();
+            
+            Log::info("✅ Solde corrigé pour le compte {$compte->numero_compte}", [
+                'ancien_solde' => $compte->solde,
+                'nouveau_solde' => $soldeTheorique,
+                'difference' => $compte->solde - $soldeTheorique
+            ]);
+        }
+    }
+    
+    return $corrections;
+}
+
+
+public function synchroniserSolde(): bool
+{
+    try {
+        // OPTION 1: Calculer à partir des épargnes ORIGINALES seulement
+        $totalEpargnes = 0;
+        
+        if ($this->type_compte === 'individuel' && $this->client_id) {
+            $totalEpargnes = Epargne::where('client_id', $this->client_id)
+                ->where('statut', 'valide')
+                ->where('devise', $this->devise)
+                ->sum('montant');
+        } elseif ($this->type_compte === 'groupe_solidaire' && $this->groupe_solidaire_id) {
+            $totalEpargnes = Epargne::where('groupe_solidaire_id', $this->groupe_solidaire_id)
+                ->where('statut', 'valide')
+                ->where('devise', $this->devise)
+                ->sum('montant');
+        }
+        
+        // OPTION 2: OU calculer à partir des mouvements d'épargne seulement
+        // $totalEpargnes = MouvementEpargne::where('compte_epargne_id', $this->id)
+        //     ->where('type', 'depot')
+        //     ->sum('montant');
+        
+        // Les retraits sont toujours dans la table mouvements
+        $totalRetraits = Mouvement::where('compte_epargne_id', $this->id)
+            ->where('type', 'retrait')
+            ->sum('montant');
+        
+        $soldeTheorique = $totalEpargnes - $totalRetraits;
+        
+        $ecart = $this->solde - $soldeTheorique;
+        
+        if (abs($ecart) > 0.01) {
+            Log::warning("❌ Écart détecté", [
+                'compte_id' => $this->id,
+                'numero_compte' => $this->numero_compte,
+                'solde_actuel' => $this->solde,
+                'solde_theorique' => $soldeTheorique,
+                'ecart' => $ecart,
+                'total_epargnes' => $totalEpargnes,
+                'total_retraits' => $totalRetraits
+            ]);
+            
+            return false; // Ne pas corriger automatiquement encore
+        }
+        
+        return false;
+        
+    } catch (\Exception $e) {
+        Log::error("❌ Erreur synchronisation", ['error' => $e->getMessage()]);
+        return false;
+    }
+}
+/**
+ * Obtenir le solde calculé à partir des mouvements
+ */
+public function getSoldeCalculeAttribute(): float
+{
+    $totalEpargnes = 0;
+    
+    // FILTRER PAR DEVISE DU COMPTE
+    if ($this->type_compte === 'individuel' && $this->client_id) {
+        $totalEpargnes = Epargne::where('client_id', $this->client_id)
+            ->where('statut', 'valide')
+            ->where('devise', $this->devise) 
+            ->sum('montant');
+    } elseif ($this->type_compte === 'groupe_solidaire' && $this->groupe_solidaire_id) {
+        $totalEpargnes = Epargne::where('groupe_solidaire_id', $this->groupe_solidaire_id)
+            ->where('statut', 'valide')
+            ->where('devise', $this->devise) 
+            ->sum('montant');
+    }
+    
+    $totalRetraits = Mouvement::where('compte_epargne_id', $this->id)
+        ->where('type', 'retrait')
+        ->sum('montant');
+    
+    return $totalEpargnes - $totalRetraits;
 }
 }

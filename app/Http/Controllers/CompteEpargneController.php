@@ -5,87 +5,130 @@ namespace App\Http\Controllers;
 use App\Models\CompteEpargne;
 use App\Models\Epargne;
 use App\Models\Mouvement;
+use App\Models\MouvementEpargne;
 use Illuminate\Http\Request;
 use Barryvdh\DomPDF\Facade\Pdf;
 
 class CompteEpargneController extends Controller
 {
-   public function details($compte_epargne_id)
+
+ 
+
+public function details($compte_epargne_id)
 {
     $compte = CompteEpargne::with(['client', 'groupeSolidaire'])
         ->findOrFail($compte_epargne_id);
 
-    // Récupérer les épargnes selon le type de compte ET la devise
+    // RÉCUPÉRER SEULEMENT LES ÉPARGNES AVEC LA MÊME DEVISE QUE LE COMPTE
     if ($compte->type_compte === 'individuel' && $compte->client_id) {
-        // Pour les comptes individuels : chercher par client_id ET devise
         $epargnes = Epargne::where('client_id', $compte->client_id)
-            ->where('devise', $compte->devise) // FILTRE PAR DEVISE
+            ->where('statut', 'valide')
+            ->where('devise', $compte->devise)  // ← AJOUTER CE FILTRE
+            ->with(['cycle'])
             ->orderBy('created_at', 'desc')
             ->get();
     } elseif ($compte->type_compte === 'groupe_solidaire' && $compte->groupe_solidaire_id) {
-        // Pour les comptes groupe : chercher par groupe_solidaire_id ET devise
         $epargnes = Epargne::where('groupe_solidaire_id', $compte->groupe_solidaire_id)
-            ->where('devise', $compte->devise) // FILTRE PAR DEVISE
+            ->where('statut', 'valide')
+            ->where('devise', $compte->devise)  // ← AJOUTER CE FILTRE
+            ->with(['cycle'])
             ->orderBy('created_at', 'desc')
             ->get();
     } else {
         $epargnes = collect();
     }
 
-    // Récupérer les retraits depuis les mouvements avec FILTRE DEVISE
+    // Récupérer les retraits POUR CE COMPTE SPÉCIFIQUE
     $retraits = Mouvement::where('compte_epargne_id', $compte_epargne_id)
         ->where('type', 'retrait')
-        ->where('devise', $compte->devise) // FILTRE PAR DEVISE
+        ->with('operateur')
         ->orderBy('created_at', 'desc')
         ->get();
 
-    // Combiner et trier toutes les transactions
-    $transactions = collect();
-    
-    // Ajouter les épargnes comme dépôts (déjà filtrées par devise)
-    foreach ($epargnes as $epargne) {
-        $transactions->push([
+    // Convertir les épargnes en format commun AVEC INFO CYCLE
+    $transactionsEpargnes = $epargnes->map(function($epargne) {
+        return [
             'id' => $epargne->id,
             'type' => 'depot',
-            'type_mouvement' => 'epargne',
+            'reference' => $epargne->reference ?? 'EPARG-' . $epargne->id,
+            'description' => 'Épargne ' . ($epargne->type_epargne === 'groupe_solidaire' ? 'groupe' : 'individuelle'),
             'montant' => $epargne->montant,
-            'description' => $this->getEpargneDescription($epargne),
-            'nom_deposant' => $epargne->agent_nom ?? 'Système',
             'devise' => $epargne->devise,
+            'nom_deposant' => $epargne->agent_nom ?? null,
+            'date_operation' => $epargne->created_at,
             'created_at' => $epargne->created_at,
-            'date_operation' => $epargne->date_apport,
-            'solde_avant' => 0,
-            'solde_apres' => 0,
-            'operateur' => $epargne->user,
-            'reference' => 'EPARGNE-' . $epargne->id
-        ]);
-    }
+            'source' => 'epargne_ancien',
+            'operateur' => null,
+            'agent_nom' => $epargne->agent_nom ?? 'Système',
+            'cycle' => $epargne->cycle ? [
+                'id' => $epargne->cycle->id,
+                'numero_cycle' => $epargne->cycle->numero_cycle,
+                'nom' => $epargne->cycle->nom ?? 'Cycle ' . $epargne->cycle->numero_cycle
+            ] : null,
+            'cycle_id' => $epargne->cycle_id
+        ];
+    });
 
-    // Ajouter les retraits (déjà filtrés par devise)
-    foreach ($retraits as $retrait) {
-        $transactions->push([
+    // Convertir les retraits en format commun
+    $transactionsRetraits = $retraits->map(function($retrait) {
+        return [
             'id' => $retrait->id,
             'type' => 'retrait',
-            'type_mouvement' => $retrait->type_mouvement,
+            'reference' => $retrait->reference ?? 'RET-' . $retrait->id,
+            'description' => $retrait->description ?? 'Retrait épargne',
             'montant' => $retrait->montant,
-            'description' => $retrait->description,
-            'nom_deposant' => $retrait->nom_deposant,
             'devise' => $retrait->devise,
+            'nom_deposant' => $retrait->nom_deposant ?? null,
+            'date_operation' => $retrait->created_at,
             'created_at' => $retrait->created_at,
-            'date_operation' => $retrait->date_mouvement,
-            'solde_avant' => $retrait->solde_avant,
-            'solde_apres' => $retrait->solde_apres,
+            'source' => 'mouvement',
             'operateur' => $retrait->operateur,
-            'reference' => $retrait->reference
-        ]);
+            'agent_nom' => optional($retrait->operateur)->name ?? 'Système',
+            'cycle' => null,
+            'cycle_id' => null
+        ];
+    });
+
+    // Fusionner et trier toutes les transactions
+    $toutesTransactions = $transactionsEpargnes->merge($transactionsRetraits)
+        ->sortByDesc('date_operation')
+        ->values();
+
+    // Pagination manuelle
+    $perPage = 20;
+    $currentPage = request()->get('page', 1);
+    $paginatedTransactions = collect($toutesTransactions)->forPage($currentPage, $perPage);
+    $mouvements = new \Illuminate\Pagination\LengthAwarePaginator(
+        $paginatedTransactions,
+        $toutesTransactions->count(),
+        $perPage,
+        $currentPage,
+        ['path' => request()->url()]
+    );
+
+    // Statistiques PAR CYCLE POUR CETTE DEVISE
+    $statistiquesCycles = [];
+    if ($compte->type_compte === 'individuel' && $compte->client_id) {
+        $statistiquesCycles = Epargne::where('client_id', $compte->client_id)
+            ->where('statut', 'valide')
+            ->where('devise', $compte->devise)  // ← AJOUTER CE FILTRE
+            ->with('cycle')
+            ->get()
+            ->groupBy('cycle_id')
+            ->map(function($epargnesParCycle, $cycleId) {
+                $cycle = $epargnesParCycle->first()->cycle;
+                return [
+                    'cycle_id' => $cycleId,
+                    'numero_cycle' => $cycle ? $cycle->numero_cycle : 'N/A',
+                    'nom_cycle' => $cycle ? ($cycle->nom ?? 'Cycle ' . $cycle->numero_cycle) : 'Cycle inconnu',
+                    'nombre_epargnes' => $epargnesParCycle->count(),
+                    'total_montant' => $epargnesParCycle->sum('montant'),
+                    'devise' => $epargnesParCycle->first()->devise ?? 'USD'
+                ];
+            })->values();
     }
 
-    // Trier par date décroissante
-    $transactions = $transactions->sortByDesc(function($transaction) {
-        return $transaction['date_operation'] ?? $transaction['created_at'];
-    })->values();
-
-    // Statistiques - seulement pour la devise du compte
+    // Statistiques générales POUR CETTE DEVISE
     $statsMouvements = [
         'total_depots' => $epargnes->sum('montant'),
         'total_retraits' => $retraits->sum('montant'),
@@ -93,100 +136,38 @@ class CompteEpargneController extends Controller
         'nombre_retraits' => $retraits->count(),
     ];
 
-    // Pagination manuelle
-    $page = request()->get('page', 1);
-    $perPage = 20;
-    $paginatedTransactions = $transactions->slice(($page - 1) * $perPage, $perPage)->all();
-    $mouvements = new \Illuminate\Pagination\LengthAwarePaginator(
-        $paginatedTransactions,
-        $transactions->count(),
-        $perPage,
-        $page,
-        ['path' => request()->url()]
-    );
-
-    return view('comptes-epargne.details', compact('compte', 'statsMouvements', 'mouvements'));
+    
+   // Dans le contrôleur, avant de retourner la vue, ajoutez cette vérification
+$mixedDevises = false;
+if ($compte->type_compte === 'individuel' && $compte->client_id) {
+    $nombreDevises = Epargne::where('client_id', $compte->client_id)
+        ->where('statut', 'valide')
+        ->distinct('devise')
+        ->count('devise');
+    
+    $mixedDevises = $nombreDevises > 1;
 }
-    public function mouvements($compte_epargne_id)
-    {
-        $compte = CompteEpargne::findOrFail($compte_epargne_id);
-        
-        // Même logique que dans details() mais avec plus d'éléments par page
-        if ($compte->type_compte === 'individuel' && $compte->client_id) {
-            $epargnes = Epargne::where('client_id', $compte->client_id)
-                 ->where('devise', $compte->devise) // AJOUT
-                ->orderBy('created_at', 'desc')
-                ->get();
-        } elseif ($compte->type_compte === 'groupe_solidaire' && $compte->groupe_solidaire_id) {
-            $epargnes = Epargne::where('groupe_solidaire_id', $compte->groupe_solidaire_id)
-                ->where('devise', $compte->devise) // AJOUT
-                ->orderBy('created_at', 'desc')
-                ->get();
-        } else {
-            $epargnes = collect();
-        }
 
-        $retraits = Mouvement::where('compte_epargne_id', $compte_epargne_id)
-            ->where('devise', $compte->devise) // AJOUT
-            ->where('type', 'retrait')
-            ->orderBy('created_at', 'desc')
-            ->get();
+return view('comptes-epargne.details', compact(
+    'compte', 
+    'statsMouvements', 
+    'mouvements',
+    'epargnes',
+    'statistiquesCycles',
+    'mixedDevises'  // ← Ajouter cette variable
+));
+}
+// Mettez à jour aussi la méthode mouvements()
+public function mouvements($compte_epargne_id)
+{
+    $compte = CompteEpargne::findOrFail($compte_epargne_id);
+    
+    $mouvements = MouvementEpargne::where('compte_epargne_id', $compte_epargne_id)
+        ->orderBy('created_at', 'desc')
+        ->paginate(50);
 
-        $transactions = collect();
-        
-        foreach ($epargnes as $epargne) {
-            $transactions->push([
-                'id' => $epargne->id,
-                'type' => 'depot',
-                'type_mouvement' => 'epargne',
-                'montant' => $epargne->montant,
-                'description' => $this->getEpargneDescription($epargne),
-                'nom_deposant' => $epargne->agent_nom ?? 'Système',
-                'devise' => $epargne->devise,
-                'created_at' => $epargne->created_at,
-                'date_operation' => $epargne->date_apport,
-                'solde_avant' => 0,
-                'solde_apres' => 0,
-                'operateur' => $epargne->user,
-                'reference' => 'EPARGNE-' . $epargne->id
-            ]);
-        }
-
-        foreach ($retraits as $retrait) {
-            $transactions->push([
-                'id' => $retrait->id,
-                'type' => 'retrait',
-                'type_mouvement' => $retrait->type_mouvement,
-                'montant' => $retrait->montant,
-                'description' => $retrait->description,
-                'nom_deposant' => $retrait->nom_deposant,
-                'devise' => $retrait->devise,
-                'created_at' => $retrait->created_at,
-                'date_operation' => $retrait->date_mouvement,
-                'solde_avant' => $retrait->solde_avant,
-                'solde_apres' => $retrait->solde_apres,
-                'operateur' => $retrait->operateur,
-                'reference' => $retrait->reference
-            ]);
-        }
-
-        $transactions = $transactions->sortByDesc(function($transaction) {
-            return $transaction['date_operation'] ?? $transaction['created_at'];
-        })->values();
-
-        $page = request()->get('page', 1);
-        $perPage = 50;
-        $paginatedTransactions = $transactions->slice(($page - 1) * $perPage, $perPage)->all();
-        $mouvements = new \Illuminate\Pagination\LengthAwarePaginator(
-            $paginatedTransactions,
-            $transactions->count(),
-            $perPage,
-            $page,
-            ['path' => request()->url()]
-        );
-
-        return view('comptes-epargne.mouvements', compact('compte', 'mouvements'));
-    }
+    return view('comptes-epargne.mouvements', compact('compte', 'mouvements'));
+}
 
     public function exportReleve($compte_epargne_id)
     {
@@ -195,10 +176,12 @@ class CompteEpargneController extends Controller
         // Récupérer toutes les transactions
         if ($compte->type_compte === 'individuel' && $compte->client_id) {
             $epargnes = Epargne::where('client_id', $compte->client_id)
+                ->where('devise', $compte->devise)  // ← AJOUTER
                 ->orderBy('created_at', 'desc')
                 ->get();
         } elseif ($compte->type_compte === 'groupe_solidaire' && $compte->groupe_solidaire_id) {
             $epargnes = Epargne::where('groupe_solidaire_id', $compte->groupe_solidaire_id)
+                 ->where('devise', $compte->devise)  // ← AJOUTER
                 ->orderBy('created_at', 'desc')
                 ->get();
         } else {

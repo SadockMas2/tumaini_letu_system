@@ -35,4 +35,11 @@ return [
         ],
     ],
 
+        'asmsc' => [
+        'url' => env('ASMSC_API_URL', 'https://api2.dream-digital.info/api'),
+        'api_id' => env('ASMSC_API_ID'),
+        'api_password' => env('ASMSC_API_PASSWORD'),
+        'sender_id' => env('ASMSC_SENDER_ID', 'TUMAINI'),
+    ],
+
 ];

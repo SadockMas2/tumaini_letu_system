@@ -57,6 +57,25 @@
             <p class="text-white/80 text-lg">Vue d'ensemble complète de votre compte épargne</p>
         </div>
 
+        @if($mixedDevises)
+<!-- Avertissement sur les devises multiples -->
+<div class="bg-blue-50 border-l-4 border-blue-400 p-4 mb-4">
+    <div class="flex">
+        <div class="flex-shrink-0">
+            <i class="fas fa-info-circle text-blue-400"></i>
+        </div>
+        <div class="ml-3">
+            <p class="text-sm text-blue-700">
+                <strong>Note :</strong> Ce client a des épargnes dans d'autres devises
+            </p>
+            <p class="text-xs text-blue-600 mt-1">
+                Cette page affiche uniquement les épargnes en <strong>{{ $compte->devise }}</strong>.
+                Pour voir les épargnes en d'autres devises, consultez les autres comptes épargne du client.
+            </p>
+        </div>
+    </div>
+</div>
+@endif
         <!-- Main Details Card -->
         <div class="details-card rounded-2xl p-8">
             <!-- Account Header -->
@@ -192,28 +211,80 @@
                             <p class="text-xs text-gray-500">Toutes transactions</p>
                         </div>
                     </div>
+<!-- Après les statistiques rapides, ajoutez cette section -->
 
-                    <!-- Filtres -->
-                    <div class="px-6 py-4 bg-white border-b border-gray-200">
-                        <div class="flex flex-col sm:flex-row gap-4 items-center justify-between">
-                            <div class="flex gap-2">
-                                <button class="filter-btn active bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm font-medium transition-all duration-200">
-                                    Tous
-                                </button>
-                                <button class="filter-btn bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm font-medium transition-all duration-200" data-type="depot">
-                                    Épargnes
-                                </button>
-                                <button class="filter-btn bg-red-100 text-red-700 px-3 py-1 rounded-full text-sm font-medium transition-all duration-200" data-type="retrait">
-                                    Retraits
-                                </button>
-                            </div>
-                            <div class="text-sm text-gray-500">
-                                Affichage des {{ $mouvements->count() }} dernières opérations
-                            </div>
-                        </div>
+@if(count($statistiquesCycles) > 0)
+<!-- Section Statistiques par Cycle -->
+<div class="p-6 bg-white border-b border-gray-200">
+    <h4 class="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+        <i class="fas fa-chart-line mr-2 text-blue-500"></i>
+        Statistiques par Cycle d'Épargne
+    </h4>
+    
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-{{ min(count($statistiquesCycles), 4) }} gap-4">
+        @foreach($statistiquesCycles as $statCycle)
+        <div class="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-200">
+            <div class="flex justify-between items-start mb-2">
+                <div>
+                    <div class="text-sm font-medium text-blue-700">
+                        {{ $statCycle['nom_cycle'] }}
                     </div>
+                    <div class="text-xs text-blue-600">
+                        Cycle #{{ $statCycle['numero_cycle'] }}
+                    </div>
+                </div>
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    {{ $statCycle['nombre_epargnes'] }} fois
+                </span>
+            </div>
+            <div class="text-2xl font-bold text-blue-900">
+                {{ number_format($statCycle['total_montant'], 0, ',', ' ') }} {{ $statCycle['devise'] }}
+            </div>
+            <div class="text-xs text-blue-600 mt-1">
+                Moyenne : {{ number_format($statCycle['total_montant'] / max($statCycle['nombre_epargnes'], 1), 0, ',', ' ') }} {{ $statCycle['devise'] }}/fois
+            </div>
+        </div>
+        @endforeach
+    </div>
+</div>
+@endif
+
+             <!-- Dans la section Filtres, ajoutez un filtre pour les cycles -->
+<div class="flex flex-col sm:flex-row gap-4 items-center justify-between">
+    <div class="flex gap-2">
+        <button class="filter-btn active bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm font-medium transition-all duration-200" data-type="tous">
+            Tous
+        </button>
+        <button class="filter-btn bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm font-medium transition-all duration-200" data-type="depot">
+            Épargnes
+        </button>
+        <button class="filter-btn bg-red-100 text-red-700 px-3 py-1 rounded-full text-sm font-medium transition-all duration-200" data-type="retrait">
+            Retraits
+        </button>
+        
+        @if(count($statistiquesCycles) > 0)
+        <div class="relative">
+            <select id="filterCycle" class="appearance-none bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-sm font-medium border-0 focus:ring-2 focus:ring-blue-300">
+                <option value="">Tous les cycles</option>
+                @foreach($statistiquesCycles as $statCycle)
+                <option value="{{ $statCycle['cycle_id'] }}">
+                    Cycle {{ $statCycle['numero_cycle'] }} ({{ $statCycle['nombre_epargnes'] }} épargnes)
+                </option>
+                @endforeach
+            </select>
+            <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-blue-700">
+                <i class="fas fa-chevron-down text-xs"></i>
+            </div>
+        </div>
+        @endif
+    </div>
+    <div class="text-sm text-gray-500">
+        Affichage des {{ $mouvements->count() }} dernières opérations
+    </div>
+</div>
 
                     <!-- Tableau des Mouvements -->
+<!-- Tableau des Mouvements -->
 <div class="overflow-x-auto">
     <table class="w-full">
         <thead>
@@ -231,6 +302,9 @@
                     Description
                 </th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Cycle
+                </th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Montant
                 </th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -240,8 +314,11 @@
         </thead>
         <tbody class="divide-y divide-gray-200">
             @forelse($mouvements as $mouvement)
-            <tr class="mouvement-row hover:bg-gray-50 transition-colors duration-150" data-type="{{ $mouvement['type'] }}">
-               <td class="px-6 py-4 whitespace-nowrap">
+            <!-- AJOUTEZ data-cycle-id ICI -->
+            <tr class="mouvement-row hover:bg-gray-50 transition-colors duration-150" 
+                data-type="{{ $mouvement['type'] }}"
+                data-cycle-id="{{ $mouvement['cycle_id'] ?? '' }}">
+                <td class="px-6 py-4 whitespace-nowrap">
                     <div class="text-sm font-medium text-gray-900">
                         {{ isset($mouvement['date_operation']) ? \Carbon\Carbon::parse($mouvement['date_operation'])->format('d/m/Y') : \Carbon\Carbon::parse($mouvement['created_at'])->format('d/m/Y') }}
                     </div>
@@ -278,6 +355,20 @@
                     @endif
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap">
+                    @if($mouvement['type'] === 'depot' && isset($mouvement['cycle']))
+                        <div class="text-sm font-medium text-blue-700">
+                            Cycle {{ $mouvement['cycle']['numero_cycle'] }}
+                        </div>
+                        <div class="text-xs text-blue-600">
+                            {{ $mouvement['cycle']['nom'] ?? '' }}
+                        </div>
+                    @elseif($mouvement['type'] === 'retrait')
+                        <div class="text-xs text-gray-400">
+                            N/A
+                        </div>
+                    @endif
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap">
                     <div class="text-sm font-medium {{ $mouvement['type'] === 'depot' ? 'text-green-600' : 'text-red-600' }}">
                         {{ $mouvement['type'] === 'depot' ? '+' : '-' }}
                         {{ number_format($mouvement['montant'], 2, ',', ' ') }} {{ $mouvement['devise'] ?? $compte->devise }}
@@ -291,7 +382,7 @@
             </tr>
             @empty
             <tr>
-                <td colspan="6" class="px-6 py-12 text-center">
+                <td colspan="7" class="px-6 py-12 text-center">
                     <div class="text-gray-400 mb-4">
                         <i class="fas fa-piggy-bank text-4xl"></i>
                     </div>
@@ -442,6 +533,57 @@
                 this.style.transform = 'translateY(0)';
             });
         });
+
+
+        // Ajoutez ce code dans votre section <script>
+
+// Filtrage par cycle
+document.addEventListener('DOMContentLoaded', function() {
+    const filterCycle = document.getElementById('filterCycle');
+    const mouvementRows = document.querySelectorAll('.mouvement-row');
+    const filterButtons = document.querySelectorAll('.filter-btn');
+    
+    if (filterCycle) {
+        filterCycle.addEventListener('change', function() {
+            const selectedCycleId = this.value;
+            
+            // Réinitialiser aussi les boutons de filtre de type
+            filterButtons.forEach(btn => {
+                if (btn.dataset.type === 'tous') {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
+            });
+            
+            mouvementRows.forEach(row => {
+                const rowCycleId = row.dataset.cycleId;
+                
+                if (!selectedCycleId) {
+                    row.classList.remove('hidden');
+                } else if (row.dataset.type === 'depot' && rowCycleId == selectedCycleId) {
+                    // Note: rowCycleId est une chaîne, selectedCycleId est une chaîne
+                    row.classList.remove('hidden');
+                } else if (row.dataset.type === 'retrait' && !selectedCycleId) {
+                    row.classList.remove('hidden');
+                } else {
+                    row.classList.add('hidden');
+                }
+            });
+        });
+    }
+    
+    // Pour que le filtre par type réinitialise aussi le filtre cycle
+    filterButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            if (filterCycle) {
+                filterCycle.value = ''; // Réinitialiser le filtre cycle
+            }
+        });
+    });
+});
+// Modifiez aussi les lignes pour inclure l'attribut data-cycle-id
+// Dans votre code PHP, ajoutez data-cycle-id="{{ $mouvement['cycle_id'] ?? '' }}" à chaque ligne
     </script>
 </body>
 </html>

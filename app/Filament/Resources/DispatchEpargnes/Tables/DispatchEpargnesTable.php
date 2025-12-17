@@ -4,6 +4,7 @@ namespace App\Filament\Resources\DispatchEpargnes\Tables;
 
 use App\Models\Client;
 use App\Models\Compte;
+use App\Models\MouvementEpargne;
 use App\Models\User;
 use App\Models\CompteTransitoire;
 use App\Models\Epargne;
@@ -285,98 +286,118 @@ class DispatchEpargnesTable
     /**
      * Traiter le dispatch
      */
-    private static function processDispatch(array $data): void
-    {
-        try {
-            DB::transaction(function () use ($data) {
-                $epargne = Epargne::findOrFail($data['epargne_id']);
-                $montantTotal = $epargne->montant;
-                $isGroupe = $epargne->type_epargne === 'groupe_solidaire';
+   private static function processDispatch(array $data): void
+{
+    try {
+        DB::transaction(function () use ($data) {
+            $epargne = Epargne::findOrFail($data['epargne_id']);
+            $montantTotal = $epargne->montant;
+            $isGroupe = $epargne->type_epargne === 'groupe_solidaire';
+            
+            // Vérification solde agent
+            $compteTransitoire = CompteTransitoire::where('user_id', $epargne->user_id)
+                ->where('devise', $epargne->devise)
+                ->first();
                 
-                // CORRECTION : Vérification finale du solde existant dans la bonne devise
-                $compteTransitoire = CompteTransitoire::where('user_id', $epargne->user_id)
+            if (!$compteTransitoire || $compteTransitoire->solde < $montantTotal) {
+                throw new \Exception("Fonds insuffisants dans le compte transitoire.");
+            }
+            
+            // Pour les individuels, préparer répartition
+            if (!$isGroupe) {
+                $data['repartition'] = [[
+                    'membre_id' => $epargne->client_id,
+                    'membre_nom' => $epargne->client_nom,
+                    'montant' => $montantTotal
+                ]];
+            }
+            
+            $totalReparti = collect($data['repartition'])->sum('montant');
+            
+            if (abs($totalReparti - $montantTotal) > 0.01) {
+                throw new \Exception("Total réparti ({$totalReparti}) ≠ montant collecté ({$montantTotal}).");
+            }
+            
+            // Débiter le compte transitoire
+            $compteTransitoire->solde -= $montantTotal;
+            $compteTransitoire->save();
+            
+            // Créditer les comptes épargne et créer des mouvements
+            foreach ($data['repartition'] as $repartition) {
+                $membreId = $repartition['membre_id'];
+                $montantMembre = $repartition['montant'];
+                
+                if ($montantMembre <= 0) continue;
+                
+                // Vérifier/créer compte épargne
+                $compteEpargne = CompteEpargne::where('client_id', $membreId)
                     ->where('devise', $epargne->devise)
                     ->first();
-                    
-                if (!$compteTransitoire || $compteTransitoire->solde < $montantTotal) {
-                    throw new \Exception("L'agent ne dispose pas de suffisamment de fonds dans son compte transitoire {$epargne->devise}.");
+                
+                if (!$compteEpargne) {
+                    $compteEpargne = new CompteEpargne();
+                    $compteEpargne->client_id = $membreId;
+                    $compteEpargne->devise = $epargne->devise;
+                    $compteEpargne->solde = 0;
+                    $compteEpargne->numero_compte = CompteEpargne::genererNumeroCompte('individuel');
+                    $compteEpargne->type_compte = 'individuel';
+                    $compteEpargne->statut = 'actif';
+                    $compteEpargne->taux_interet = 2.5;
+                    $compteEpargne->solde_minimum = 0;
+                    $compteEpargne->conditions = 'Compte épargne standard';
+                    $compteEpargne->date_ouverture = now();
+                    $compteEpargne->user_id = Auth::id();
                 }
                 
-                // Pour les individuels, on prépare une répartition automatique
-                if (!$isGroupe) {
-                    $data['repartition'] = [
-                        [
-                            'membre_id' => $epargne->client_id,
-                            'membre_nom' => $epargne->client_nom,
-                            'montant' => $montantTotal
-                        ]
-                    ];
-                }
+                // Créditer le compte épargne
+                $soldeAvant = $compteEpargne->solde;
+                $compteEpargne->solde += $montantMembre;
+                $compteEpargne->save();
                 
-                $totalReparti = collect($data['repartition'])->sum('montant');
-                
-                // Vérifier que le total réparti correspond au montant total
-                if (abs($totalReparti - $montantTotal) > 0.01) {
-                    throw new \Exception("Le total réparti ({$totalReparti}) ne correspond pas au montant collecté ({$montantTotal}).");
-                }
-                
-                // CORRECTION : Débiter le compte transitoire existant de l'agent dans la bonne devise
-                $compteTransitoire->solde -= $montantTotal;
-                $compteTransitoire->save();
-                
-                // Créditer les comptes épargne des bénéficiaires
-                foreach ($data['repartition'] as $repartition) {
-                    $membreId = $repartition['membre_id'];
-                    $montantMembre = $repartition['montant'];
-                    
-                    if ($montantMembre <= 0) continue;
-                    
-                    // Vérifier si le compte épargne existe déjà
-                    $compteEpargne = CompteEpargne::where('client_id', $membreId)
-                        ->where('devise', $epargne->devise)
-                        ->first();
-                    
-                    if (!$compteEpargne) {
-                        // Créer un nouveau compte épargne
-                        $compteEpargne = new CompteEpargne();
-                        $compteEpargne->client_id = $membreId;
-                        $compteEpargne->devise = $epargne->devise;
-                        $compteEpargne->solde = 0;
-                        $compteEpargne->numero_compte = CompteEpargne::genererNumeroCompte('individuel');
-                        $compteEpargne->type_compte = 'individuel';
-                        $compteEpargne->statut = 'actif';
-                        $compteEpargne->taux_interet = 2.5;
-                        $compteEpargne->solde_minimum = 0;
-                        $compteEpargne->conditions = 'Compte épargne standard';
-                        $compteEpargne->date_ouverture = now();
-                        $compteEpargne->user_id = Auth::id();
-                    }
-                    
-                    // Créditer le compte épargne du membre
-                    $ancienSolde = $compteEpargne->solde;
-                    $compteEpargne->solde += $montantMembre;
-                    $compteEpargne->save();
-                }
-                
-                // Marquer l'épargne comme validée
-                $epargne->statut = 'valide';
-                $epargne->save();
-                
-                $typeLabel = $isGroupe ? 'du groupe' : 'individuelle';
-                $nouveauSolde = $compteTransitoire->solde;
-                
-                Notification::make()
-                    ->title('Dispatch Réussi')
-                    ->body("Le montant de {$montantTotal} {$epargne->devise} a été réparti vers les comptes épargne {$typeLabel}. Solde restant agent: {$nouveauSolde} {$epargne->devise}")
-                    ->success()
-                    ->send();
-            });
-        } catch (\Exception $e) {
+                // CRÉER LE MOUVEMENT D'ÉPARGNE
+                // MouvementEpargne::create([
+                //     'compte_epargne_id' => $compteEpargne->id,
+                //     'epargne_id' => $epargne->id,
+                //     'type' => 'depot',
+                //     'montant' => $montantMembre,
+                //     'solde_avant' => $soldeAvant,
+                //     'solde_apres' => $compteEpargne->solde,
+                //     'devise' => $epargne->devise,
+                //     'description' => "Dépôt épargne - " . ($isGroupe ? "Groupe" : "Individuel"),
+                //     'reference' => 'EPG-' . $epargne->id . '-' . $membreId,
+                //     'operateur_nom' => Auth::user()->name ?? 'Système',
+                //     'operateur_id' => Auth::id(),
+                // ]);
+
+
+                   // Log pour le suivi
+                \Illuminate\Support\Facades\Log::info('Dispatch épargne', [
+                    'epargne_id' => $epargne->id,
+                    'compte_epargne_id' => $compteEpargne->id,
+                    'montant' => $montantMembre,
+                    'devise' => $epargne->devise,
+                    'solde_avant' => $soldeAvant,
+                    'solde_apres' => $compteEpargne->solde,
+                    'sans_mouvement_epargne' => true
+                ]);
+            }
+            
+            // Marquer l'épargne comme validée
+            $epargne->statut = 'valide';
+            $epargne->save();
+            
             Notification::make()
-                ->title('Erreur de Dispatch')
-                ->body($e->getMessage())
-                ->danger()
+                ->title('Dispatch Réussi')
+                ->body("Montant dispatché et SMS envoyés aux bénéficiaires")
+                ->success()
                 ->send();
-        }
+        });
+    } catch (\Exception $e) {
+        Notification::make()
+            ->title('Erreur de Dispatch')
+            ->body($e->getMessage())
+            ->danger()
+            ->send();
     }
+}
 }

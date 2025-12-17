@@ -295,6 +295,11 @@ class Mouvement extends Model
         }
     }
 
+        public function compteEpargne()
+    {
+        return $this->belongsTo(CompteEpargne::class, 'compte_epargne_id');
+    }
+
     /**
      * Remplir automatiquement les informations du mouvement
      */

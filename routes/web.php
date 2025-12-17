@@ -12,12 +12,14 @@ use App\Http\Controllers\PaiementGroupeController;
 use App\Http\Controllers\RapportTresorerieController;
 use App\Http\Controllers\CompteEpargneController;
 use App\Models\Client;
+use App\Models\CompteTransitoire;
 use App\Services\CycleService;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Request;
+use Illuminate\Support\Facades\Request\Http;
 use Illuminate\Support\Facades\DB;
+use App\Services\SmsService;
 use App\Models\Mouvement;
 
 Route::get('/', function () {
@@ -113,64 +115,64 @@ Route::get('/credits/approval-groupe-final/{credit_groupe_id}', function($credit
     }
 })->name('credits.approval-groupe-final');
 
-// Route de test pour crédit groupe
-Route::get('/test-credit-groupe/{id}', function($id) {
-    echo "<h1>Test Crédit Groupe ID: $id</h1>";
+// // Route de test pour crédit groupe
+// Route::get('/test-credit-groupe/{id}', function($id) {
+//     echo "<h1>Test Crédit Groupe ID: $id</h1>";
     
-    try {
-        $credit = App\Models\CreditGroupe::find($id);
+//     try {
+//         $credit = App\Models\CreditGroupe::find($id);
         
-        if (!$credit) {
-            throw new Exception("Crédit groupe non trouvé");
-        }
+//         if (!$credit) {
+//             throw new Exception("Crédit groupe non trouvé");
+//         }
 
-        echo "<h2>1. Informations du crédit</h2>";
-        echo "<pre>" . print_r($credit->toArray(), true) . "</pre>";
+//         echo "<h2>1. Informations du crédit</h2>";
+//         echo "<pre>" . print_r($credit->toArray(), true) . "</pre>";
 
-        echo "<h2>2. Informations du compte</h2>";
-        $compte = $credit->compte;
-        if ($compte) {
-            echo "<pre>" . print_r($compte->toArray(), true) . "</pre>";
-        } else {
-            echo "❌ Compte non trouvé";
-        }
+//         echo "<h2>2. Informations du compte</h2>";
+//         $compte = $credit->compte;
+//         if ($compte) {
+//             echo "<pre>" . print_r($compte->toArray(), true) . "</pre>";
+//         } else {
+//             echo "❌ Compte non trouvé";
+//         }
 
-        echo "<h2>3. Liste des membres</h2>";
-        $membres = $credit->membres;
-        echo "<pre>" . print_r($membres->toArray(), true) . "</pre>";
+//         echo "<h2>3. Liste des membres</h2>";
+//         $membres = $credit->membres;
+//         echo "<pre>" . print_r($membres->toArray(), true) . "</pre>";
 
-        echo "<h2>4. Test de répartition</h2>";
-        $montantsTest = [];
-        foreach ($membres as $membre) {
-            $montantsTest[$membre->id] = 100;
-        }
+//         echo "<h2>4. Test de répartition</h2>";
+//         $montantsTest = [];
+//         foreach ($membres as $membre) {
+//             $montantsTest[$membre->id] = 100;
+//         }
         
-        $repartition = App\Models\CreditGroupe::calculerRepartitionAvecMontants($montantsTest, 300);
-        echo "<pre>" . print_r($repartition, true) . "</pre>";
+//         $repartition = App\Models\CreditGroupe::calculerRepartitionAvecMontants($montantsTest, 300);
+//         echo "<pre>" . print_r($repartition, true) . "</pre>";
 
-        echo "<h2>5. Test création crédits</h2>";
-        try {
-            DB::beginTransaction();
+//         echo "<h2>5. Test création crédits</h2>";
+//         try {
+//             DB::beginTransaction();
             
-            $credit->update(['montants_membres' => $montantsTest]);
-            $credit->creerCreditsIndividuels();
+//             $credit->update(['montants_membres' => $montantsTest]);
+//             $credit->creerCreditsIndividuels();
             
-            DB::rollBack();
-            echo "✅ Test réussi - Transaction annulée";
+//             DB::rollBack();
+//             echo "✅ Test réussi - Transaction annulée";
             
-        } catch (Exception $e) {
-            DB::rollBack();
-            echo "❌ Erreur: " . $e->getMessage() . "<br>";
-            echo "Fichier: " . $e->getFile() . " Ligne: " . $e->getLine() . "<br>";
-            echo "<pre>" . $e->getTraceAsString() . "</pre>";
-        }
+//         } catch (Exception $e) {
+//             DB::rollBack();
+//             echo "❌ Erreur: " . $e->getMessage() . "<br>";
+//             echo "Fichier: " . $e->getFile() . " Ligne: " . $e->getLine() . "<br>";
+//             echo "<pre>" . $e->getTraceAsString() . "</pre>";
+//         }
 
-    } catch (Exception $e) {
-        echo "❌ Erreur générale: " . $e->getMessage() . "<br>";
-        echo "Fichier: " . $e->getFile() . " Ligne: " . $e->getLine() . "<br>";
-        echo "<pre>" . $e->getTraceAsString() . "</pre>";
-    }
-});
+//     } catch (Exception $e) {
+//         echo "❌ Erreur générale: " . $e->getMessage() . "<br>";
+//         echo "Fichier: " . $e->getFile() . " Ligne: " . $e->getLine() . "<br>";
+//         echo "<pre>" . $e->getTraceAsString() . "</pre>";
+//     }
+// });
 
 // Dans web.php
 Route::get('/credits/groupe/{id}/details', [CreditController::class, 'showDetailsGroupe'])->name('credits.details-groupe');
@@ -188,87 +190,87 @@ Route::get('/paiement/{paiement}/bordereau', [CreditController::class, 'generate
 // Routes pour l'historique des paiements
 Route::get('/credits/{credit}/historique-paiements', [CreditController::class, 'showHistoriquePaiements'])->name('credits.historique-paiements');
 
-Route::get('/test-approval-groupe/{id}', [App\Http\Controllers\CreditController::class, 'testApprovalGroupe']);
+Route::get('/test-approval-groupe/{id}', [CreditController::class, 'testApprovalGroupe']);
 
 Route::get('/credits/{credit_id}/echeancier', [CreditController::class, 'showEcheancier'])->name('credits.echeancier');
 
 
-// Dans routes/web.php
-Route::get('/test-debit-direct/{userId}/{devise}/{montant}', function ($userId, $devise, $montant) {
-    try {
-        Log::info('=== TEST DÉBIT DIRECT ===');
+// // Dans routes/web.php
+// Route::get('/test-debit-direct/{userId}/{devise}/{montant}', function ($userId, $devise, $montant) {
+//     try {
+//         Log::info('=== TEST DÉBIT DIRECT ===');
         
-        // 1. Vérifier le compte transitoire
-        $compte = \App\Models\CompteTransitoire::where('user_id', $userId)
-            ->where('devise', $devise)
-            ->first();
+//         // 1. Vérifier le compte transitoire
+//         $compte = CompteTransitoire::where('user_id', $userId)
+//             ->where('devise', $devise)
+//             ->first();
             
-        if (!$compte) {
-            return response()->json(['error' => 'Compte transitoire introuvable'], 404);
-        }
+//         if (!$compte) {
+//             return response()->json(['error' => 'Compte transitoire introuvable'], 404);
+//         }
         
-        Log::info('Compte trouvé', [
-            'compte_id' => $compte->id,
-            'solde_avant' => $compte->solde,
-            'user_id' => $compte->user_id,
-            'devise' => $compte->devise
-        ]);
+//         Log::info('Compte trouvé', [
+//             'compte_id' => $compte->id,
+//             'solde_avant' => $compte->solde,
+//             'user_id' => $compte->user_id,
+//             'devise' => $compte->devise
+//         ]);
         
-        // 2. Tester le débit directement
-        $ancienSolde = $compte->solde;
-        $montant = (float)$montant;
+//         // 2. Tester le débit directement
+//         $ancienSolde = $compte->solde;
+//         $montant = (float)$montant;
         
-        Log::info('Tentative de débit', [
-            'ancien_solde' => $ancienSolde,
-            'montant' => $montant
-        ]);
+//         Log::info('Tentative de débit', [
+//             'ancien_solde' => $ancienSolde,
+//             'montant' => $montant
+//         ]);
         
-        // Méthode 1: Utiliser la méthode debit()
-        $resultat = $compte->debit($montant);
+//         // Méthode 1: Utiliser la méthode debit()
+//         $resultat = $compte->debit($montant);
         
-        Log::info('Résultat méthode debit()', ['resultat' => $resultat]);
+//         Log::info('Résultat méthode debit()', ['resultat' => $resultat]);
         
-        // Recharger le compte
-        $compte->refresh();
+//         // Recharger le compte
+//         $compte->refresh();
         
-        Log::info('Après débit', [
-            'nouveau_solde' => $compte->solde,
-            'difference' => $ancienSolde - $compte->solde
-        ]);
+//         Log::info('Après débit', [
+//             'nouveau_solde' => $compte->solde,
+//             'difference' => $ancienSolde - $compte->solde
+//         ]);
         
-        // Méthode 2: Débit manuel
-        $compte2 = \App\Models\CompteTransitoire::find($compte->id);
-        $compte2->solde = $compte2->solde - $montant;
-        $resultat2 = $compte2->save();
+//         // Méthode 2: Débit manuel
+//         $compte2 = CompteTransitoire::find($compte->id);
+//         $compte2->solde = $compte2->solde - $montant;
+//         $resultat2 = $compte2->save();
         
-        Log::info('Résultat débit manuel', [
-            'resultat_save' => $resultat2,
-            'solde_apres_manuel' => $compte2->solde
-        ]);
+//         Log::info('Résultat débit manuel', [
+//             'resultat_save' => $resultat2,
+//             'solde_apres_manuel' => $compte2->solde
+//         ]);
         
-        return response()->json([
-            'success' => true,
-            'compte_id' => $compte->id,
-            'debit_method_result' => $resultat,
-            'manual_debit_result' => $resultat2,
-            'solde_avant' => $ancienSolde,
-            'solde_apres' => $compte->solde,
-            'solde_apres_manuel' => $compte2->solde,
-            'devise' => $devise
-        ]);
+//         return response()->json([
+//             'success' => true,
+//             'compte_id' => $compte->id,
+//             'debit_method_result' => $resultat,
+//             'manual_debit_result' => $resultat2,
+//             'solde_avant' => $ancienSolde,
+//             'solde_apres' => $compte->solde,
+//             'solde_apres_manuel' => $compte2->solde,
+//             'devise' => $devise
+//         ]);
         
-    } catch (\Exception $e) {
-        Log::error('Erreur test débit direct', [
-            'error' => $e->getMessage(),
-            'trace' => $e->getTraceAsString()
-        ]);
+//     } catch (\Exception $e) {
+//         Log::error('Erreur test débit direct', [
+//             'error' => $e->getMessage(),
+//             'trace' => $e->getTraceAsString()
+//         ]);
         
-        return response()->json([
-            'error' => $e->getMessage(),
-            'trace' => $e->getTraceAsString()
-        ], 500);
-    }
-});
+//         return response()->json([
+//             'error' => $e->getMessage(),
+//             'trace' => $e->getTraceAsString()
+//         ], 500);
+//     }
+// });
 
 Route::get('/comptes/{compte_id}/export-releve', [CompteController::class, 'exportReleve'])
     ->name('comptes.export-releve');
@@ -329,3 +331,285 @@ Route::get('/client-image/{filename}', function ($filename) {
 
 Route::get('/paiement-credits-groupe', [PaiementGroupeController::class, 'index'])->name('paiement.credits.groupe');
 Route::post('/paiement-credits-groupe/processer', [PaiementGroupeController::class, 'processerPaiements'])->name('paiement.credits.groupe.processer');
+
+
+
+
+
+Route::prefix('sms')->group(function () {
+    
+    // Envoyer à tous les clients
+    Route::get('/send-to-all', function () {
+        try {
+            $clients = Client::whereNotNull('telephone')
+                ->where('sms_notifications', true)
+                ->get();
+            
+            $smsService = app(SmsService::class);
+            $results = [];
+            
+            foreach ($clients as $client) {
+                $message = "Cher(e) {$client->nom_complet},\nNouvelles de TUMAINI LETU!";
+                
+                $result = $smsService->sendTransactionSMS(
+                    $client->telephone,
+                    $message,
+                    'broadcast_' . time() . '_' . $client->id
+                );
+                
+                $results[] = [
+                    'client' => $client->nom_complet,
+                    'phone' => $client->telephone,
+                    'status' => $result['status'],
+                    'message_id' => $result['message_id'] ?? null,
+                ];
+                
+                // Pause pour éviter le spam
+                sleep(1);
+            }
+            
+            return response()->json([
+                'total_sent' => count($results),
+                'successful' => count(array_filter($results, fn($r) => $r['status'] === 'S')),
+                'results' => $results,
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('Erreur envoi masse SMS', ['error' => $e->getMessage()]);
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    });
+    
+    // Envoyer à des numéros spécifiques
+    Route::post('/send-custom', function () {
+        request()->validate([
+            'numbers' => 'required|string',
+            'message' => 'required|string|max:160',
+        ]);
+        
+        $numbers = array_filter(
+            explode("\n", request('numbers')),
+            fn($n) => !empty(trim($n))
+        );
+        
+        $smsService = app(SmsService::class);
+        $results = [];
+        
+        foreach ($numbers as $number) {
+            $cleanNumber = preg_replace('/[^0-9]/', '', trim($number));
+            
+            if (!str_starts_with($cleanNumber, '243')) {
+                $cleanNumber = '243' . ltrim($cleanNumber, '0');
+            }
+            
+            $result = $smsService->sendTransactionSMS(
+                $cleanNumber,
+                request('message'),
+                'custom_' . time() . '_' . substr(md5($cleanNumber), 0, 6)
+            );
+            
+            $results[] = [
+                'number' => $cleanNumber,
+                'status' => $result['status'],
+                'message' => $result['remarks'] ?? 'N/A',
+            ];
+            
+            sleep(1);
+        }
+        
+        return response()->json([
+            'sent_to' => count($results),
+            'results' => $results,
+        ]);
+    });
+    
+    // Vérifier/activer les SMS pour un client
+    Route::post('/client/{client}/toggle-sms', function (Client $client) {
+        $enabled = request('enabled', true);
+        $client->update(['sms_notifications' => $enabled]);
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'SMS ' . ($enabled ? 'activés' : 'désactivés') . ' pour ' . $client->nom_complet,
+            'client' => $client->only(['id', 'nom_complet', 'telephone', 'sms_notifications']),
+        ]);
+    });
+});
+
+
+// Dans routes/web.php, ajoutez temporairement :
+
+Route::get('/test-soldes', function() {
+    $comptes = App\Models\CompteEpargne::take(95)->get();
+    
+    $resultats = [];
+    
+    foreach ($comptes as $compte) {
+        // Calculer les épargnes
+        $totalEpargnes = 0;
+        if ($compte->type_compte === 'individuel' && $compte->client_id) {
+            $totalEpargnes = App\Models\Epargne::where('client_id', $compte->client_id)
+                ->where('statut', 'valide')
+                ->where('devise', $compte->devise)
+                ->sum('montant');
+        }
+        
+        // Calculer les retraits
+        $totalRetraits = App\Models\Mouvement::where('compte_epargne_id', $compte->id)
+            ->where('type', 'retrait')
+            ->sum('montant');
+        
+        $soldeCalcule = $totalEpargnes - $totalRetraits;
+        
+        $resultats[] = [
+            'numero_compte' => $compte->numero_compte,
+            'client' => $compte->nom_complet,
+            'solde_actuel' => $compte->solde,
+            'total_epargnes' => $totalEpargnes,
+            'total_retraits' => $totalRetraits,
+            'solde_calcule' => $soldeCalcule,
+            'ecart' => $compte->solde - $soldeCalcule,
+        ];
+    }
+    
+    return response()->json($resultats);
+});
+
+
+
+
+Route::get('/debug-compte/{numero}', function($numero) {
+    $compte = App\Models\CompteEpargne::where('numero_compte', $numero)->first();
+    
+    if (!$compte) {
+        return "Compte non trouvé";
+    }
+    
+    // 1. Les épargnes originales
+    $epargnes = App\Models\Epargne::where('client_id', $compte->client_id)
+        ->where('statut', 'valide')
+        ->where('devise', $compte->devise)
+        ->get(['id', 'montant', 'created_at', 'reference']);
+    
+    // 2. Les mouvements d'épargne (potentiels doublons)
+    $mouvementsEpargne = App\Models\MouvementEpargne::where('compte_epargne_id', $compte->id)
+        ->where('type', 'depot')
+        ->get(['id', 'montant', 'epargne_id', 'created_at', 'reference']);
+    
+    // 3. Les retraits
+    $retraits = App\Models\Mouvement::where('compte_epargne_id', $compte->id)
+        ->where('type', 'retrait')
+        ->get(['id', 'montant', 'created_at', 'reference']);
+    
+    $resultat = [
+        'compte' => [
+            'numero' => $compte->numero_compte,
+            'client' => $compte->nom_complet,
+            'solde_actuel' => $compte->solde,
+        ],
+        'epargnes' => [
+            'total' => $epargnes->sum('montant'),
+            'nombre' => $epargnes->count(),
+            'liste' => $epargnes
+        ],
+        'mouvements_epargne' => [
+            'total' => $mouvementsEpargne->sum('montant'),
+            'nombre' => $mouvementsEpargne->count(),
+            'liste' => $mouvementsEpargne
+        ],
+        'retraits' => [
+            'total' => $retraits->sum('montant'),
+            'nombre' => $retraits->count(),
+            'liste' => $retraits
+        ],
+        'calculs' => [
+            'total_epargnes_seulement' => $epargnes->sum('montant'),
+            'total_mouvements_epargne_seulement' => $mouvementsEpargne->sum('montant'),
+            'solde_theorique_epargnes_seulement' => $epargnes->sum('montant') - $retraits->sum('montant'),
+            'solde_theorique_mouvements_seulement' => $mouvementsEpargne->sum('montant') - $retraits->sum('montant'),
+        ]
+    ];
+    
+    return response()->json($resultat, 200, [], JSON_PRETTY_PRINT);
+});
+
+
+
+Route::get('/verifier-doublons', function() {
+    $resultats = [];
+    
+    // Vérifions les 5 premiers comptes
+    $comptes = App\Models\CompteEpargne::take(95)->get();
+    
+    foreach ($comptes as $compte) {
+        // 1. Épargnes originales
+        $epargnes = App\Models\Epargne::where('client_id', $compte->client_id)
+            ->where('statut', 'valide')
+            ->where('devise', $compte->devise)
+            ->sum('montant');
+            
+        // 2. Mouvements d'épargne
+        $mouvementsEpargne = App\Models\MouvementEpargne::where('compte_epargne_id', $compte->id)
+            ->where('type', 'depot')
+            ->sum('montant');
+            
+        // 3. Retraits
+        $retraits = App\Models\Mouvement::where('compte_epargne_id', $compte->id)
+            ->where('type', 'retrait')
+            ->sum('montant');
+            
+        $resultats[] = [
+            'compte' => $compte->numero_compte,
+            'client' => $compte->nom_complet,
+            'solde_actuel' => $compte->solde,
+            'epargnes_originales' => $epargnes,
+            'mouvements_epargne' => $mouvementsEpargne,
+            'retraits' => $retraits,
+            'solde_epargnes_seulement' => $epargnes - $retraits,
+            'solde_mouvements_seulement' => $mouvementsEpargne - $retraits,
+            'doublon_detecte' => ($epargnes > 0 && $mouvementsEpargne > 0) ? 'OUI' : 'NON',
+            'difference_epargnes_vs_mouvements' => $epargnes - $mouvementsEpargne,
+        ];
+    }
+    
+    return response()->json($resultats, 200, [], JSON_PRETTY_PRINT);
+});
+
+
+
+Route::get('/verifier-soldes-finaux', function() {
+    $resultats = [];
+    
+    $comptes = App\Models\CompteEpargne::take(95)->get();
+    
+    foreach ($comptes as $compte) {
+        // Solde calculé depuis les épargnes VALIDES seulement
+        $totalEpargnes = 0;
+        if ($compte->type_compte === 'individuel' && $compte->client_id) {
+            $totalEpargnes = App\Models\Epargne::where('client_id', $compte->client_id)
+                ->where('statut', 'valide')
+                ->where('devise', $compte->devise)
+                ->sum('montant');
+        }
+        
+        $totalRetraits = App\Models\Mouvement::where('compte_epargne_id', $compte->id)
+            ->where('type', 'retrait')
+            ->sum('montant');
+            
+        $soldeCalcule = $totalEpargnes - $totalRetraits;
+        $ecart = abs($compte->solde - $soldeCalcule);
+        
+        $resultats[] = [
+            'compte' => $compte->numero_compte,
+            'client' => $compte->nom_complet,
+            'solde_actuel' => $compte->solde,
+            'epargnes_valides' => $totalEpargnes,
+            'retraits' => $totalRetraits,
+            'solde_calcule' => $soldeCalcule,
+            'ecart' => $ecart,
+            'statut' => $ecart < 0.01 ? '✅ OK' : '❌ INCOHERENT'
+        ];
+    }
+    
+    return response()->json($resultats, 200, [], JSON_PRETTY_PRINT);
+});

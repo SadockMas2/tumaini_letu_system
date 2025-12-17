@@ -104,7 +104,7 @@ class CompteEpargnesTable
                     ->icon('heroicon-o-eye')
                     ->color('info')
                     ->url(fn ($record) => route('comptes-epargne.details', ['compte_epargne_id' => $record->id]))
-                    ->visible(fn () => Auth::user()?->can('view_comptetransitoire')),
+                    ->visible(fn () => Auth::user()?->can('view_client')),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([

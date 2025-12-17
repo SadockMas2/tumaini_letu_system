@@ -153,11 +153,14 @@ return [
     Illuminate\Validation\ValidationServiceProvider::class,
     Illuminate\View\ViewServiceProvider::class, // 👈 très important
 
+
     /*
     * Application Service Providers...
     */
     App\Providers\AppServiceProvider::class,
     App\Providers\Filament\AdminPanelProvider::class,
+    // Spatie\LaravelSettings\LaravelSettingsServiceProvider::class,
+
 ],
 
 
