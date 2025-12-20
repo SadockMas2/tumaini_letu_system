@@ -36,6 +36,10 @@ class MouvementObserver
             'depense_diverse_comptabilite',
             'deblocage_caution_auto',
             'versement_agent',
+            'paiement_groupes',
+            'paiement_credit_groupe',
+            'paiement_credit_automatique',
+            
         ];
         
         if (in_array($mouvement->type_mouvement, $excludedTypes)) {

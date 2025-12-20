@@ -15,44 +15,65 @@ class CompteController extends Controller
         return redirect('/admin/comptes');
     }
 
-    public function details($compte_id)
-    {
-        $compte = Compte::with([
-            'credits' => function($query) {
-                $query->orderBy('created_at', 'desc');
-            },
-            'creditsGroupe' => function($query) {
-                $query->orderBy('created_at', 'desc');
-            },
-            'mouvements' => function($query) {
-                $query->orderBy('created_at', 'desc');
-            }
-        ])->findOrFail($compte_id);
+ public function details($compte_id)
+{
+    $compte = Compte::with([
+        'credits' => function($query) {
+            $query->orderBy('created_at', 'desc');
+        },
+        'creditsGroupe' => function($query) {
+            $query->orderBy('created_at', 'desc');
+        },
+        'mouvements' => function($query) {
+            $query->orderBy('created_at', 'desc');
+        }
+    ])->findOrFail($compte_id);
 
-        // Récupérer les mouvements avec pagination
-        $mouvements = Mouvement::where('compte_id', $compte_id)
-            ->orWhere('numero_compte', $compte->numero_compte)
-            ->orderBy('created_at', 'desc')
-            ->paginate(20);
+    // Récupérer tous les mouvements pour les statistiques
+    $tousMouvements = Mouvement::where('compte_id', $compte_id)
+        ->orWhere('numero_compte', $compte->numero_compte)
+        ->get();
 
-        // Calculer les statistiques des mouvements
-        $statsMouvements = [
-            'total_depots' => Mouvement::where('compte_id', $compte_id)
-                ->where('type', 'depot')
-                ->sum('montant'),
-            'total_retraits' => Mouvement::where('compte_id', $compte_id)
-                ->where('type', 'retrait')
-                ->sum('montant'),
-            'nombre_depots' => Mouvement::where('compte_id', $compte_id)
-                ->where('type', 'depot')
-                ->count(),
-            'nombre_retraits' => Mouvement::where('compte_id', $compte_id)
-                ->where('type', 'retrait')
-                ->count(),
-        ];
+    // Calculer les statistiques avec la logique correcte
+    $totalDepots = 0;
+    $totalRetraits = 0;
+    $nombreDepots = 0;
+    $nombreRetraits = 0;
 
-        return view('comptes.details', compact('compte', 'mouvements', 'statsMouvements'));
+    foreach ($tousMouvements as $mouvement) {
+        $typeAffichage = \App\Helpers\MouvementHelper::getTypeAffichage($mouvement->type_mouvement);
+        $montant = floatval($mouvement->montant);
+        
+        // Ignorer les mouvements neutres (comme caution_bloquee avec montant 0)
+        if ($typeAffichage === 'neutre' && $montant == 0) {
+            continue;
+        }
+        
+        if ($typeAffichage === 'depot') {
+            $totalDepots += abs($montant);
+            $nombreDepots++;
+        } elseif ($typeAffichage === 'retrait') {
+            $totalRetraits += abs($montant);
+            $nombreRetraits++;
+        }
+        // Les types 'autre' ne sont pas comptés dans les statistiques
     }
+
+    $statsMouvements = [
+        'total_depots' => $totalDepots,
+        'total_retraits' => $totalRetraits,
+        'nombre_depots' => $nombreDepots,
+        'nombre_retraits' => $nombreRetraits,
+    ];
+
+    // Récupérer les mouvements avec pagination pour l'affichage
+    $mouvements = Mouvement::where('compte_id', $compte_id)
+        ->orWhere('numero_compte', $compte->numero_compte)
+        ->orderBy('created_at', 'desc')
+        ->paginate(20);
+
+    return view('comptes.details', compact('compte', 'mouvements', 'statsMouvements'));
+}
 
 
 public function exportReleve($compte_id)

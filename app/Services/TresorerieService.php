@@ -134,16 +134,18 @@ public function rapportInstantanee($date = null)
             'solde_total' => 0,
             'depots' => 0,
             'retraits' => 0,
-            'delaistages' => 0, // NOUVEAU: compteur spécifique pour délaistages
+            'delaistages' => 0,
             'operations' => 0,
+            'variation_nette' => 0, // NOUVEAU: variation nette (+/-)
             'caisses' => []
         ],
         'cdf' => [
             'solde_total' => 0,
             'depots' => 0,
             'retraits' => 0,
-            'delaistages' => 0, // NOUVEAU: compteur spécifique pour délaistages
+            'delaistages' => 0,
             'operations' => 0,
+            'variation_nette' => 0, // NOUVEAU: variation nette (+/-)
             'caisses' => []
         ],
         'mouvements_detail' => []
@@ -152,6 +154,7 @@ public function rapportInstantanee($date = null)
     foreach ($grandesCaisses as $caisse) {
         $mouvements = $caisse->mouvements;
         
+        // Séparer les dépôts (+) et retraits (-)
         $depots = $mouvements->where('type', 'depot')->sum('montant');
         $retraits = $mouvements->where('type', 'retrait')->sum('montant');
         
@@ -169,20 +172,27 @@ public function rapportInstantanee($date = null)
             'solde_final' => $caisse->solde,
             'depots' => $depots,
             'retraits' => $retraits,
-            'delaistages' => $delaistages, // NOUVEAU: inclure les délaistages par caisse
+            'delaistages' => $delaistages,
             'operations' => $operations,
+            'variation_nette' => $mouvementsJour, // NOUVEAU: variation (+/-)
             'mouvements' => $mouvements->map(function($mouvement) {
+                // Déterminer le signe selon le type
+                $signe = $mouvement->type === 'depot' ? '+' : '-';
+                $montantAvecSigne = $signe . ' ' . number_format($mouvement->montant, 2);
+                
                 return [
                     'type' => $mouvement->type,
                     'type_mouvement' => $mouvement->type_mouvement,
                     'montant' => $mouvement->montant,
+                    'montant_avec_signe' => $montantAvecSigne, // NOUVEAU: avec signe
                     'description' => $mouvement->description,
                     'nom_deposant' => $mouvement->nom_deposant,
                     'client_nom' => $mouvement->client_nom,
                     'operateur' => $mouvement->operateur->name ?? 'N/A',
                     'heure' => $mouvement->created_at->format('H:i:s'),
                     'solde_avant' => $mouvement->solde_avant,
-                    'solde_apres' => $mouvement->solde_apres
+                    'solde_apres' => $mouvement->solde_apres,
+                    'signe' => $signe // NOUVEAU: pour le formatage
                 ];
             })->values()
         ];
@@ -191,33 +201,41 @@ public function rapportInstantanee($date = null)
             $rapport['usd']['solde_total'] += $caisse->solde;
             $rapport['usd']['depots'] += $depots;
             $rapport['usd']['retraits'] += $retraits;
-            $rapport['usd']['delaistages'] += $delaistages; // NOUVEAU: cumul des délaistages USD
+            $rapport['usd']['delaistages'] += $delaistages;
             $rapport['usd']['operations'] += $operations;
+            $rapport['usd']['variation_nette'] += $mouvementsJour; // NOUVEAU
             $rapport['usd']['caisses'][] = $caisseData;
         } elseif ($caisse->devise === 'CDF') {
             $rapport['cdf']['solde_total'] += $caisse->solde;
             $rapport['cdf']['depots'] += $depots;
             $rapport['cdf']['retraits'] += $retraits;
-            $rapport['cdf']['delaistages'] += $delaistages; // NOUVEAU: cumul des délaistages CDF
+            $rapport['cdf']['delaistages'] += $delaistages;
             $rapport['cdf']['operations'] += $operations;
+            $rapport['cdf']['variation_nette'] += $mouvementsJour; // NOUVEAU
             $rapport['cdf']['caisses'][] = $caisseData;
         }
 
-        // Ajouter aux mouvements détaillés
+        // Ajouter aux mouvements détaillés avec signes
         foreach ($mouvements as $mouvement) {
+            $signe = $mouvement->type === 'depot' ? '+' : '-';
+            $montantAvecSigne = $signe . ' ' . number_format($mouvement->montant, 2);
+            
             $rapport['mouvements_detail'][] = [
                 'caisse' => $caisse->nom,
                 'devise' => $caisse->devise,
                 'type' => $mouvement->type,
                 'type_mouvement' => $mouvement->type_mouvement,
                 'montant' => $mouvement->montant,
+                'montant_avec_signe' => $montantAvecSigne, // NOUVEAU
                 'description' => $mouvement->description,
                 'nom_deposant' => $mouvement->nom_deposant,
                 'client_nom' => $mouvement->client_nom,
                 'operateur' => $mouvement->operateur->name ?? 'N/A',
                 'heure' => $mouvement->created_at->format('H:i:s'),
                 'solde_avant' => $mouvement->solde_avant,
-                'solde_apres' => $mouvement->solde_apres
+                'solde_apres' => $mouvement->solde_apres,
+                'signe' => $signe, // NOUVEAU
+                'couleur' => $mouvement->type === 'depot' ? 'success' : 'danger' // Pour le CSS
             ];
         }
     }
@@ -227,9 +245,17 @@ public function rapportInstantanee($date = null)
         return strtotime($a['heure']) - strtotime($b['heure']);
     });
 
+    // Calculer les totaux globaux avec signes
+    $rapport['total_global'] = [
+        'solde_total' => $rapport['usd']['solde_total'] + $rapport['cdf']['solde_total'],
+        'total_depots' => $rapport['usd']['depots'] + $rapport['cdf']['depots'],
+        'total_retraits' => $rapport['usd']['retraits'] + $rapport['cdf']['retraits'],
+        'total_operations' => $rapport['usd']['operations'] + $rapport['cdf']['operations'],
+        'variation_nette' => $rapport['usd']['variation_nette'] + $rapport['cdf']['variation_nette']
+    ];
+
     return $rapport;
 }
-
     /**
      * Générer un rapport pour une période spécifique
      */

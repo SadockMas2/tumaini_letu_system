@@ -168,17 +168,32 @@ class CompteEpargne extends Model
         return $this->save();
     }
 
-    public function getNomCompletAttribute(): string
-{
-    if ($this->type_compte === 'individuel' && $this->client) {
-        return $this->client->nom_complet;
-    } elseif ($this->type_compte === 'groupe_solidaire' && $this->groupeSolidaire) {
-        return $this->groupeSolidaire->nom_groupe . ' (Groupe)';
-    }
-    
-    return 'N/A';
-}
+    protected $appends = ['nom_complet'];
 
+public function getNomCompletAttribute(): string
+    {
+        if ($this->type_compte === 'individuel' && $this->client) {
+            return $this->client->nom_complet;
+        } elseif ($this->type_compte === 'groupe_solidaire' && $this->groupeSolidaire) {
+            return $this->groupeSolidaire->nom_groupe . ' (Groupe)';
+        }
+        
+        return 'N/A';
+    }
+
+
+       public function scopeSearchByNom($query, $search)
+    {
+        return $query->where(function($q) use ($search) {
+            $q->whereHas('client', function($clientQuery) use ($search) {
+                $clientQuery->where('nom', 'like', "%{$search}%")
+                    ->orWhere('postnom', 'like', "%{$search}%")
+                    ->orWhere('prenom', 'like', "%{$search}%");
+            })->orWhereHas('groupeSolidaire', function($groupeQuery) use ($search) {
+                $groupeQuery->where('nom_groupe', 'like', "%{$search}%");
+            });
+        });
+    }
 
 /**
  * Vérifier et corriger les soldes des comptes épargne
@@ -310,4 +325,8 @@ public function getSoldeCalculeAttribute(): float
     
     return $totalEpargnes - $totalRetraits;
 }
+
+    
+
+
 }

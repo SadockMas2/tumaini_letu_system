@@ -114,15 +114,15 @@ class EpargnesTable
             ])
 
             ->headerActions([
-                Action::make('create_epargne')
-                    ->label('Epargner')
-                    ->icon('heroicon-o-currency-dollar')
-                    ->visible(function () {
-                        /** @var User|null $user */
-                        $user = Auth::user();
-                        return $user && $user->can('create_epargne');
-                    })
-                    ->url(route('filament.admin.resources.epargnes.create')), // ✅ Correct pour création
+                // Action::make('create_epargne')
+                //     ->label('Epargner')
+                //     ->icon('heroicon-o-currency-dollar')
+                //     ->visible(function () {
+                //         /** @var User|null $user */
+                //         $user = Auth::user();
+                //         return $user && $user->can('create_epargne');
+                //     })
+                //     ->url(route('filament.admin.resources.epargnes.create')), // ✅ Correct pour création
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('type_epargne')

@@ -7,188 +7,298 @@
     <style>
         @page {
             size: A4;
-            margin: 0.5cm;
+            margin: 0.7cm;
         }
         
         body {
-            font-family: 'Arial Narrow', Arial, sans-serif;
+            font-family: 'Arial', sans-serif;
             margin: 0;
             padding: 0;
-            color: #000;
-            font-size: 12px;
-            line-height: 1.1;
+            color: #333;
+            font-size: 11px;
+            line-height: 1.2;
         }
         
         .header {
             display: flex;
             justify-content: space-between;
-            align-items: flex-start;
-            margin-bottom: 5px;
+            align-items: center;
+            margin-bottom: 8px;
+            padding-bottom: 5px;
+            border-bottom: 2px solid #2c3e50;
         }
         
         .header img {
-            height: 55px;
-            max-width: 100px;
+            height: 60px;
+            max-width: 110px;
             object-fit: contain;
         }
         
         .header-info {
             text-align: right;
+            font-size: 10px;
+            color: #2c3e50;
+        }
+        
+        .header-info strong {
             font-size: 12px;
-            flex: 1;
-            margin-left: 8px;
+            color: #2c3e50;
         }
         
         .separator {
-            border-top: 1px solid #000;
-            margin: 5px 0;
+            border-top: 1px solid #ddd;
+            margin: 8px 0;
         }
         
         .ref-date {
             display: flex;
             justify-content: space-between;
-            margin-bottom: 8px;
+            margin-bottom: 10px;
             font-weight: bold;
-            font-size: 12px;
+            font-size: 11px;
+            background-color: #f8f9fa;
+            padding: 6px 8px;
+            border-radius: 4px;
+            border-left: 4px solid #3498db;
         }
         
         .client-info {
-            margin-bottom: 8px;
-            padding: 6px;
+            margin-bottom: 12px;
+            padding: 8px;
             background-color: #f8f9fa;
-            border-radius: 3px;
+            border-radius: 5px;
+            border: 1px solid #e0e0e0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
         }
         
         .info-grid {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
-            gap: 4px;
-            margin-bottom: 8px;
+            gap: 6px;
+            margin-bottom: 5px;
         }
         
         .info-item {
             display: flex;
             justify-content: space-between;
-            padding: 1px 0;
+            padding: 3px 0;
         }
         
         .info-label {
             font-weight: bold;
-            min-width: 85px;
+            color: #2c3e50;
+            min-width: 90px;
+        }
+        
+        .info-value {
+            font-weight: normal;
+            color: #34495e;
         }
         
         .echeancier-table {
             width: 100%;
             border-collapse: collapse;
-            margin: 10px 0;
-            font-size: 14px;
-        }
-        
-        .echeancier-table th,
-        .echeancier-table td {
-            border: 1px solid #000;
-            padding: px 2px;
-            text-align: center;
+            margin: 12px 0;
+            font-size: 11px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
         }
         
         .echeancier-table th {
-            background-color: #f0f0f0;
+            background-color: #2c3e50;
+            color: white;
             font-weight: bold;
+            padding: 5px 5px;
+            text-align: center;
+            border: 1px solid #2c3e50;
+        }
+        
+        .echeancier-table td {
+            padding: 4px 5px;
+            text-align: center;
+            border: 1px solid #ddd;
+        }
+        
+        .echeancier-table tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        
+        .echeancier-table tr:hover {
+            background-color: #f5f5f5;
         }
         
         .echeancier-table .semaine {
-            width: 5%;
+            width: 6%;
+            font-weight: bold;
         }
         
         .echeancier-table .date {
-            width: 10%;
-        }
-        
-        .echeancier-table .capital-hebdo {
-            width: 10%;
+            width: 15%;
         }
         
         .echeancier-table .interet-hebdo {
-            width: 10%;
+            width: 15%;
+        }
+        
+        .echeancier-table .capital-hebdo {
+            width: 15%;
         }
         
         .echeancier-table .montant {
-            width: 10%;
+            width: 15%;
+            font-weight: bold;
         }
         
         .echeancier-table .capital {
-            width: 10%;
+            width: 15%;
         }
         
         .total-section {
-            margin-top: 90px;
-            padding: 6px;
+            margin-top: 15px;
+            padding: 10px;
             background-color: #f8f9fa;
-            border: 1px solid #000;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
         }
         
         .total-grid {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
-            gap: 6px;
+            gap: 10px;
             text-align: center;
         }
         
         .total-item {
-            padding: 3px;
+            padding: 5px;
+            border-right: 1px solid #ddd;
+        }
+        
+        .total-item:last-child {
+            border-right: none;
+        }
+        
+        .total-item div:first-child {
+            color: #2c3e50;
+            font-weight: bold;
+            margin-bottom: 3px;
         }
         
         .total-value {
             font-weight: bold;
-            font-size: 10px;
-            margin-top: 2px;
+            font-size: 12px;
+            color: #27ae60;
         }
         
         .signature-section {
-            margin-top: 15px;
+            margin-top: 20px;
             display: flex;
             justify-content: space-between;
+            padding-top: 15px;
+            border-top: 1px solid #ddd;
         }
         
         .signature {
             text-align: center;
-            border-top: 1px solid #000;
-            padding-top: 3px;
-            width: 150px;
-            font-size: 9px;
+            width: 180px;
+            font-size: 10px;
+            color: #666;
+        }
+        
+        .signature-line {
+            margin-top: 40px;
+            border-top: 1px solid #333;
+            padding-top: 5px;
         }
         
         .footer {
-            margin-top: 10px;
+            margin-top: 15px;
             text-align: center;
-            font-size: 7px;
-            color: #666;
+            font-size: 9px;
+            color: #7f8c8d;
+            padding-top: 8px;
+            border-top: 1px solid #eee;
         }
         
         @media print {
             .no-print { display: none; }
-            body { margin: 0; }
+            body { margin: 0.7cm; }
+            .echeancier-table { box-shadow: none; }
+            .client-info { box-shadow: none; }
+            .total-section { box-shadow: none; }
         }
         
         .notes {
-            margin-top: 8px;
-            padding: 5px;
-            background-color: #fff3cd;
+            margin-top: 12px;
+            padding: 8px 10px;
+            background-color: #fff8e1;
             border: 1px solid #ffeaa7;
-            border-radius: 3px;
-            font-size: 8px;
+            border-radius: 5px;
+            font-size: 10px;
+            color: #5d4037;
         }
         
         .title {
             text-align: center;
             font-weight: bold;
-            font-size: 12px;
-            margin: 5px 0 8px 0;
+            font-size: 14px;
+            margin: 10px 0 15px 0;
+            color: #2c3e50;
+            text-transform: uppercase;
+            letter-spacing: 1px;
         }
         
         .table-container {
-            max-height: 400px;
             overflow: hidden;
+        }
+        
+        .montant-cell {
+            font-family: 'Courier New', monospace;
+            letter-spacing: 0.5px;
+        }
+        
+        .totals-row {
+            background-color: #ecf0f1 !important;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+        
+        .print-btn {
+            padding: 8px 16px;
+            background: #3498db;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+            font-size: 11px;
+            transition: background 0.3s;
+        }
+        
+        .print-btn:hover {
+            background: #2980b9;
+        }
+        
+        .close-btn {
+            padding: 8px 16px;
+            background: #e74c3c;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+            font-size: 11px;
+            transition: background 0.3s;
+        }
+        
+        .close-btn:hover {
+            background: #c0392b;
+        }
+        
+        .btn-container {
+            text-align: center;
+            margin-top: 20px;
+            padding-top: 15px;
+            border-top: 1px solid #eee;
         }
     </style>
 </head>
@@ -198,24 +308,18 @@
         $dateDebut = $creditActif->date_octroi->copy()->addWeeks(2);
         $montantHebdo = $creditActif->remboursement_hebdo;
         
-        // Pourcentages pour les intérêts hebdomadaires
+        // Pourcentages pour les intérêts hebdomadaires (16 semaines)
         $pourcentageInterets = [
-            14.4154589019, 12.5668588387, 11.5077233696, 10.4164781435,
-            9.2926366489, 9.1352258629, 8.9432727627, 6.7153178136,
-            4.4503879929, 3.1475102776, 2.8057116447, 1.8057116447,
-            1.8057116447, 1.4057116447, 1.3057116447, 0.2805711645
+            14.4154589019438, 12.5668588386971, 11.5077233695784, 10.4164781434722,
+            9.292636648909, 9.13522586294972, 8.94327276265538, 6.71531781361745,
+            4.45038799289693, 3.14751027755479, 2.80571164465202, 1.80571164465202,
+            1.80571164465202, 1.40571164465202, 1.30571164465202, 0.280571164465202
         ];
         
-        // Pourcentages pour le capital hebdomadaire
-        $pourcentageCapital = [
-            4.66369746885061, 5.02282473831897, 5.22858283417971, 5.44057888793057,
-            5.65890741408505, 5.68948758492370, 5.72677828621991, 6.15960277500698,
-            6.59961036681905, 6.85272023393667, 6.91912140538681, 7.11339126213323,
-            7.11339126213323, 7.19109920483180, 7.21052619050644, 7.40968008473729
-        ];
-        
-        $capitalRestant = $creditActif->montant_total;
-        $capitalPrincipalRestant = $creditActif->montant_accorde;
+        $totalInterets = round($creditActif->montant_total - $creditActif->montant_accorde, 2);
+        $capitalRestant = round($creditActif->montant_total, 2);
+        $capitalPrincipalRestant = round($creditActif->montant_accorde, 2);
+        $montantHebdo = round($montantHebdo, 2);
         $echeances = [];
         $totalCapitalPaye = 0;
         $totalInteretsPayes = 0;
@@ -223,29 +327,31 @@
         for ($semaine = 1; $semaine <= 16; $semaine++) {
             $dateEcheance = $dateDebut->copy()->addWeeks($semaine - 1);
             
-            // Calcul des montants basés sur les pourcentages
-            $capitalHebdomadaire = ($creditActif->montant_accorde * $pourcentageCapital[$semaine - 1]) / 100;
-            $interetHebdomadaire = ($creditActif->montant_accorde * $pourcentageInterets[$semaine - 1]) / 100;
+            // Calcul de l'intérêt hebdomadaire basé sur le pourcentage
+            $interetHebdomadaire = round(($totalInterets * $pourcentageInterets[$semaine - 1]) / 100, 2);
+            
+            // Calcul du capital hebdomadaire (remboursement hebdo - intérêt)
+            $capitalHebdomadaire = round($montantHebdo - $interetHebdomadaire, 2);
             
             // Pour la dernière échéance, ajuster pour équilibrer
             if ($semaine == 16) {
                 $capitalHebdomadaire = $capitalPrincipalRestant;
-                $interetHebdomadaire = $montantHebdo - $capitalHebdomadaire;
+                $interetHebdomadaire = round($montantHebdo - $capitalHebdomadaire, 2);
             }
             
             // Limiter le capital au capital principal restant
             if ($capitalHebdomadaire > $capitalPrincipalRestant) {
                 $capitalHebdomadaire = $capitalPrincipalRestant;
-                $interetHebdomadaire = $montantHebdo - $capitalHebdomadaire;
+                $interetHebdomadaire = round($montantHebdo - $capitalHebdomadaire, 2);
             }
             
             // Mettre à jour les totaux
             $totalCapitalPaye += $capitalHebdomadaire;
             $totalInteretsPayes += $interetHebdomadaire;
             
-            // Mettre à jour les soldes
-            $capitalPrincipalRestant -= $capitalHebdomadaire;
-            $capitalRestant -= $montantHebdo;
+            // Mettre à jour les soldes avec arrondi
+            $capitalPrincipalRestant = round($capitalPrincipalRestant - $capitalHebdomadaire, 2);
+            $capitalRestant = round($capitalRestant - $montantHebdo, 2);
             
             if ($capitalPrincipalRestant < 0) $capitalPrincipalRestant = 0;
             if ($capitalRestant < 0) $capitalRestant = 0;
@@ -260,12 +366,29 @@
             ];
         }
         
-        // Ajustement final
-        $ajustementCapital = $creditActif->montant_accorde - $totalCapitalPaye;
+        // Ajustement final pour équilibrer les totaux
+        $ajustementCapital = round($creditActif->montant_accorde - $totalCapitalPaye, 2);
+        
         if (abs($ajustementCapital) > 0.01) {
-            $echeances[15]['capital_hebdo'] += $ajustementCapital;
-            $echeances[15]['interet_hebdo'] = $montantHebdo - $echeances[15]['capital_hebdo'];
+            $echeances[15]['capital_hebdo'] = round($echeances[15]['capital_hebdo'] + $ajustementCapital, 2);
+            $echeances[15]['interet_hebdo'] = round($montantHebdo - $echeances[15]['capital_hebdo'], 2);
             $echeances[15]['capital_restant'] = 0;
+            
+            // Recalculer les totaux après ajustement
+            $totalCapitalPaye = array_sum(array_column($echeances, 'capital_hebdo'));
+            $totalInteretsPayes = array_sum(array_column($echeances, 'interet_hebdo'));
+        }
+        
+        // Vérification des totaux avec arrondi
+        $totalCapitalFinal = round(array_sum(array_column($echeances, 'capital_hebdo')), 2);
+        $totalInteretsFinal = round(array_sum(array_column($echeances, 'interet_hebdo')), 2);
+        $totalGeneralFinal = round(array_sum(array_column($echeances, 'montant_total')), 2);
+        
+        // Ajustement final pour s'assurer que les totaux correspondent
+        $differenceCapital = round($creditActif->montant_accorde - $totalCapitalFinal, 2);
+        if (abs($differenceCapital) > 0.01) {
+            $echeances[15]['capital_hebdo'] = round($echeances[15]['capital_hebdo'] + $differenceCapital, 2);
+            $echeances[15]['interet_hebdo'] = round($montantHebdo - $echeances[15]['capital_hebdo'], 2);
         }
     @endphp
 
@@ -274,8 +397,11 @@
             @if(file_exists(public_path('images/logo-tumaini1.png')))
                 <img src="{{ asset('images/logo-tumaini1.png') }}" alt="TUMAINI LETU asbl">
             @else
-                <div style="height: 55px; width: 100px; background: #f0f0f0; display: flex; align-items: center; justify-content: center; border: 1px dashed #ccc; font-size: 8px;">
-                    TUMAINI LETU
+                <div style="height: 60px; width: 110px; background: #f0f0f0; display: flex; align-items: center; justify-content: center; border: 1px solid #ddd; border-radius: 4px; font-size: 10px; color: #666;">
+                    <div style="text-align: center; padding: 5px;">
+                        <strong>TUMAINI LETU</strong><br>
+                        <span style="font-size: 8px;">asbl</span>
+                    </div>
                 </div>
             @endif
         </div>
@@ -288,15 +414,11 @@
         </div>
     </div>
 
-    <div class="separator"></div>
-
     <div class="ref-date">
         <div>RÉF : ÉCH-{{ $creditActif->id }}-{{ date('Ymd') }}</div>
         <div>DATE : {{ now()->format('d/m/Y') }}</div>
         <div>PÉRIODE : 16 SEMAINES</div>
     </div>
-
-    <div class="separator"></div>
 
     <div class="title">ÉCHÉANCIER DE REMBOURSEMENT</div>
 
@@ -304,35 +426,35 @@
         <div class="info-grid">
             <div class="info-item">
                 <span class="info-label">Compte :</span>
-                <span>{{ $compte->numero_compte }}</span>
+                <span class="info-value">{{ $compte->numero_compte }}</span>
             </div>
             <div class="info-item">
                 <span class="info-label">Membre :</span>
-                <span>{{ $compte->nom }} {{ $compte->postnom }} {{ $compte->prenom }}</span>
+                <span class="info-value">{{ $compte->nom }} {{ $compte->postnom }} {{ $compte->prenom }}</span>
             </div>
             <div class="info-item">
                 <span class="info-label">Type :</span>
-                <span>{{ ucfirst($creditActif->type_credit) }}</span>
+                <span class="info-value">{{ ucfirst($creditActif->type_credit) }}</span>
             </div>
             <div class="info-item">
                 <span class="info-label">Date Octroi :</span>
-                <span>{{ $creditActif->date_octroi->format('d/m/Y') }}</span>
+                <span class="info-value">{{ $creditActif->date_octroi->format('d/m/Y') }}</span>
             </div>
             <div class="info-item">
                 <span class="info-label">Montant Accordé :</span>
-                <span>{{ number_format($creditActif->montant_accorde, 2, ',', ' ') }} $</span>
+                <span class="info-value montant-cell">{{ number_format($creditActif->montant_accorde, 2, ',', ' ') }} $</span>
             </div>
             <div class="info-item">
                 <span class="info-label">Montant Total :</span>
-                <span>{{ number_format($creditActif->montant_total, 2, ',', ' ') }} $</span>
+                <span class="info-value montant-cell">{{ number_format($creditActif->montant_total, 2, ',', ' ') }} $</span>
             </div>
             <div class="info-item">
                 <span class="info-label">Début Remb. :</span>
-                <span>{{ $dateDebut->format('d/m/Y') }}</span>
+                <span class="info-value">{{ $dateDebut->format('d/m/Y') }}</span>
             </div>
             <div class="info-item">
                 <span class="info-label">Fin :</span>
-                <span>{{ $creditActif->date_echeance->format('d/m/Y') }}</span>
+                <span class="info-value">{{ $creditActif->date_echeance->format('d/m/Y') }}</span>
             </div>
         </div>
     </div>
@@ -343,8 +465,8 @@
                 <tr>
                     <th class="semaine">Sem</th>
                     <th class="date">Date</th>
-                    <th class="capital-hebdo">Capital</th>
                     <th class="interet-hebdo">Intérêt</th>
+                    <th class="capital-hebdo">Capital</th>
                     <th class="montant">À Payer</th>
                     <th class="capital">Reste</th>
                 </tr>
@@ -354,12 +476,19 @@
                 <tr>
                     <td class="semaine">{{ $echeance['semaine'] }}</td>
                     <td class="date">{{ $echeance['date']->format('d/m/Y') }}</td>
-                    <td class="capital-hebdo">{{ number_format($echeance['capital_hebdo'], 2, ',', ' ') }} </td>
-                    <td class="interet-hebdo">{{ number_format($echeance['interet_hebdo'], 2, ',', ' ') }} </td>
-                    <td class="montant">{{ number_format($echeance['montant_total'], 2, ',', ' ') }} </td>
-                    <td class="capital">{{ number_format($echeance['capital_restant'], 2, ',', ' ') }}</td>
+                    <td class="montant-cell">{{ number_format($echeance['interet_hebdo'], 2, ',', ' ') }} $</td>
+                    <td class="montant-cell">{{ number_format($echeance['capital_hebdo'], 2, ',', ' ') }} $</td>
+                    <td class="montant montant-cell">{{ number_format($echeance['montant_total'], 2, ',', ' ') }} $</td>
+                    <td class="montant-cell">{{ number_format($echeance['capital_restant'], 2, ',', ' ') }} $</td>
                 </tr>
                 @endforeach
+                {{-- <tr class="totals-row">
+                    <td colspan="2"><strong>TOTAUX</strong></td>
+                    <td class="montant-cell">{{ number_format($totalInteretsFinal, 2, ',', ' ') }} $</td>
+                    <td class="montant-cell">{{ number_format($totalCapitalFinal, 2, ',', ' ') }} $</td>
+                    <td class="montant-cell">{{ number_format($totalGeneralFinal, 2, ',', ' ') }} $</td>
+                    <td class="montant-cell">0,00 $</td>
+                </tr> --}}
             </tbody>
         </table>
     </div>
@@ -368,61 +497,70 @@
         <div class="total-grid">
             <div class="total-item">
                 <div>Montant Accordé</div>
-                <div class="total-value">{{ number_format($creditActif->montant_accorde, 2, ',', ' ') }} $</div>
+                <div class="total-value montant-cell">{{ number_format($creditActif->montant_accorde, 2, ',', ' ') }} $</div>
             </div>
             <div class="total-item">
                 <div>Total Intérêts</div>
-                <div class="total-value">{{ number_format($creditActif->montant_total - $creditActif->montant_accorde, 2, ',', ' ') }} $</div>
+                <div class="total-value montant-cell">{{ number_format($totalInterets, 2, ',', ' ') }} $</div>
             </div>
             <div class="total-item">
                 <div>Montant Total</div>
-                <div class="total-value">{{ number_format($creditActif->montant_total, 2, ',', ' ') }} $</div>
+                <div class="total-value montant-cell">{{ number_format($creditActif->montant_total, 2, ',', ' ') }} $</div>
             </div>
             <div class="total-item">
                 <div>Remb. Hebdo</div>
-                <div class="total-value">{{ number_format($montantHebdo, 2, ',', ' ') }} $</div>
+                <div class="total-value montant-cell">{{ number_format($montantHebdo, 2, ',', ' ') }} $</div>
             </div>
         </div>
     </div>
 
     <div class="notes">
-        <strong>Notes :</strong><br>
-        • Remboursement hebdomadaire fixe : {{ number_format($montantHebdo, 2, ',', ' ') }} USD<br>
-        • Jour de paiement : chaque {{ $dateDebut->locale('fr')->translatedFormat('l') }}<br>
-        • Début : 2 semaines après l'octroi<br>
-        • Pénalité retard : 5%<br>
-        • Caution débloquée après remboursement complet
+        <strong>Notes importantes :</strong><br>
+        • Remboursement hebdomadaire fixe : <strong>{{ number_format($montantHebdo, 2, ',', ' ') }} USD</strong><br>
+        • Jour de paiement : chaque <strong>{{ $dateDebut->locale('fr')->translatedFormat('l') }}</strong><br>
+        • Début : 2 semaines après l'octroi (le {{ $dateDebut->format('d/m/Y') }})<br>
+        • Pénalité de retard : 5% du montant dû<br>
+        • La caution sera débloquée après remboursement complet du crédit
     </div>
 
     <div class="signature-section">
         <div class="signature">
-            Membre<br>
-            <div style="margin-top: 25px;">{{ $compte->nom }} {{ $compte->postnom }} {{ $compte->prenom }}</div>
+            <div style="margin-bottom: 5px;"></div>
+            <div style="margin-bottom: 20px; font-weight: bold;">Le Membre</div>
+            <div class="signature-line">
+                {{ $compte->nom }} {{ $compte->postnom }} {{ $compte->prenom }}
+            </div>
         </div>
         <div class="signature">
-            Responsable<br>
-            <div style="margin-top: 25px;">Tumaini Letu asbl</div>
+            <div style="margin-bottom: 5px;"></div>
+            <div style="margin-bottom: 20px; font-weight: bold;">Tumaini Letu asbl</div>
+            <div class="signature-line">
+                Le Responsable
+            </div>
         </div>
     </div>
 
     <div class="footer">
-        <div class="separator"></div>
-        Document généré le {{ now()->format('d/m/Y H:i') }} | Tumaini Letu asbl
+        Document généré le {{ now()->format('d/m/Y à H:i') }} | Tumaini Letu asbl - Goma, RDC
     </div>
 
-    <div class="no-print" style="text-align: center; margin-top: 15px;">
-        <button onclick="window.print()" style="padding: 6px 12px; background: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer; margin: 3px; font-size: 10px;">
-            📄 Imprimer
+    <div class="btn-container no-print">
+        <button onclick="window.print()" class="print-btn">
+            📄 Imprimer l'échéancier
         </button>
-        <button onclick="window.close()" style="padding: 6px 12px; background: #dc3545; color: white; border: none; border-radius: 3px; cursor: pointer; margin: 3px; font-size: 10px;">
-            ❌ Fermer
+        <button onclick="window.close()" class="close-btn">
+            ❌ Fermer la fenêtre
         </button>
     </div>
 
     <script>
-        function downloadPDF() {
-            window.print();
-        }
+        // Ajustement pour l'impression
+        document.addEventListener('DOMContentLoaded', function() {
+            const printBtn = document.querySelector('.print-btn');
+            printBtn.addEventListener('click', function() {
+                window.print();
+            });
+        });
     </script>
 </body>
 </html>

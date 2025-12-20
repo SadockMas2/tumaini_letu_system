@@ -165,6 +165,25 @@ class EpargneForm
                                         $set('devise', $cycle->devise);
                                         $set('montant', $cycle->solde_initial);
                                         
+
+                                         // Vérifier la limite
+            $currentCount = $cycle->epargnes()->count();
+            $max = $cycle->nombre_max_epargnes ?? 30;
+            
+            if ($currentCount >= $max) {
+                Notification::make()
+                    ->title('Cycle complet')
+                    ->body("Ce cycle a déjà {$max} épargnes. Veuillez sélectionner un autre cycle ou en créer un nouveau.")
+                    ->danger()
+                    ->send();
+            } elseif ($currentCount >= ($max - 5)) {
+                $remaining = $max - $currentCount;
+                Notification::make()
+                    ->title('Limite proche')
+                    ->body("Il reste seulement {$remaining} épargnes disponibles dans ce cycle.")
+                    ->warning()
+                    ->send();
+            }
                                         // Avertissement si le cycle est clôturé
                                         if ($cycle->statut === 'clôturé') {
                                             Notification::make()

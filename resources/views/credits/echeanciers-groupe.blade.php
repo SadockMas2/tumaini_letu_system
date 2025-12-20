@@ -51,6 +51,8 @@
             font-size: 12px; margin: 5px 0 8px 0;
         }
         .table-container { max-height: 400px; overflow: hidden; }
+        .montant-cell { font-family: 'Courier New', monospace; letter-spacing: 0.5px; }
+        .totals-row { background-color: #e0e0e0 !important; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -72,10 +74,24 @@
 
     <div>
         @php
-            $dateDebut = $credit->date_octroi->copy()->addWeeks(2);
-            $montantHebdo = $credit->remboursement_hebdo_total;
+            // Vérification et débogage des données
+            $dateDebut = $credit->date_octroi ? $credit->date_octroi->copy()->addWeeks(2) : now()->addWeeks(2);
             
-            // Pourcentages pour les intérêts hebdomadaires
+            // Récupération des montants depuis la base de données
+            $montantAccorde = floatval($credit->montant_accorde);
+            
+            // CORRECTION : CALCUL CORRECT POUR CRÉDIT GROUPE
+            // 122.5% = coefficient 1.225
+            // Donc : montant_total = montant_accorde × 1.225
+            $montantTotal = round($montantAccorde * 1.225, 2);
+            
+            // Pour 2400$ : 2400 × 1.225 = 2940
+            // Remboursement hebdo : 2940 ÷ 16 = 183.75
+            
+            // Calcul du remboursement hebdomadaire pour groupe
+            $montantHebdo = round($montantTotal / 16, 2);
+            
+            // Pourcentages pour les intérêts hebdomadaires SEULEMENT
             $pourcentageInterets = [
                 14.4154589019, 12.5668588387, 11.5077233696, 10.4164781435,
                 9.2926366489, 9.1352258629, 8.9432727627, 6.7153178136,
@@ -83,34 +99,36 @@
                 1.8057116447, 1.4057116447, 1.3057116447, 0.2805711645
             ];
             
-            // Pourcentages pour le capital hebdomadaire
-            $pourcentageCapital = [
-                4.66369746885061, 5.02282473831897, 5.22858283417971, 5.44057888793057,
-                5.65890741408505, 5.68948758492370, 5.72677828621991, 6.15960277500698,
-                6.59961036681905, 6.85272023393667, 6.91912140538681, 7.11339126213323,
-                7.11339126213323, 7.19109920483180, 7.21052619050644, 7.40968008473729
-            ];
+            // Calcul du total des intérêts
+            $totalInterets = round($montantTotal - $montantAccorde, 2);
             
-            $capitalRestant = $credit->montant_total;
-            $capitalPrincipalRestant = $credit->montant_accorde;
+            // Initialisation des variables
+            $capitalRestant = $montantTotal;
+            $capitalPrincipalRestant = $montantAccorde;
             $echeances = [];
             $totalCapitalPaye = 0;
             $totalInteretsPayes = 0;
             
+            // Calcul des 16 échéances
             for ($semaine = 1; $semaine <= 16; $semaine++) {
                 $dateEcheance = $dateDebut->copy()->addWeeks($semaine - 1);
                 
-                $capitalHebdomadaire = ($credit->montant_accorde * $pourcentageCapital[$semaine - 1]) / 100;
-                $interetHebdomadaire = ($credit->montant_accorde * $pourcentageInterets[$semaine - 1]) / 100;
+                // Calcul de l'intérêt hebdomadaire basé sur le pourcentage du TOTAL des intérêts
+                $interetHebdomadaire = round(($totalInterets * $pourcentageInterets[$semaine - 1]) / 100, 2);
                 
+                // Calcul du capital hebdomadaire (remboursement hebdo - intérêt)
+                $capitalHebdomadaire = round($montantHebdo - $interetHebdomadaire, 2);
+                
+                // Pour la dernière échéance, ajuster pour équilibrer
                 if ($semaine == 16) {
-                    $capitalHebdomadaire = $capitalPrincipalRestant;
-                    $interetHebdomadaire = $montantHebdo - $capitalHebdomadaire;
+                    $capitalHebdomadaire = round($capitalPrincipalRestant, 2);
+                    $interetHebdomadaire = round($montantHebdo - $capitalHebdomadaire, 2);
                 }
                 
+                // Limiter le capital au capital principal restant
                 if ($capitalHebdomadaire > $capitalPrincipalRestant) {
-                    $capitalHebdomadaire = $capitalPrincipalRestant;
-                    $interetHebdomadaire = $montantHebdo - $capitalHebdomadaire;
+                    $capitalHebdomadaire = round($capitalPrincipalRestant, 2);
+                    $interetHebdomadaire = round($montantHebdo - $capitalHebdomadaire, 2);
                 }
                 
                 $totalCapitalPaye += $capitalHebdomadaire;
@@ -128,17 +146,47 @@
                     'capital_hebdo' => $capitalHebdomadaire,
                     'interet_hebdo' => $interetHebdomadaire,
                     'montant_total' => $montantHebdo,
-                    'capital_restant' => $capitalRestant,
+                    'capital_restant' => round($capitalRestant, 2),
                 ];
             }
             
-            $ajustementCapital = $credit->montant_accorde - $totalCapitalPaye;
+            // Ajustement final pour équilibrer les totaux
+            $ajustementCapital = round($montantAccorde - $totalCapitalPaye, 2);
             if (abs($ajustementCapital) > 0.01) {
-                $echeances[15]['capital_hebdo'] += $ajustementCapital;
-                $echeances[15]['interet_hebdo'] = $montantHebdo - $echeances[15]['capital_hebdo'];
+                $echeances[15]['capital_hebdo'] = round($echeances[15]['capital_hebdo'] + $ajustementCapital, 2);
+                $echeances[15]['interet_hebdo'] = round($montantHebdo - $echeances[15]['capital_hebdo'], 2);
                 $echeances[15]['capital_restant'] = 0;
+                
+                // Recalculer les totaux après ajustement
+                $totalCapitalPaye = $montantAccorde;
+                $totalInteretsPayes = $totalInterets;
             }
+            
+            // Calcul des totaux finaux
+            $totalCapitalFinal = round(array_sum(array_column($echeances, 'capital_hebdo')), 2);
+            $totalInteretsFinal = round(array_sum(array_column($echeances, 'interet_hebdo')), 2);
+            $totalGeneralFinal = round(array_sum(array_column($echeances, 'montant_total')), 2);
+            
+            // Afficher les calculs pour débogage
+            $debugInfo = [
+                'montant_accorde' => $montantAccorde,
+                'montant_total_calcule' => $montantTotal,
+                'total_interets' => $totalInterets,
+                'montant_hebdo' => $montantHebdo,
+            ];
         @endphp
+
+        <!-- Section de débogage -->
+        {{-- @if(env('APP_DEBUG'))
+        <div style="background:#ffcccc; padding:10px; margin-bottom:10px; border:1px solid #ff6666; font-size:10px;">
+            <strong>DEBUG INFO:</strong><br>
+            Montant Accordé: {{ $montantAccorde }} $<br>
+            Montant Total: {{ $montantAccorde }} × 1.225 = {{ $montantTotal }} $<br>
+            Total Intérêts: {{ $totalInterets }} $<br>
+            Montant Hebdo: {{ $montantTotal }} ÷ 16 = {{ $montantHebdo }} $<br>
+            Vérification: ({{ $montantHebdo }} × 16) = {{ round($montantHebdo * 16, 2) }} $
+        </div>
+        @endif --}}
 
         <div class="header">
             <div class="logo">
@@ -173,14 +221,38 @@
 
         <div class="client-info">
             <div class="info-grid">
-                <div class="info-item"><span class="info-label">Compte :</span><span>{{ $credit->compte->numero_compte }}</span></div>
-                <div class="info-item"><span class="info-label">Groupe :</span><span>{{ $credit->compte->nom }}</span></div>
-                <div class="info-item"><span class="info-label">Type :</span><span>Groupe Solidaire</span></div>
-                <div class="info-item"><span class="info-label">Date Octroi :</span><span>{{ $credit->date_octroi->format('d/m/Y') }}</span></div>
-                <div class="info-item"><span class="info-label">Montant Accordé :</span><span>{{ number_format($credit->montant_accorde, 2, ',', ' ') }} $</span></div>
-                <div class="info-item"><span class="info-label">Montant Total :</span><span>{{ number_format($credit->montant_total, 2, ',', ' ') }} $</span></div>
-                <div class="info-item"><span class="info-label">Début Remb. :</span><span>{{ $dateDebut->format('d/m/Y') }}</span></div>
-                <div class="info-item"><span class="info-label">Remb. Hebdo :</span><span>{{ number_format($montantHebdo, 2, ',', ' ') }} $</span></div>
+                <div class="info-item">
+                    <span class="info-label">Compte :</span>
+                    <span>{{ $credit->compte->numero_compte }}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Groupe :</span>
+                    <span>{{ $credit->compte->nom }}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Type :</span>
+                    <span>Groupe Solidaire</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Date Octroi :</span>
+                    <span>{{ $credit->date_octroi ? $credit->date_octroi->format('d/m/Y') : 'N/A' }}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Montant Accordé :</span>
+                    <span class="montant-cell">{{ number_format($montantAccorde, 2, ',', ' ') }} $</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Montant Total :</span>
+                    <span class="montant-cell">{{ number_format($montantTotal, 2, ',', ' ') }} $</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Début Remb. :</span>
+                    <span>{{ $dateDebut->format('d/m/Y') }}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Remb. Hebdo :</span>
+                    <span class="montant-cell">{{ number_format($montantHebdo, 2, ',', ' ') }} $</span>
+                </div>
             </div>
         </div>
 
@@ -190,8 +262,8 @@
                     <tr>
                         <th>Sem</th>
                         <th>Date</th>
-                        <th>Capital</th>
                         <th>Intérêt</th>
+                        <th>Capital</th>
                         <th>À Payer</th>
                         <th>Reste</th>
                     </tr>
@@ -201,38 +273,64 @@
                     <tr>
                         <td>{{ $echeance['semaine'] }}</td>
                         <td>{{ $echeance['date']->format('d/m/Y') }}</td>
-                        <td>{{ number_format($echeance['capital_hebdo'], 2, ',', ' ') }} </td>
-                        <td>{{ number_format($echeance['interet_hebdo'], 2, ',', ' ') }} </td>
-                        <td>{{ number_format($echeance['montant_total'], 2, ',', ' ') }} </td>
-                        <td>{{ number_format($echeance['capital_restant'], 2, ',', ' ') }}</td>
+                        <td class="montant-cell">{{ number_format($echeance['interet_hebdo'], 2, ',', ' ') }} $</td>
+                        <td class="montant-cell">{{ number_format($echeance['capital_hebdo'], 2, ',', ' ') }} $</td>
+                        <td class="montant-cell">{{ number_format($echeance['montant_total'], 2, ',', ' ') }} $</td>
+                        <td class="montant-cell">{{ number_format($echeance['capital_restant'], 2, ',', ' ') }} $</td>
                     </tr>
                     @endforeach
+                    <tr class="totals-row">
+                        <td colspan="2"><strong>TOTAUX</strong></td>
+                        <td class="montant-cell">{{ number_format($totalInteretsFinal, 2, ',', ' ') }} $</td>
+                        <td class="montant-cell">{{ number_format($totalCapitalFinal, 2, ',', ' ') }} $</td>
+                        <td class="montant-cell">{{ number_format($totalGeneralFinal, 2, ',', ' ') }} $</td>
+                        <td class="montant-cell">0,00 $</td>
+                    </tr>
                 </tbody>
             </table>
         </div>
 
         <div class="total-section">
             <div class="total-grid">
-                <div class="total-item"><div>Montant Accordé</div><div class="total-value">{{ number_format($credit->montant_accorde, 2, ',', ' ') }} $</div></div>
-                <div class="total-item"><div>Total Intérêts</div><div class="total-value">{{ number_format($credit->montant_total - $credit->montant_accorde, 2, ',', ' ') }} $</div></div>
-                <div class="total-item"><div>Montant Total</div><div class="total-value">{{ number_format($credit->montant_total, 2, ',', ' ') }} $</div></div>
-                <div class="total-item"><div>Remb. Hebdo</div><div class="total-value">{{ number_format($montantHebdo, 2, ',', ' ') }} $</div></div>
+                <div class="total-item">
+                    <div>Montant Accordé</div>
+                    <div class="total-value montant-cell">{{ number_format($montantAccorde, 2, ',', ' ') }} $</div>
+                </div>
+                <div class="total-item">
+                    <div>Total Intérêts</div>
+                    <div class="total-value montant-cell">{{ number_format($totalInterets, 2, ',', ' ') }} $</div>
+                </div>
+                <div class="total-item">
+                    <div>Montant Total</div>
+                    <div class="total-value montant-cell">{{ number_format($montantTotal, 2, ',', ' ') }} $</div>
+                </div>
+                <div class="total-item">
+                    <div>Remb. Hebdo</div>
+                    <div class="total-value montant-cell">{{ number_format($montantHebdo, 2, ',', ' ') }} $</div>
+                </div>
             </div>
         </div>
 
         <div class="notes">
-            <strong>Notes :</strong><br>
-            • Remboursement hebdomadaire fixe : {{ number_format($montantHebdo, 2, ',', ' ') }} USD<br>
-            • Jour de paiement : chaque {{ $dateDebut->locale('fr')->translatedFormat('l') }}<br>
-            • Début : 2 semaines après l'octroi<br>
-            • Pénalité retard : 5%<br>
+            <strong>Notes importantes :</strong><br>
+            • Remboursement hebdomadaire fixe : <strong>{{ number_format($montantHebdo, 2, ',', ' ') }} USD</strong><br>
+
+            • Jour de paiement : chaque <strong>{{ $dateDebut->locale('fr')->translatedFormat('l') }}</strong><br>
+            • Début : 2 semaines après l'octroi (le {{ $dateDebut->format('d/m/Y') }})<br>
+            • Pénalité retard : 5% du montant dû<br>
             • Caution groupe : {{ number_format($credit->caution_totale, 2, ',', ' ') }} USD<br>
-            • Solidarité groupe obligatoire
+            • Solidarité groupe obligatoire pour tous les membres
         </div>
 
         <div class="signature-section">
-            <div class="signature">Responsable Groupe<br><div style="margin-top:25px;">{{ $credit->compte->nom }}</div></div>
-            <div class="signature">Responsable Tumaini Letu<br><div style="margin-top:25px;">Tumaini Letu asbl</div></div>
+            <div class="signature">
+                Responsable Groupe<br>
+                <div style="margin-top:25px;">{{ $credit->compte->nom }}</div>
+            </div>
+            <div class="signature">
+                Responsable Tumaini Letu<br>
+                <div style="margin-top:25px;">Tumaini Letu asbl</div>
+            </div>
         </div>
 
         <div class="footer">

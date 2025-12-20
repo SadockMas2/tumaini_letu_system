@@ -52,6 +52,30 @@ class Cycle extends Model
         return $this->belongsTo(User::class, 'user_id');
     }
 
+
+    /**
+ * Vérifier et clôturer automatiquement si la limite est atteinte
+ */
+public function verifierEtCloturer(): void
+{
+    $count = $this->epargnes()->count();
+    $max = $this->nombre_max_epargnes ?? 30;
+    
+    if ($count >= $max && $this->statut !== 'clôturé') {
+        $this->update([
+            'statut' => 'clôturé',
+            'date_cloture' => now(),
+            'solde_final' => $this->solde_initial + $this->epargnes()->where('statut', 'valide')->sum('montant')
+        ]);
+        
+        Log::info("Cycle clôturé automatiquement - limite d'épargnes atteinte", [
+            'cycle_id' => $this->id,
+            'epargnes' => $count,
+            'limite' => $max
+        ]);
+    }
+}
+
      protected static function boot(): void
     {
         parent::boot();
@@ -91,6 +115,15 @@ class Cycle extends Model
             $cycle->nombre_max_epargnes = $cycle->nombre_max_epargnes ?: 30;
             $cycle->nombre_epargnes_actuel = 0;
         });
+
+          static::created(function ($epargne) {
+        // Incrémenter le compteur d'épargnes
+        $cycle = $epargne->cycle;
+        if ($cycle) {
+            $cycle->synchroniserCompteurEpargnes();
+            $cycle->verifierEtCloturer();
+        }
+    });
 
     }
 

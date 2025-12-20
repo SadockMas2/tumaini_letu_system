@@ -1487,7 +1487,7 @@ Section::make('Détails de l\'Opération')
 
     private static function depotVersCompte(array $data)
     {
-        $compte = Compte::find($data['compte_id']);
+        $compte = Compte::find(id: $data['compte_id']);
         
         if (!$compte) {
             throw new \Exception('Compte non trouvé');
@@ -1517,6 +1517,7 @@ Section::make('Détails de l\'Opération')
                 'compte_id' => $compte->id,
                 'caisse_id' => $grandeCaisse->id,
                 'type' => 'depot',
+                'type_mouvement' => 'depot_compte',
                 'montant' => $data['montant'],
                 'solde_avant' => $ancienSolde,
                 'solde_apres' => $compte->solde,
@@ -1572,6 +1573,7 @@ Section::make('Détails de l\'Opération')
                 'compte_id' => $compte->id,
                 'caisse_id' => $grandeCaisse->id,
                 'type' => 'retrait',
+                'type_mouvement' => 'retrait_compte',
                 'montant' => $data['montant'],
                 'solde_avant' => $ancienSolde,
                 'solde_apres' => $compte->solde,

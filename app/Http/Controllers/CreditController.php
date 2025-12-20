@@ -559,6 +559,7 @@ public function processApprovalGroupe(Request $request, $credit_groupe_id)
             // 2. CRÉER LE MOUVEMENT "RETRAIT FRAIS" POUR LE GROUPE
             Mouvement::create([
                 'compte_id' => $compteGroupe->id,
+                'type' => 'retrait',
                 'type_mouvement' => 'frais_payes_credit_groupe',
                 'montant' => -$totalFraisGroupe,
                 'solde_avant' => $soldeDebutGroupe,
@@ -729,7 +730,7 @@ private function crediterComptesMembresSansDouble($montantsMembres, $creditGroup
                 // CRÉER LE MOUVEMENT "DÉPÔT" POUR LE MEMBRE
                 Mouvement::create([
                     'compte_id' => $compteMembre->id,
-                    'type_mouvement' => 'credit_groupe_recu',
+                    'type_mouvement' => 'credit_octroye',
                     'montant' => $montant,
                     'solde_avant' => $soldeDebutMembre,
                     'solde_apres' => $nouveauSolde,
@@ -1391,7 +1392,7 @@ private function creerMouvementsCreditGroupe($creditGroupe, $compteGroupe, $tota
             
             Mouvement::create([
                 'compte_id' => $compteGroupe->id,
-                'type_mouvement' => 'caution_bloquee_groupe',
+                'type_mouvement' => 'caution_bloquee',
                 'montant' => -$totalCaution, // ❌ CORRECTION: Montant négatif pour la déduction
                 'solde_avant' => $soldeActuel,
                 'solde_apres' => $soldeActuel - $totalCaution, // ❌ CORRECTION: Calcul correct

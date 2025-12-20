@@ -760,126 +760,139 @@
                 </div>
             </div>
 
-            <!-- Tableau des Mouvements -->
-            <div class="overflow-x-auto">
-                <table class="w-full">
-                    <thead>
-                        <tr class="bg-gray-50 border-b border-gray-200">
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Date & Heure
-                            </th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Type
-                            </th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Référence
-                            </th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Description
-                            </th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Montant
-                            </th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Solde Avant
-                            </th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Solde Après
-                            </th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Opérateur
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-gray-200">
-                        <?php $__empty_1 = true; $__currentLoopData = $mouvements; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $mouvement): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); $__empty_1 = false; ?>
-                        <tr class="mouvement-row hover:bg-gray-50 transition-colors duration-150" data-type="<?php echo e($mouvement->type); ?>">
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                <div class="text-sm font-medium text-gray-900">
-                                    <?php echo e($mouvement->created_at->format('d/m/Y')); ?>
+         <!-- Tableau des Mouvements -->
+<div class="overflow-x-auto">
+    <table class="w-full">
+        <thead>
+            <tr class="bg-gray-50 border-b border-gray-200">
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Date & Heure
+                </th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Type
+                </th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Référence
+                </th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Description
+                </th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Montant
+                </th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Solde Avant
+                </th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Solde Après
+                </th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Opérateur
+                </th>
+            </tr>
+        </thead>
+     <!-- Section Tableau des Mouvements - VERSION CORRIGÉE -->
+<tbody class="divide-y divide-gray-200">
+    <?php $__empty_1 = true; $__currentLoopData = $mouvements; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $mouvement): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); $__empty_1 = false; ?>
+    <?php
+        // Utiliser le helper pour tout
+        $typeAffichage = App\Helpers\MouvementHelper::getTypeAffichage($mouvement->type_mouvement);
+        $typePourFiltre = $typeAffichage === 'retrait' ? 'retrait' : ($typeAffichage === 'depot' ? 'depot' : 'autre');
+        $couleurClasse = App\Helpers\MouvementHelper::getCouleurClasse($mouvement->type_mouvement);
+        $badgeClasse = App\Helpers\MouvementHelper::getBadgeClasse($mouvement->type_mouvement);
+        $icone = App\Helpers\MouvementHelper::getIcone($mouvement->type_mouvement);
+        $signe = App\Helpers\MouvementHelper::getSigne($mouvement->type_mouvement, $mouvement->montant);
+        $montantAbsolu = abs($mouvement->montant);
+        $typeTraduit = App\Helpers\MouvementHelper::traduireType($mouvement->type_mouvement);
+        
+        // Formatage spécial pour caution bloquée
+        if ($mouvement->type_mouvement === 'caution_bloquee') {
+            $montantAffichage = number_format($mouvement->montant, 2, ',', ' ') . ' ' . ($mouvement->devise ?? $compte->devise);
+            $montantAffichage = '0,00 ' . ($mouvement->devise ?? $compte->devise); // Toujours 0 pour caution bloquée
+        } else {
+            $montantAffichage = $signe . ' ' . number_format($montantAbsolu, 2, ',', ' ') . ' ' . ($mouvement->devise ?? $compte->devise);
+        }
+    ?>
+    
+    <tr class="mouvement-row hover:bg-gray-50 transition-colors duration-150" data-type="<?php echo e($typePourFiltre); ?>">
+        <td class="px-6 py-4 whitespace-nowrap">
+            <div class="text-sm font-medium text-gray-900">
+                <?php echo e($mouvement->created_at->format('d/m/Y')); ?>
 
-                                </div>
-                                <div class="text-xs text-gray-500">
-                                    <?php echo e($mouvement->created_at->format('H:i:s')); ?>
-
-                                </div>
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                <?php if($mouvement->type === 'depot'): ?>
-                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                        <i class="fas fa-arrow-down mr-1"></i>
-                                        Dépôt
-                                    </span>
-                                <?php else: ?>
-                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                                        <i class="fas fa-arrow-up mr-1"></i>
-                                        Retrait
-                                    </span>
-                                <?php endif; ?>
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                <div class="text-sm font-mono text-gray-900">
-                                    <?php echo e($mouvement->reference ?? 'N/A'); ?>
-
-                                </div>
-                            </td>
-                            <td class="px-6 py-4">
-                                <div class="text-sm text-gray-900 max-w-xs truncate">
-                                    <?php echo e($mouvement->description ?? 'Transaction'); ?>
-
-                                </div>
-                                <?php if($mouvement->nom_deposant): ?>
-                                <div class="text-xs text-gray-500">
-                                    Par: <?php echo e($mouvement->nom_deposant); ?>
-
-                                </div>
-                                <?php endif; ?>
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                <div class="text-sm font-medium <?php echo e($mouvement->type === 'depot' ? 'text-green-600' : 'text-red-600'); ?>">
-                                    <?php echo e($mouvement->type === 'depot' ? '+' : '-'); ?>
-
-                                    <?php echo e(number_format($mouvement->montant, 2, ',', ' ')); ?> <?php echo e($mouvement->devise ?? $compte->devise); ?>
-
-                                </div>
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                <div class="text-sm text-gray-600">
-                                    <?php echo e(number_format($mouvement->solde_avant, 2, ',', ' ')); ?> <?php echo e($mouvement->devise ?? $compte->devise); ?>
-
-                                </div>
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                <div class="text-sm font-semibold text-gray-900">
-                                    <?php echo e(number_format($mouvement->solde_apres, 2, ',', ' ')); ?> <?php echo e($mouvement->devise ?? $compte->devise); ?>
-
-                                </div>
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                <div class="text-sm text-gray-600">
-                                    <?php echo e($mouvement->operateur->name ?? 'Système'); ?>
-
-                                </div>
-                                <div class="text-xs text-gray-500">
-                                    <?php echo e($mouvement->operateur->numero_employe ?? 'N/A'); ?>
-
-                                </div>
-                            </td>
-                        </tr>
-                        <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); if ($__empty_1): ?>
-                        <tr>
-                            <td colspan="8" class="px-6 py-12 text-center">
-                                <div class="text-gray-400 mb-4">
-                                    <i class="fas fa-exchange-alt text-4xl"></i>
-                                </div>
-                                <p class="text-gray-500 text-lg">Aucun mouvement enregistré</p>
-                                <p class="text-gray-400 text-sm mt-2">Les transactions apparaîtront ici</p>
-                            </td>
-                        </tr>
-                        <?php endif; ?>
-                    </tbody>
-                </table>
             </div>
+            <div class="text-xs text-gray-500">
+                <?php echo e($mouvement->created_at->format('H:i:s')); ?>
+
+            </div>
+        </td>
+        <td class="px-6 py-4 whitespace-nowrap">
+            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium <?php echo e($badgeClasse); ?>">
+                <i class="fas <?php echo e($icone); ?> mr-1"></i>
+                <?php echo e($typeTraduit); ?>
+
+            </span>
+        </td>
+        <td class="px-6 py-4 whitespace-nowrap">
+            <div class="text-sm font-mono text-gray-900">
+                <?php echo e($mouvement->reference ?? 'N/A'); ?>
+
+            </div>
+        </td>
+        <td class="px-6 py-4">
+            <div class="text-sm text-gray-900 max-w-xs truncate">
+                <?php echo e($mouvement->description ?? 'Transaction'); ?>
+
+            </div>
+            <?php if($mouvement->nom_deposant): ?>
+            <div class="text-xs text-gray-500">
+                Par: <?php echo e($mouvement->nom_deposant); ?>
+
+            </div>
+            <?php endif; ?>
+        </td>
+        <td class="px-6 py-4 whitespace-nowrap">
+            <div class="text-sm font-medium <?php echo e($couleurClasse); ?>">
+                <?php echo e($montantAffichage); ?>
+
+            </div>
+        </td>
+        <td class="px-6 py-4 whitespace-nowrap">
+            <div class="text-sm text-gray-600">
+                <?php echo e(number_format($mouvement->solde_avant, 2, ',', ' ')); ?> <?php echo e($mouvement->devise ?? $compte->devise); ?>
+
+            </div>
+        </td>
+        <td class="px-6 py-4 whitespace-nowrap">
+            <div class="text-sm font-semibold text-gray-900">
+                <?php echo e(number_format($mouvement->solde_apres, 2, ',', ' ')); ?> <?php echo e($mouvement->devise ?? $compte->devise); ?>
+
+            </div>
+        </td>
+        <td class="px-6 py-4 whitespace-nowrap">
+            <div class="text-sm text-gray-600">
+                <?php echo e($mouvement->operateur->name ?? 'Système'); ?>
+
+            </div>
+            <div class="text-xs text-gray-500">
+                <?php echo e($mouvement->operateur->numero_employe ?? 'N/A'); ?>
+
+            </div>
+        </td>
+    </tr>
+    <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); if ($__empty_1): ?>
+    <tr>
+        <td colspan="8" class="px-6 py-12 text-center">
+            <div class="text-gray-400 mb-4">
+                <i class="fas fa-exchange-alt text-4xl"></i>
+            </div>
+            <p class="text-gray-500 text-lg">Aucun mouvement enregistré</p>
+            <p class="text-gray-400 text-sm mt-2">Les transactions apparaîtront ici</p>
+        </td>
+    </tr>
+    <?php endif; ?>
+</tbody>
+    </table>
+</div>
 
             <!-- Pagination -->
             <?php if($mouvements->hasPages()): ?>
@@ -910,6 +923,8 @@
             <?php endif; ?>
         </div>
     </div>
+
+    
 
                 <!-- Action Buttons -->
                 <div class="flex flex-col sm:flex-row gap-4 mt-8 pt-6 border-t border-gray-200">

@@ -10,6 +10,7 @@ use Filament\Actions\ExportAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Auth;
 
 class CompteEpargnesTable
@@ -18,10 +19,10 @@ class CompteEpargnesTable
     {
         return $table
             ->columns([
+                // Vos colonnes ici (même qu'avant)
                 TextColumn::make('numero_compte')
                     ->label('Numéro Compte')
-                    
-                    ->sortable(),  // PAS de searchable() ici
+                    ->sortable(),
                     
                 TextColumn::make('type_compte')
                     ->label('Type')
@@ -31,23 +32,14 @@ class CompteEpargnesTable
                         'groupe_solidaire' => 'primary',
                     }),
                     
-                // Colonne pour afficher le nom complet
                 TextColumn::make('nom_complet')
                     ->label('Titulaire')
-                    ->getStateUsing(function (CompteEpargne $record) {
-                        if ($record->type_compte === 'individuel' && $record->client) {
-                            return $record->client->nom_complet;
-                        } elseif ($record->type_compte === 'groupe_solidaire' && $record->groupeSolidaire) {
-                            return $record->groupeSolidaire->nom_groupe . ' (Groupe)';
-                        }
-                        return 'N/A';
-                    })
-                    ->sortable(),  // PAS de searchable() ici
+                    ->sortable(),
 
                 TextColumn::make('groupeSolidaire.nom_groupe')
                     ->label('Groupe')
                     ->visible(fn ($record) => $record && $record->type_compte === 'groupe_solidaire')
-                    ->sortable(),  // PAS de searchable() ici
+                    ->sortable(),
                     
                 TextColumn::make('solde')
                     ->label('Solde')
@@ -73,6 +65,46 @@ class CompteEpargnesTable
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
+                // Ajoutez ce filtre de recherche en PREMIER
+                \Filament\Tables\Filters\Filter::make('recherche_rapide')
+                    ->schema([
+                        \Filament\Forms\Components\TextInput::make('search')
+                            ->label('Recherche rapide')
+                            ->placeholder('Numéro, nom, groupe...')
+                            ->live()
+                    ])
+                    ->query(function (Builder $query, array $data): Builder {
+                        return $query
+                            ->when(
+                                $data['search'] ?? null,
+                                fn (Builder $query, $search): Builder => $query->where(function($q) use ($search) {
+                                    $q->where('numero_compte', 'LIKE', "%{$search}%")
+                                      ->orWhere('type_compte', 'LIKE', "%{$search}%")
+                                      ->orWhere('devise', 'LIKE', "%{$search}%")
+                                      ->orWhere('statut', 'LIKE', "%{$search}%")
+                                      ->orWhereRaw("CAST(solde AS CHAR) LIKE ?", ["%{$search}%"])
+                                      
+                                      ->orWhereHas('client', function($clientQuery) use ($search) {
+                                          $clientQuery->where('nom', 'LIKE', "%{$search}%")
+                                                     ->orWhere('postnom', 'LIKE', "%{$search}%")
+                                                     ->orWhere('prenom', 'LIKE', "%{$search}%");
+                                      })
+                                      
+                                      ->orWhereHas('groupeSolidaire', function($groupeQuery) use ($search) {
+                                          $groupeQuery->where('nom_groupe', 'LIKE', "%{$search}%");
+                                      });
+                                })
+                            );
+                    })
+                    ->indicateUsing(function (array $data): ?string {
+                        if (! ($data['search'] ?? null)) {
+                            return null;
+                        }
+                        
+                        return 'Recherche: ' . $data['search'];
+                    })
+                    ->columnSpanFull(),
+                    
                 SelectFilter::make('type_compte')
                     ->options([
                         'individuel' => 'Individuel',
@@ -105,12 +137,6 @@ class CompteEpargnesTable
                     ->color('info')
                     ->url(fn ($record) => route('comptes-epargne.details', ['compte_epargne_id' => $record->id]))
                     ->visible(fn () => Auth::user()?->can('view_client')),
-            ])
-            ->toolbarActions([
-                BulkActionGroup::make([
-                    ExportAction::make()
-                        ->exporter(CompteEpargneExporter::class)
-                ]),
             ]);
     }
 }
