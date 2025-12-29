@@ -30,15 +30,19 @@ class MouvementObserver
 
         // ====== EXCLUSIONS ======
         $excludedTypes = [
-            'credit_octroye',
+            // 'credit_octroye',
             'credit_octroye_groupe', 
             'depense_comptabilite',
             'depense_diverse_comptabilite',
             'deblocage_caution_auto',
             'versement_agent',
-            'paiement_groupes',
+            'paiement_groupes', 
+            'paiement_credit',
+            'excedent_groupe_exact',
             'paiement_credit_groupe',
+            'paiement_individuels',
             'paiement_credit_automatique',
+            'complement_paiement_groupe',
             
         ];
         
@@ -198,7 +202,7 @@ class MouvementObserver
         $typeOperation = $mouvement->type === 'depot' ? 'dépôt' : 'retrait';
         
         $message = sprintf(
-            "%s membre %s, un %s de %s %s a été effectué sur votre compte %s, le %s. Nouveau solde : %s %s.\nTUMAINI LETU \"Réussir ensemble !\"",
+            "%s membre %s, un %s de %s %s a été effectué sur votre compte %s, le %s.  solde : %s %s.\nTUMAINI LETU",
             $genre,
             $nom,
             $typeOperation,
@@ -233,7 +237,7 @@ class MouvementObserver
         $solde = $mouvement->solde_apres ?? $compteEpargne->solde;
         
         $message = sprintf(
-            "%s membre %s, un %s de %s %s a été effectué sur votre compte épargne %s, le %s. Nouveau solde : %s %s.\nTUMAINI LETU \"Réussir ensemble !\"",
+            "%s membre %s, un %s de %s %s a été effectué sur votre compte épargne %s, le %s.solde : %s %s.\nTUMAINI LETU ",
             $genre,
             $nom,
             $typeOperation,

@@ -467,8 +467,8 @@ class ManageComptabilite extends ManageRecords
                                 ->label(fn ($get) => $get('type_operation') === 'paiement_salaire' ? 'Montant à Créditer' : 'Montant')
                                 ->numeric()
                                 ->required()
-                                ->minValue(0.01)
-                                ->step(0.01)
+                                // ->minValue(0.01)
+                                // ->step(0.01)
                                 ->suffix(function ($get) {
                                     if ($get('type_operation') === 'paiement_salaire') {
                                         return $get('devise') ?? 'USD';

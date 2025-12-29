@@ -4,6 +4,7 @@ namespace App\Filament\Resources\HistoriqueCompteSpecials\Tables;
 
 use App\Filament\Exports\HistoriqueCompteSpecialExporter;
 use App\Models\HistoriqueCompteSpecial;
+use App\Services\ComptabilityService;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
@@ -248,6 +249,46 @@ class HistoriqueCompteSpecialsTable
                 ]),
             ])
             ->headerActions([
+
+                Action::make('rapport_instantanee_comptabilite')
+                        ->label('Rapport Comptabilité Instantané')
+                        ->icon('heroicon-o-clock')
+                        ->color('info')
+                        ->schema([
+                            DatePicker::make('date_rapport')
+                                ->label('Date du rapport')
+                                ->default(now())
+                                ->required(),
+                            Toggle::make('inclure_details')
+                                ->label('Inclure le détail des mouvements')
+                                ->default(true),
+                        ])
+                        ->action(function (array $data) {
+                            try {
+                                $comptabilityService = app(ComptabilityService::class);
+                                $rapport = $comptabilityService->rapportInstantaneeComptabilite($data['date_rapport']);
+                                
+                                // Export HTML
+                                $html = view('pdf.rapport-comptabilite-instantanee', [
+                                    'rapport' => $rapport,
+                                    'inclure_details' => $data['inclure_details']
+                                ])->render();
+
+                                $filename = 'rapport-comptabilite-instantane-' . now()->format('Y-m-d-H-i') . '.html';
+                                
+                                return response()->streamDownload(function () use ($html) {
+                                    echo $html;
+                                }, $filename);
+                                
+                            } catch (\Exception $e) {
+                                Notification::make()
+                                    ->title('Erreur')
+                                    ->body('Impossible de générer le rapport: ' . $e->getMessage())
+                                    ->danger()
+                                    ->send();
+                            }
+                        }),
+
                 // Action pour générer un rapport HTML
                 Action::make('generer_rapport')
                     ->label('Générer Rapport HTML')
@@ -339,7 +380,7 @@ class HistoriqueCompteSpecialsTable
                     ->label('Exporter Excel (Analyse)')
                     ->icon('heroicon-o-arrow-down-tray')
                     ->color('warning')
-                    ->exporter(\App\Filament\Exports\HistoriqueCompteSpecialExporter::class)
+                    ->exporter(HistoriqueCompteSpecialExporter::class)
                     ->fileName('historique-compte-special-analyse')
                     ->formats([
                         ExportFormat::Csv,
@@ -351,6 +392,9 @@ class HistoriqueCompteSpecialsTable
                     ->modalCancelActionLabel('Annuler')
                     ->visible(fn () => Auth::user()->can('view_comptespecial')),
             ]);
+
+
+            
     }
     
     /**

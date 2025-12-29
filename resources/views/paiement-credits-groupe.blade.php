@@ -77,36 +77,33 @@
             </div>
         @endif
 
- @if(session('paiement_success'))
-    <!-- Affichage des résultats détaillés -->
-      <!-- Affichage des résultats détaillés -->
+@if(session('paiement_success'))
     <div class="mb-6 bg-white rounded-xl p-6 shadow-lg">
         <h3 class="text-xl font-bold text-green-600 mb-4 flex items-center">
             <i class="fas fa-check-circle mr-2"></i>
             Paiement Groupe Terminé - {{ session('credit_groupe_nom') }}
         </h3>
         
-        <!-- Ajout de la répartition capital/intérêts -->
         <div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-4">
             <div class="bg-blue-50 p-4 rounded-lg">
-                <p class="text-sm text-blue-600">Total Prélevé</p>
+                <p class="text-sm text-blue-600">Total Prélevé Groupe</p>
                 <p class="text-2xl font-bold text-blue-700">{{ number_format(session('total_paiement_groupe'), 2) }} USD</p>
             </div>
+            <div class="bg-purple-50 p-4 rounded-lg">
+                <p class="text-sm text-purple-600">Prélevé Membres</p>
+                <p class="text-2xl font-bold text-purple-700">
+                    {{ number_format(collect(session('results'))->sum('montant_preleve_membre'), 2) }} USD
+                </p>
+            </div>
             <div class="bg-green-50 p-4 rounded-lg">
-                <p class="text-sm text-green-600">Capital Remboursé</p>
+                <p class="text-sm text-green-600">Avec Complément</p>
                 <p class="text-2xl font-bold text-green-700">
-                    {{ number_format(session('capital_rembourse') ?? 0, 2) }} USD
+                    {{ collect(session('results'))->where('montant_preleve_membre', '>', 0)->count() }}
                 </p>
             </div>
             <div class="bg-orange-50 p-4 rounded-lg">
-                <p class="text-sm text-orange-600">Intérêts Payés</p>
+                <p class="text-sm text-orange-600">Avec Excédent</p>
                 <p class="text-2xl font-bold text-orange-700">
-                    {{ number_format(session('interets_payes') ?? 0, 2) }} USD
-                </p>
-            </div>
-            <div class="bg-purple-50 p-4 rounded-lg">
-                <p class="text-sm text-purple-600">Avec Excédent</p>
-                <p class="text-2xl font-bold text-purple-700">
                     {{ collect(session('results'))->where('montant_excedent', '>', 0)->count() }}
                 </p>
             </div>
@@ -118,17 +115,25 @@
             </div>
         </div>
         
-        
         <div class="space-y-2">
             <h4 class="font-semibold text-gray-700 mb-2">Détails par membre:</h4>
             @foreach(session('results') as $result)
                 @php
-                    $bgColor = $result['statut'] === 'succes' ? 
-                              ($result['montant_excedent'] > 0 ? 'bg-purple-50' : 'bg-green-50') : 
-                              'bg-red-50';
-                    $icon = $result['statut'] === 'succes' ? 
-                           ($result['montant_excedent'] > 0 ? 'fa-plus-circle text-purple-600' : 'fa-check-circle text-green-600') : 
-                           'fa-times-circle text-red-600';
+                    if ($result['statut'] === 'succes') {
+                        if ($result['montant_excedent'] > 0) {
+                            $bgColor = 'bg-purple-50';
+                            $icon = 'fa-plus-circle text-purple-600';
+                        } elseif ($result['montant_preleve_membre'] > 0) {
+                            $bgColor = 'bg-green-50';
+                            $icon = 'fa-wallet text-green-600';
+                        } else {
+                            $bgColor = 'bg-blue-50';
+                            $icon = 'fa-check-circle text-blue-600';
+                        }
+                    } else {
+                        $bgColor = 'bg-red-50';
+                        $icon = 'fa-times-circle text-red-600';
+                    }
                 @endphp
                 <div class="{{ $bgColor }} p-3 rounded-lg">
                     <div class="flex items-center justify-between mb-2">
@@ -144,6 +149,12 @@
                     <div class="grid grid-cols-2 gap-2 text-sm">
                         <div>Prélevé du groupe: <span class="font-semibold">{{ number_format($result['montant_preleve_groupe'], 2) }} USD</span></div>
                         <div>Dû: <span class="font-semibold">{{ number_format($result['montant_du'], 2) }} USD</span></div>
+                        @if($result['montant_preleve_membre'] > 0)
+                            <div class="col-span-2 text-green-600">
+                                <i class="fas fa-wallet mr-1"></i>
+                                Complément du membre: <span class="font-semibold">{{ number_format($result['montant_preleve_membre'], 2) }} USD</span>
+                            </div>
+                        @endif
                         @if($result['montant_excedent'] > 0)
                             <div class="col-span-2 text-purple-600">
                                 <i class="fas fa-arrow-right mr-1"></i>
@@ -206,6 +217,7 @@
                         </div>
 
 <!-- Dans les statistiques du groupe -->
+<!-- Dans les statistiques du groupe -->
 <div class="info-card bg-gradient-to-br from-orange-50 to-red-50 rounded-xl p-6 border-l-orange-400">
     <div class="flex items-center justify-between mb-3">
         <div class="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
@@ -223,14 +235,28 @@
     <p class="text-xs text-green-600 mt-1">
         Dû jusqu'à présent: {{ number_format($groupeSelectionne->montant_du_jusqu_present, 2) }} USD
     </p>
-
     
-</div>
-    <p class="text-sm text-gray-600 font-medium">Montant Restant</p>
-    <p class="text-xs text-gray-500 mt-1">
-        Dû jusqu'à présent: {{ number_format($groupeSelectionne->montant_du_jusqu_present ?? 0, 2) }} USD
-        | Payé: {{ number_format($groupeSelectionne->total_deja_paye ?? 0, 2) }} USD
-    </p>
+    <!-- AJOUTER CE BLOC POUR AFFICHER LE SOLDE DISPONIBLE -->
+    <div class="mt-2 p-2 bg-blue-50 rounded-lg">
+        <div class="flex justify-between items-center">
+            <span class="text-xs text-blue-700 font-medium">Solde du compte groupe:</span>
+            <span class="text-sm font-bold text-blue-800">
+                {{ number_format($groupeSelectionne->compte->solde, 2) }} USD
+            </span>
+        </div>
+        <div class="flex justify-between items-center mt-1">
+            <span class="text-xs text-red-600">Caution bloquée:</span>
+            <span class="text-xs font-semibold text-red-600">
+                {{ number_format(App\Models\Mouvement::getCautionBloquee($groupeSelectionne->compte->id), 2) }} USD
+            </span>
+        </div>
+        <div class="flex justify-between items-center mt-1">
+            <span class="text-xs text-green-700 font-medium">Solde disponible:</span>
+            <span class="text-xs font-bold text-green-700">
+                {{ number_format(App\Models\Mouvement::getSoldeDisponible($groupeSelectionne->compte->id), 2) }} USD
+            </span>
+        </div>
+    </div>
 </div>
 
                         <div class="info-card bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-6 border-l-green-400">

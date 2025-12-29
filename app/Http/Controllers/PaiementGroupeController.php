@@ -12,6 +12,7 @@ use App\Models\PaiementCredit;
 use App\Enums\TypePaiement;
 use Filament\Notifications\Collection;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -28,158 +29,122 @@ class PaiementGroupeController extends Controller
         ]);
     }
 
-   public function processerPaiements(Request $request)
-    {
-        $request->validate([
-            'selected_groupe_id' => 'required|exists:credit_groupes,id',
-            'paiements_membres' => 'required|array',
-        ]);
+public function processerPaiements(Request $request)
+{
+    $request->validate([
+        'selected_groupe_id' => 'required|exists:credit_groupes,id',
+        'paiements_membres' => 'required|array',
+    ]);
 
-        try {
-            DB::transaction(function () use ($request) {
-                $creditGroupe = CreditGroupe::with(['compte'])->findOrFail($request->selected_groupe_id);
-                $datePaiement = now();
-                $results = [];
-                $totalPaiementGroupe = 0;
+    try {
+        DB::transaction(function () use ($request) {
+            $creditGroupe = CreditGroupe::with(['compte'])->findOrFail($request->selected_groupe_id);
+            $datePaiement = now();
+            $results = [];
+            $totalPaiementGroupe = 0;
 
-                foreach ($request->paiements_membres as $membreId => $montantApporte) {
-                    $montantApporte = floatval($montantApporte);
-                    if ($montantApporte > 0) {
-                        $result = $this->traiterPaiementMembreGroupe($membreId, $montantApporte, $creditGroupe, $datePaiement);
-                        $results[] = $result;
-                        $totalPaiementGroupe += $result['montant_preleve_groupe'] ?? 0;
-                    }
+            foreach ($request->paiements_membres as $membreId => $montantApporte) {
+                $montantApporte = floatval($montantApporte);
+                if ($montantApporte > 0) {
+                    // UTILISER LA BONNE MÉTHODE - VERSION EXACTE
+                    $result = $this->traiterPaiementMembreGroupeExact($membreId, $montantApporte, $creditGroupe, $datePaiement);
+                    $results[] = $result;
+                    $totalPaiementGroupe += $result['montant_preleve_groupe'] ?? 0;
                 }
+            }
 
-                // CORRECTION : Utiliser la nouvelle méthode pour traiter par membre
-                $this->traiterPaiementsParMembre($creditGroupe, $results, $datePaiement);
+            // Traiter les paiements par membre
+            $this->traiterPaiementsParMembre($creditGroupe, $results, $datePaiement);
 
-                // Stocker les résultats dans la session pour affichage
-                session()->flash('paiement_success', true);
-                session()->flash('results', $results);
-                session()->flash('total_paiement_groupe', $totalPaiementGroupe);
-                session()->flash('credit_groupe_nom', $creditGroupe->compte->nom ?? 'Groupe');
-                
-                // Ajouter les totaux pour affichage
-                $totalExcedent = array_sum(array_column($results, 'montant_excedent'));
-                session()->flash('total_excedent', $totalExcedent);
-            });
+            // Stocker les résultats
+            session()->flash('paiement_success', true);
+            session()->flash('results', $results);
+            session()->flash('total_paiement_groupe', $totalPaiementGroupe);
+            session()->flash('credit_groupe_nom', $creditGroupe->compte->nom ?? 'Groupe');
+            
+            $totalExcedent = array_sum(array_column($results, 'montant_excedent'));
+            session()->flash('total_excedent', $totalExcedent);
+        });
 
-            return redirect()->route('paiement.credits.groupe', [
-                'selected_groupe_id' => $request->selected_groupe_id
-            ])->with('success', 'Paiements traités avec succès!');
+        return redirect()->route('paiement.credits.groupe', [
+            'selected_groupe_id' => $request->selected_groupe_id
+        ])->with('success', 'Paiements traités avec succès!');
 
-        } catch (\Exception $e) {
-            Log::error('Erreur lors du traitement des paiements groupe: ' . $e->getMessage());
-            return redirect()->route('paiement.credits.groupe')
-                ->with('error', 'Une erreur est survenue lors du traitement des paiements: ' . $e->getMessage());
-        }
+    } catch (\Exception $e) {
+        Log::error('Erreur lors du traitement des paiements groupe: ' . $e->getMessage());
+        return redirect()->route('paiement.credits.groupe')
+            ->with('error', 'Une erreur est survenue lors du traitement des paiements: ' . $e->getMessage());
     }
-
+}
     /**
      * CORRECTION : Traite les paiements multiples (si montant > remboursement hebdo)
      */
-  private function traiterPaiementsMultiples($creditGroupe, $montantTotalApporte, $datePaiement)
-    {
-        $montantHebdomadaireTotal = $creditGroupe->remboursement_hebdo_total; // 76.56 USD pour le groupe
+
+
+private function traiterPaiementsParMembre($creditGroupe, $results, $datePaiement)
+{
+    $repartition = $creditGroupe->repartition_membres ?? [];
+    $montantTotalApporte = 0;
+    
+    // 1. Calculer le total pour le remboursement
+    foreach ($results as $result) {
+        $membreId = $result['membre_id'] ?? null;
+        $montantApporte = $result['montant_apporte'] ?? 0;
+        $montantDuMembre = $result['montant_du'] ?? 0;
         
-        // CORRECTION : Pour chaque membre, traiter individuellement son paiement
-        // On ne peut pas simplement diviser le total par le montant hebdo
-        
-        // D'abord, traiter le paiement hebdomadaire normal
-        if ($montantTotalApporte >= $montantHebdomadaireTotal) {
-            $this->effectuerPaiementGroupe($creditGroupe, $montantHebdomadaireTotal, $datePaiement);
-            
-            // Calculer l'excédent après le paiement hebdomadaire
-            $resteApresRemboursement = $montantTotalApporte - $montantHebdomadaireTotal;
-            
-            // Si reste > 0, c'est un excédent qui ira dans les comptes membres
-            if ($resteApresRemboursement > 0) {
-                $this->distribuerExcedentMembres($creditGroupe, $resteApresRemboursement, $datePaiement);
-            }
-        } else {
-            // Si le montant total est inférieur au remboursement hebdo
-            // C'est un paiement partiel, pas d'excédent
-            $this->effectuerPaiementGroupe($creditGroupe, $montantTotalApporte, $datePaiement);
+        if ($membreId && isset($repartition[$membreId])) {
+            // Le montant appliqué au remboursement est le minimum
+            $montantAppliqueAuRemboursement = min($montantApporte, $montantDuMembre);
+            $montantTotalApporte += $montantAppliqueAuRemboursement;
         }
     }
-
-
-     private function traiterPaiementsParMembre($creditGroupe, $results, $datePaiement)
-    {
-        $repartition = $creditGroupe->repartition_membres ?? [];
-        $montantTotalApporte = 0;
-        $excedentsParMembre = [];
-        
-        // 1. Calculer les excédents par membre
-        foreach ($results as $result) {
-            $membreId = $result['membre_id'] ?? null;
-            $montantApporte = $result['montant_apporte'] ?? 0;
-            $montantDuMembre = $result['montant_du'] ?? 0;
-            
-            if ($membreId && isset($repartition[$membreId])) {
-                // Calculer l'excédent pour ce membre
-                $excedentMembre = max(0, $montantApporte - $montantDuMembre);
-                
-                if ($excedentMembre > 0) {
-                    $excedentsParMembre[$membreId] = $excedentMembre;
-                }
-                
-                // Le montant appliqué au remboursement est le minimum
-                $montantAppliqueAuRemboursement = min($montantApporte, $montantDuMembre);
-                $montantTotalApporte += $montantAppliqueAuRemboursement;
-            }
-        }
-        
-        // 2. Effectuer le paiement du groupe avec le total des remboursements
-        if ($montantTotalApporte > 0) {
-            $this->effectuerPaiementGroupe($creditGroupe, $montantTotalApporte, $datePaiement);
-        }
-        
-        // 3. Distribuer les excédents aux membres
-        if (!empty($excedentsParMembre)) {
-            $this->distribuerExcedentsMembresExact($creditGroupe, $excedentsParMembre, $datePaiement);
-        }
+    
+    // 2. Effectuer le paiement du groupe avec le total des remboursements
+    if ($montantTotalApporte > 0) {
+        $this->effectuerPaiementGroupe($creditGroupe, $montantTotalApporte, $datePaiement);
     }
-
+    
+    // 3. SUPPRIMER l'appel à distribuerExcedentsMembresExact()
+    // Les excédents sont déjà gérés dans traiterPaiementMembreGroupeExact()
+}
     /**
      * NOUVELLE MÉTHODE : Distribue les excédents exacts aux membres
      */
-    private function distribuerExcedentsMembresExact($creditGroupe, $excedentsParMembre, $datePaiement)
-    {
-        foreach ($excedentsParMembre as $membreId => $excedent) {
-            if ($excedent > 0) {
-                $compteMembre = Compte::where('client_id', $membreId)->first();
-                if ($compteMembre) {
-                    // Créditer le compte membre avec l'excédent exact
-                    $ancienSolde = $compteMembre->solde;
-                    $compteMembre->solde += $excedent;
-                    $compteMembre->save();
-                    
-                    // Créer un mouvement
-                    $reference = 'EXCEDENT-EXACT-GRP-' . $creditGroupe->id . '-MEMBRE-' . $membreId . '-' . now()->format('YmdHis');
-                    
-                    Mouvement::create([
-                        'compte_id' => $compteMembre->id,
-                        'type_mouvement' => 'excedent_groupe_exact',
-                        'montant' => $excedent,
-                        'solde_avant' => $ancienSolde,
-                        'solde_apres' => $compteMembre->solde,
-                        'description' => "Excédent exact remboursement crédit groupe - Montant: " . number_format($excedent, 2) . " USD",
-                        'reference' => $reference,
-                        'date_mouvement' => $datePaiement,
-                        'nom_deposant' => 'Système Automatique'
-                    ]);
-                    
-                    Log::info("💰 Excédent exact distribué au membre", [
-                        'membre_id' => $membreId,
-                        'montant_excedent' => $excedent,
-                        'nouveau_solde' => $compteMembre->solde
-                    ]);
-                }
-            }
-        }
-    }
+// private function distribuerExcedentsMembresExact($creditGroupe, $excedentsParMembre, $datePaiement)
+// {
+//     foreach ($excedentsParMembre as $membreId => $excedent) {
+//         if ($excedent > 0) {
+//             $compteMembre = Compte::where('client_id', $membreId)->first();
+//             if ($compteMembre) {
+//                 // Créditer le compte membre avec l'excédent exact
+//                 $ancienSolde = $compteMembre->solde;
+//                 $compteMembre->solde += $excedent;
+//                 $compteMembre->save();
+                
+//                 // Créer un mouvement
+//                 $reference = 'EXCEDENT-EXACT-GRP-' . $creditGroupe->id . '-MEMBRE-' . $membreId . '-' . now()->format('YmdHis');
+                
+//                 Mouvement::create([
+//                     'compte_id' => $compteMembre->id,
+//                     'type_mouvement' => 'excedent_groupe_exact',
+//                     'montant' => $excedent,
+//                     'solde_avant' => $ancienSolde,
+//                     'solde_apres' => $compteMembre->solde,
+//                     'description' => "Excédent exact remboursement crédit groupe - Montant: " . number_format($excedent, 2) . " USD",
+//                     'reference' => $reference,
+//                     'date_mouvement' => $datePaiement,
+//                     'nom_deposant' => 'Système Automatique'
+//                 ]);
+                
+//                 Log::info("💰 Excédent exact distribué au membre", [
+//                     'membre_id' => $membreId,
+//                     'montant_excedent' => $excedent,
+//                     'nouveau_solde' => $compteMembre->solde
+//                 ]);
+//             }
+//         }
+//     }
+// }
 
 
 
@@ -229,81 +194,285 @@ class PaiementGroupeController extends Controller
         }
     }
 
-    /**
-     * Traite le paiement d'un membre avec prélèvement du compte groupe
-     */private function traiterPaiementMembreGroupe($membreId, $montantApporte, $creditGroupe, $datePaiement)
-    {
-        $compteMembre = Compte::where('client_id', $membreId)->first();
-        $compteGroupe = $creditGroupe->compte;
-        
-        if (!$compteMembre) {
-            return [
-                'compte' => 'Membre ' . $membreId,
-                'montant_apporte' => $montantApporte,
-                'montant_preleve_groupe' => 0,
-                'montant_du' => 0,
-                'montant_excedent' => 0,
-                'statut' => 'echec',
-                'raison' => 'Compte membre non trouvé',
-                'membre_id' => $membreId // ← AJOUTER pour identifier le membre
-            ];
-        }
-
-        // Récupérer les détails du membre depuis la répartition
-        $repartition = $creditGroupe->repartition_membres ?? [];
-        $detailsMembre = $repartition[$membreId] ?? [];
-        $montantDuMembre = $detailsMembre['remboursement_hebdo'] ?? 0;
-        
-        // Vérifier que le compte groupe a suffisamment de solde
-        $soldeGroupe = $compteGroupe->solde;
-        
-        if ($soldeGroupe < $montantApporte) {
-            return [
-                'compte' => $compteMembre->numero_compte,
-                'montant_apporte' => $montantApporte,
-                'montant_preleve_groupe' => 0,
-                'montant_du' => $montantDuMembre,
-                'montant_excedent' => 0,
-                'statut' => 'echec',
-                'raison' => 'Solde insuffisant dans le compte groupe',
-                'membre_id' => $membreId
-            ];
-        }
-
-        // Calculer l'excédent exact pour ce membre
-        $montantExcedent = max(0, $montantApporte - $montantDuMembre);
-        
-        // Débiter le compte groupe
-        $ancienSoldeGroupe = $compteGroupe->solde;
-        $compteGroupe->solde -= $montantApporte;
-        $compteGroupe->save();
-
-        // Créer les mouvements comptables
-        $this->creerMouvements($compteGroupe, $compteMembre, $montantApporte, $montantDuMembre, $montantExcedent, $creditGroupe, $membreId, $datePaiement);
-
-        $statut = 'succes';
-        $raison = 'Paiement enregistré';
-        
-        if ($montantExcedent > 0) {
-            $raison = 'Paiement avec excédent - ' . number_format($montantExcedent, 2) . ' USD';
-        }
-
+private function traiterPaiementMembreGroupeExact($membreId, $montantApporte, $creditGroupe, $datePaiement)
+{
+    Log::info("=== DÉBUT TRAITEMENT EXACT PAIEMENT MEMBRE GROUPE ===");
+    Log::info("Membre ID: {$membreId}");
+    Log::info("Montant apporté: {$montantApporte}");
+    Log::info("Crédit Groupe ID: {$creditGroupe->id}");
+    Log::info("Date: {$datePaiement}");
+    
+    $compteMembre = Compte::where('client_id', $membreId)->first();
+    $compteGroupe = $creditGroupe->compte;
+    
+    // LOGS DÉTAILLÉS DU GROUPE
+    Log::info("=== INFOS COMPTE GROUPE ===");
+    Log::info("ID: {$compteGroupe->id}");
+    Log::info("Numéro: {$compteGroupe->numero_compte}");
+    Log::info("Solde AVANT traitement: {$compteGroupe->solde} USD");
+    Log::info("Type: {$compteGroupe->type_compte}");
+    
+    if (!$compteMembre) {
+        Log::error("❌ Compte membre non trouvé pour client_id: {$membreId}");
         return [
-            'compte' => $compteMembre->numero_compte,
+            'compte' => 'Membre ' . $membreId,
             'montant_apporte' => $montantApporte,
-            'montant_preleve_groupe' => $montantApporte,
-            'montant_du' => $montantDuMembre,
-            'montant_excedent' => $montantExcedent,
-            'statut' => $statut,
-            'raison' => $raison,
-            'nouveau_solde_membre' => $compteMembre->solde,
-            'nouveau_solde_groupe' => $compteGroupe->solde,
-            'membre_id' => $membreId // ← TRÈS IMPORTANT pour identifier le membre
+            'montant_preleve_groupe' => 0,
+            'montant_preleve_membre' => 0,
+            'montant_du' => 0,
+            'montant_excedent' => 0,
+            'statut' => 'echec',
+            'raison' => 'Compte membre non trouvé',
+            'membre_id' => $membreId
         ];
     }
 
-
-    private function getCombinedCredits(): Collection
+    // Récupérer le montant dû hebdomadaire
+    $repartition = $creditGroupe->repartition_membres ?? [];
+    $detailsMembre = $repartition[$membreId] ?? [];
+    $montantDuMembre = $detailsMembre['remboursement_hebdo'] ?? 0;
+    
+    Log::info("=== INFOS MEMBRE ===");
+    Log::info("Compte membre: {$compteMembre->numero_compte}");
+    Log::info("Nom: {$compteMembre->nom} {$compteMembre->prenom}");
+    Log::info("Solde membre: {$compteMembre->solde} USD");
+    Log::info("Montant dû hebdo: {$montantDuMembre} USD");
+    Log::info("Montant apporté: {$montantApporte} USD");
+    
+    // Calculer solde disponible groupe
+    $cautionGroupe = DB::table('cautions')
+        ->where('compte_id', $compteGroupe->id)
+        ->where('statut', 'bloquee')
+        ->sum('montant');
+    
+    $soldeDisponibleGroupe = max(0, $compteGroupe->solde - $cautionGroupe);
+    
+    Log::info("=== INFOS CAUTION ===");
+    Log::info("Caution bloquée: {$cautionGroupe} USD");
+    Log::info("Solde disponible groupe: {$soldeDisponibleGroupe} USD");
+    
+    // === LOGIQUE DE PRÉLÈVEMENT ===
+    // RÈGLE 1: Prélèvement groupe = montant apporté
+    $montantPreleveGroupe = $montantApporte;
+    $montantPreleveMembre = 0;
+    $montantExcedent = 0;
+    
+    // RÈGLE 2: Déterminer excédent ou déficit
+    if ($montantApporte >= $montantDuMembre) {
+        // Le membre paie assez ou plus
+        $montantExcedent = $montantApporte - $montantDuMembre;
+        Log::info("✅ Membre paie assez - Excédent: {$montantExcedent} USD");
+    } else {
+        // Le membre ne paie pas assez
+        $deficit = $montantDuMembre - $montantApporte;
+        Log::info("⚠️ Membre ne paie pas assez - Déficit: {$deficit} USD");
+        
+        // Vérifier solde membre
+        $soldeMembre = $compteMembre->solde;
+        Log::info("Solde disponible membre: {$soldeMembre} USD");
+        
+        if ($soldeMembre >= $deficit) {
+            $montantPreleveMembre = $deficit;
+            Log::info("✅ Membre a assez - Complément: {$montantPreleveMembre} USD");
+        } else {
+            $montantPreleveMembre = $soldeMembre;
+            Log::info("⚠️ Membre n'a pas assez - Complément partiel: {$montantPreleveMembre} USD");
+        }
+    }
+    
+    Log::info("=== RÉSUMÉ PRÉLÈVEMENTS ===");
+    Log::info("Prélèvement groupe: {$montantPreleveGroupe} USD");
+    Log::info("Prélèvement membre: {$montantPreleveMembre} USD");
+    Log::info("Excédent: {$montantExcedent} USD");
+    Log::info("Total dû: {$montantDuMembre} USD");
+    
+    // VÉRIFICATION SOLDE GROUPE
+    Log::info("=== VÉRIFICATION SOLDE GROUPE ===");
+    Log::info("Solde groupe avant: {$compteGroupe->solde} USD");
+    Log::info("Caution bloquée: {$cautionGroupe} USD");
+    Log::info("Solde disponible: {$soldeDisponibleGroupe} USD");
+    Log::info("Prélèvement demandé: {$montantPreleveGroupe} USD");
+    
+    // IMPORTANT: Validation du solde disponible
+    if ($montantPreleveGroupe > $soldeDisponibleGroupe) {
+        $message = "❌ Prélèvement refusé - Solde disponible insuffisant";
+        Log::error($message);
+        return [
+            'compte' => $compteMembre->numero_compte,
+            'montant_apporte' => $montantApporte,
+            'montant_preleve_groupe' => 0,
+            'montant_preleve_membre' => 0,
+            'montant_du' => $montantDuMembre,
+            'montant_excedent' => 0,
+            'statut' => 'echec',
+            'raison' => "Solde disponible groupe insuffisant. Disponible: " . number_format($soldeDisponibleGroupe, 2) . " USD",
+            'membre_id' => $membreId
+        ];
+    }
+    
+    // === PRÉLÈVEMENT DU GROUPE ===
+    if ($montantPreleveGroupe > 0) {
+        $ancienSoldeGroupe = $compteGroupe->solde;
+        $nouveauSoldeGroupe = $ancienSoldeGroupe - $montantPreleveGroupe;
+        
+        Log::info("=== PRÉLÈVEMENT GROUPE ===");
+        Log::info("Ancien solde: {$ancienSoldeGroupe} USD");
+        Log::info("Montant à prélever: {$montantPreleveGroupe} USD");
+        Log::info("Nouveau solde (calculé): {$nouveauSoldeGroupe} USD");
+        
+        // Mettre à jour le solde
+        $compteGroupe->solde = $nouveauSoldeGroupe;
+        $compteGroupe->save();
+        
+        Log::info("✅ Solde groupe mis à jour: {$compteGroupe->solde} USD");
+        
+        // Créer mouvement
+        $referenceGroupe = 'PRELEV-GRP-' . $creditGroupe->id . '-MEMBRE-' . $membreId . '-' . now()->format('YmdHis');
+        
+        $mouvementGroupe = Mouvement::create([
+            'compte_id' => $compteGroupe->id,
+            'type' => 'retrait',
+            'type_mouvement' => 'paiement_credit_groupe',
+            'montant' => $montantPreleveGroupe,
+            'solde_avant' => $ancienSoldeGroupe,
+            'solde_apres' => $compteGroupe->solde,
+            'description' => "Prélèvement crédit groupe - Membre: " . $compteMembre->numero_compte . 
+                           " - Montant apporté: " . number_format($montantApporte, 2) . " USD" .
+                           " - Dû: " . number_format($montantDuMembre, 2) . " USD",
+            'reference' => $referenceGroupe,
+            'date_mouvement' => $datePaiement,
+            'nom_deposant' => $compteMembre->nom . ' ' . $compteMembre->prenom
+        ]);
+        
+        Log::info("✅ Mouvement groupe créé - ID: {$mouvementGroupe->id}");
+        // Après avoir créé le mouvement groupe, vérifier la cohérence
+if (isset($mouvementGroupe)) {
+    $soldeApresAttendu = $ancienSoldeGroupe - $montantPreleveGroupe;
+    $soldeApresEnregistre = (float)$mouvementGroupe->solde_apres;
+    
+    if (abs($soldeApresAttendu - $soldeApresEnregistre) > 0.01) {
+        Log::error("❌ INCOHÉRENCE DÉTECTÉE DANS MOUVEMENT GROUPE");
+        Log::error("Solde après attendu: {$soldeApresAttendu} USD");
+        Log::error("Solde après enregistré: {$soldeApresEnregistre} USD");
+        Log::error("Différence: " . ($soldeApresAttendu - $soldeApresEnregistre) . " USD");
+        
+        // Corriger immédiatement
+        $mouvementGroupe->solde_apres = $soldeApresAttendu;
+        $mouvementGroupe->save();
+        
+        Log::info("✅ Mouvement corrigé: ID {$mouvementGroupe->id}");
+    }
+}     
+    }
+    
+ // === PRÉLÈVEMENT DU MEMBRE (si complément) ===
+if ($montantPreleveMembre > 0) {
+    Log::info("=== PRÉLÈVEMENT MEMBRE ===");
+    Log::info("Ancien solde membre: {$compteMembre->solde} USD");
+    Log::info("Montant à prélever: {$montantPreleveMembre} USD");
+    
+    $ancienSoldeMembre = $compteMembre->solde;
+    $nouveauSoldeMembre = $ancienSoldeMembre - $montantPreleveMembre;
+    
+    // Mettre à jour le solde directement avec DB::table pour éviter la validation
+    DB::table('comptes')
+        ->where('id', $compteMembre->id)
+        ->update(['solde' => $nouveauSoldeMembre]);
+    
+    // Recharger le modèle
+    $compteMembre->refresh();
+    
+    Log::info("✅ Nouveau solde membre: {$compteMembre->solde} USD");
+    
+    $referenceMembre = 'COMPL-MEMBRE-' . $membreId . '-GRP-' . $creditGroupe->id . '-' . now()->format('YmdHis');
+    
+    // Créer le mouvement avec DB::table pour éviter la validation
+    DB::table('mouvements')->insert([
+        'compte_id' => $compteMembre->id,
+        'type' => 'retrait',
+        'type_mouvement' => 'complement_paiement_groupe',
+        'montant' => $montantPreleveMembre,
+        'solde_avant' => $ancienSoldeMembre,
+        'solde_apres' => $nouveauSoldeMembre,
+        'description' => "Complément paiement crédit groupe - Montant: " . number_format($montantPreleveMembre, 2) . " USD" .
+                       " - Dû total: " . number_format($montantDuMembre, 2) . " USD" .
+                       " - Apporté: " . number_format($montantApporte, 2) . " USD",
+        'reference' => $referenceMembre,
+        'date_mouvement' => $datePaiement,
+        'nom_deposant' => 'Système Automatique',
+        'operateur_id' => Auth::id(),
+        'numero_compte' => $compteMembre->numero_compte,
+        'client_nom' => trim($compteMembre->nom . ' ' . $compteMembre->prenom),
+        'created_at' => now(),
+        'updated_at' => now(),
+        'devise' => 'USD'
+    ]);
+}
+    
+    // === EXCÉDENT AU MEMBRE ===
+    if ($montantExcedent > 0) {
+        Log::info("=== EXCÉDENT AU MEMBRE ===");
+        Log::info("Ancien solde membre: {$compteMembre->solde} USD");
+        Log::info("Excédent à créditer: {$montantExcedent} USD");
+        
+        $ancienSoldeMembre = $compteMembre->solde;
+        $compteMembre->solde += $montantExcedent;
+        $compteMembre->save();
+        
+        Log::info("✅ Nouveau solde membre avec excédent: {$compteMembre->solde} USD");
+        
+        $referenceExcedent = 'EXCEDENT-GRP-' . $creditGroupe->id . '-MEMBRE-' . $membreId . '-' . now()->format('YmdHis');
+        
+        Mouvement::create([
+            'compte_id' => $compteMembre->id,
+            'type' => 'depot',
+            'type_mouvement' => 'excedent_groupe',
+            'montant' => $montantExcedent,
+            'solde_avant' => $ancienSoldeMembre,
+            'solde_apres' => $compteMembre->solde,
+            'description' => "Excédent paiement crédit groupe - Montant: " . number_format($montantExcedent, 2) . " USD",
+            'reference' => $referenceExcedent,
+            'date_mouvement' => $datePaiement,
+            'nom_deposant' => 'Système Automatique'
+        ]);
+    }
+    
+    // === RÉSUMÉ FINAL ===
+    Log::info("=== RÉSUMÉ FINAL ===");
+    Log::info("Solde groupe après: {$compteGroupe->solde} USD");
+    Log::info("Solde membre après: {$compteMembre->solde} USD");
+    Log::info("Montant apporté: {$montantApporte} USD");
+    Log::info("Prélèvement groupe: {$montantPreleveGroupe} USD");
+    Log::info("Prélèvement membre: {$montantPreleveMembre} USD");
+    Log::info("Excédent: {$montantExcedent} USD");
+    Log::info("=== FIN TRAITEMENT ===");
+    
+    // Préparer réponse
+    $statut = 'succes';
+    $raison = 'Paiement enregistré';
+    
+    if ($montantExcedent > 0) {
+        $raison = 'Paiement avec excédent de ' . number_format($montantExcedent, 2) . ' USD';
+    }
+    
+    if ($montantPreleveMembre > 0) {
+        $raison = 'Paiement complété depuis compte membre: ' . number_format($montantPreleveMembre, 2) . ' USD';
+    }
+    
+    return [
+        'compte' => $compteMembre->numero_compte,
+        'montant_apporte' => $montantApporte,
+        'montant_preleve_groupe' => $montantPreleveGroupe,
+        'montant_preleve_membre' => $montantPreleveMembre,
+        'montant_du' => $montantDuMembre,
+        'montant_excedent' => $montantExcedent,
+        'statut' => $statut,
+        'raison' => $raison,
+        'nouveau_solde_membre' => $compteMembre->solde,
+        'nouveau_solde_groupe' => $compteGroupe->solde,
+        'membre_id' => $membreId
+    ];
+}    private function getCombinedCredits(): Collection
 {
     $creditsIndividuels = Credit::where('statut_demande', 'approuve')
         ->with(['compte', 'agent', 'superviseur', 'paiements'])
@@ -368,24 +537,28 @@ class PaiementGroupeController extends Controller
     /**
      * Crée les mouvements comptables
      */
-    private function creerMouvements($compteGroupe, $compteMembre, $montantApporte, $montantDu, $montantExcedent, $creditGroupe, $membreId, $datePaiement)
-    {
-        $reference = 'PAY-GRP-' . $creditGroupe->id . '-MEMBRE-' . $membreId . '-' . now()->format('YmdHis');
+  /**
+ * Crée les mouvements comptables
+ */
+private function creerMouvements($compteGroupe, $compteMembre, $montantPreleveGroupe, $montantDu, $montantExcedent, $creditGroupe, $membreId, $datePaiement)
+{
+    $reference = 'PAY-GRP-' . $creditGroupe->id . '-MEMBRE-' . $membreId . '-' . now()->format('YmdHis');
 
-        // Mouvement 1: Débit du compte groupe
-        Mouvement::create([
-            'compte_id' => $compteGroupe->id,
-            'type_mouvement' => 'paiement_credit_groupe',
-            'montant' => -$montantApporte,
-            'solde_avant' => $compteGroupe->solde + $montantApporte,
-            'solde_apres' => $compteGroupe->solde,
-            'description' => "Collecte paiement crédit groupe - Membre: " . $compteMembre->numero_compte . 
-                           " - Montant: " . number_format($montantApporte, 2) . " USD",
-            'reference' => $reference,
-            'date_mouvement' => $datePaiement,
-            'nom_deposant' => $compteMembre->nom . ' ' . $compteMembre->prenom
-        ]);
-    }
+    // Mouvement 1: Débit du compte groupe
+    Mouvement::create([
+        'compte_id' => $compteGroupe->id,
+        'type' => 'retrait',
+        'type_mouvement' => 'paiement_credit_groupe',
+        'montant' => $montantPreleveGroupe,
+        'solde_avant' => $compteGroupe->solde + $montantPreleveGroupe,
+        'solde_apres' => $compteGroupe->solde,
+        'description' => "Collecte paiement crédit groupe - Membre: " . $compteMembre->numero_compte . 
+                       " - Montant: " . number_format($montantPreleveGroupe, 2) . " USD",
+        'reference' => $reference,
+        'date_mouvement' => $datePaiement,
+        'nom_deposant' => $compteMembre->nom . ' ' . $compteMembre->prenom
+    ]);
+}
 
     /**
      * Effectue le paiement sur le compte groupe

@@ -134,108 +134,108 @@ class ComptesTable
                     ->url(fn ($record) => route('credits.create', ['compte_id' => $record->id])),
 
                 // Payer Crédit - ADAPTÉ POUR GROUPES
-                Action::make('payer_credit')
-                    ->label('')
-                    ->tooltip(fn ($record) => str_starts_with($record->numero_compte, 'GS') ? 'Payer Crédit Groupe' : 'Payer Crédit')
-                    ->color('success')
-                    ->icon('heroicon-o-currency-dollar')
-                    ->visible(function ($record) {
-                        if (str_starts_with($record->numero_compte, 'GS')) {
-                            // Pour les groupes: vérifier s'il y a des crédits groupe actifs
-                            return CreditGroupe::where('compte_id', $record->id)
-                                ->where('statut_demande', 'approuve')
-                                ->where('montant_total', '>', 0)
-                                ->exists();
-                        } else {
-                            // Pour les individuels: vérifier s'il y a des crédits individuels actifs
-                            return $record->credits()
-                                ->where('statut_demande', 'approuve')
-                                ->where('montant_total', '>', 0)
-                                ->exists();
-                        }
+                // Action::make('payer_credit')
+                //     ->label('')
+                //     ->tooltip(fn ($record) => str_starts_with($record->numero_compte, 'GS') ? 'Payer Crédit Groupe' : 'Payer Crédit')
+                //     ->color('success')
+                //     ->icon('heroicon-o-currency-dollar')
+                //     ->visible(function ($record) {
+                //         if (str_starts_with($record->numero_compte, 'GS')) {
+                //             // Pour les groupes: vérifier s'il y a des crédits groupe actifs
+                //             return CreditGroupe::where('compte_id', $record->id)
+                //                 ->where('statut_demande', 'approuve')
+                //                 ->where('montant_total', '>', 0)
+                //                 ->exists();
+                //         } else {
+                //             // Pour les individuels: vérifier s'il y a des crédits individuels actifs
+                //             return $record->credits()
+                //                 ->where('statut_demande', 'approuve')
+                //                 ->where('montant_total', '>', 0)
+                //                 ->exists();
+                //         }
 
                         
-                    })
+                //     })
 
-                    ->visible(function () {
-                        /** @var User|null $user */
-                        $user = Auth::user();
-                        return $user && $user->can('view_comptespecial');
-                    })
+                //     ->visible(function () {
+                //         /** @var User|null $user */
+                //         $user = Auth::user();
+                //         return $user && $user->can('view_comptespecial');
+                //     })
                     
-                    ->url(fn ($record) => route('credits.payment', ['compte_id' => $record->id])),
+                //     ->url(fn ($record) => route('credits.payment', ['compte_id' => $record->id])),
 
                 // Accorder Crédit Individuel - UNIQUEMENT POUR INDIVIDUELS
-                Action::make('accorder_credit')
-                    ->label('')
-                    ->tooltip('Accorder Crédit Individuel')
-                    ->color('warning')
-                    ->icon('heroicon-o-check-badge')
-                    ->visible(fn ($record) => 
-                        !str_starts_with($record->numero_compte, 'GS') && // Uniquement comptes individuels
-                        Credit::where('compte_id', $record->id)->where('statut_demande', 'en_attente')->exists()
-                    )
-                     ->visible(function () {
-                        /** @var User|null $user */
-                        $user = Auth::user();
-                        return $user && $user->can('view_comptespecial');
-                    })
-                    ->url(function ($record) {
-                        $creditEnAttente = Credit::where('compte_id', $record->id)->where('statut_demande', 'en_attente')->first();
-                        return $creditEnAttente 
-                            ? route('credits.approval', ['credit_id' => $creditEnAttente->id])
-                            : null;
-                    }),
+                // Action::make('accorder_credit')
+                //     ->label('')
+                //     ->tooltip('Accorder Crédit Individuel')
+                //     ->color('warning')
+                //     ->icon('heroicon-o-check-badge')
+                //     ->visible(fn ($record) => 
+                //         !str_starts_with($record->numero_compte, 'GS') && // Uniquement comptes individuels
+                //         Credit::where('compte_id', $record->id)->where('statut_demande', 'en_attente')->exists()
+                //     )
+                //      ->visible(function () {
+                //         /** @var User|null $user */
+                //         $user = Auth::user();
+                //         return $user && $user->can('view_comptespecial');
+                //     })
+                //     ->url(function ($record) {
+                //         $creditEnAttente = Credit::where('compte_id', $record->id)->where('statut_demande', 'en_attente')->first();
+                //         return $creditEnAttente 
+                //             ? route('credits.approval', ['credit_id' => $creditEnAttente->id])
+                //             : null;
+                //     }),
 
-                // Accorder Crédit Groupe - UNIQUEMENT POUR GROUPES
-                Action::make('accorder_credit_groupe')
-                    ->label('')
-                    ->tooltip('Accorder Crédit Groupe')
-                    ->color('orange')
-                    ->icon('heroicon-o-user-group')
-                    ->visible(fn ($record) => 
-                        str_starts_with($record->numero_compte, 'GS') &&
-                        CreditGroupe::where('compte_id', $record->id)->where('statut_demande', 'en_attente')->exists()
-                    )
-                     ->visible(function () {
-                        /** @var User|null $user */
-                        $user = Auth::user();
-                        return $user && $user->can('view_comptespecial');
-                    })
-                    ->url(function ($record) {
-                        $creditGroupeEnAttente = CreditGroupe::where('compte_id', $record->id)
-                            ->where('statut_demande', 'en_attente')
-                            ->first();
+                // // Accorder Crédit Groupe - UNIQUEMENT POUR GROUPES
+                // Action::make('accorder_credit_groupe')
+                //     ->label('')
+                //     ->tooltip('Accorder Crédit Groupe')
+                //     ->color('orange')
+                //     ->icon('heroicon-o-user-group')
+                //     ->visible(fn ($record) => 
+                //         str_starts_with($record->numero_compte, 'GS') &&
+                //         CreditGroupe::where('compte_id', $record->id)->where('statut_demande', 'en_attente')->exists()
+                //     )
+                //      ->visible(function () {
+                //         /** @var User|null $user */
+                //         $user = Auth::user();
+                //         return $user && $user->can('view_comptespecial');
+                //     })
+                //     ->url(function ($record) {
+                //         $creditGroupeEnAttente = CreditGroupe::where('compte_id', $record->id)
+                //             ->where('statut_demande', 'en_attente')
+                //             ->first();
                         
-                        return $creditGroupeEnAttente 
-                            ? route('credits.approval-groupe', $creditGroupeEnAttente->id)
-                            : null;
-                    }),
+                //         return $creditGroupeEnAttente 
+                //             ? route('credits.approval-groupe', $creditGroupeEnAttente->id)
+                //             : null;
+                //     }),
 
                 // NOUVEAU: Voir État Répartition Groupe
-                Action::make('voir_repartition_groupe')
-                    ->label('')
-                    ->tooltip('État Répartition Groupe')
-                    ->color('purple')
-                    ->icon('heroicon-o-document-chart-bar')
-                    ->visible(fn ($record) => 
-                        str_starts_with($record->numero_compte, 'GS') &&
-                        CreditGroupe::where('compte_id', $record->id)->where('statut_demande', 'approuve')->exists()
-                    )
-                     ->visible(function () {
-                        /** @var User|null $user */
-                        $user = Auth::user();
-                        return $user && $user->can('view_comptespecial');
-                    })
-                    ->url(function ($record) {
-                        $creditGroupeApprouve = CreditGroupe::where('compte_id', $record->id)
-                            ->where('statut_demande', 'approuve')
-                            ->first();
+                // Action::make('voir_repartition_groupe')
+                //     ->label('')
+                //     ->tooltip('État Répartition Groupe')
+                //     ->color('purple')
+                //     ->icon('heroicon-o-document-chart-bar')
+                //     ->visible(fn ($record) => 
+                //         str_starts_with($record->numero_compte, 'GS') &&
+                //         CreditGroupe::where('compte_id', $record->id)->where('statut_demande', 'approuve')->exists()
+                //     )
+                //      ->visible(function () {
+                //         /** @var User|null $user */
+                //         $user = Auth::user();
+                //         return $user && $user->can('view_comptespecial');
+                //     })
+                //     ->url(function ($record) {
+                //         $creditGroupeApprouve = CreditGroupe::where('compte_id', $record->id)
+                //             ->where('statut_demande', 'approuve')
+                //             ->first();
                         
-                        return $creditGroupeApprouve 
-                            ? route('credits.details-groupe', $creditGroupeApprouve->id)
-                            : null;
-                    }),
+                //         return $creditGroupeApprouve 
+                //             ? route('credits.details-groupe', $creditGroupeApprouve->id)
+                //             : null;
+                //     }),
 
                 // NOUVEAU: Voir Échéanciers Groupe
                 Action::make('voir_echeanciers_groupe')
@@ -265,6 +265,24 @@ class ComptesTable
                 DeleteAction::make()->label('')->tooltip('Supprimer'),
             ])
             ->headerActions([
+
+                 Action::make('rapport_comptes')
+        ->label('📊 Rapport Comptes')
+        ->color('success')
+        ->icon('heroicon-o-document-chart-bar')
+        ->url(route('rapport.comptes'))
+        ->openUrlInNewTab()
+        ->visible(function () {
+            /** @var User|null $user */
+            $user = Auth::user();
+            return $user && $user->can('view_comptespecial');
+        }),
+                Action::make('remboursement_periode')
+    ->label('📅 Remboursement par Période')
+    ->color('primary')
+    ->icon('heroicon-m-calendar')
+    ->url(route('rapport.remboursement.periode.form'))
+    ->openUrlInNewTab(),
                 Action::make('create_compte')
                     ->label('Ouvrir un compte')
                     ->icon('heroicon-o-user-plus')
@@ -289,7 +307,7 @@ class ComptesTable
             ])
             ->emptyStateActions([
                 Action::make('create')
-                    ->label('Créer un compte')
+                    ->label('Ouvrir un compte')
                     ->url(route('filament.admin.resources.comptes.create'))
                     ->icon('heroicon-o-plus')
                     ->button(),

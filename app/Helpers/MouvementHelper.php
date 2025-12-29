@@ -7,28 +7,32 @@ class MouvementHelper
     /**
      * Détermine si un type de mouvement est un retrait ou un dépôt
      */
-    public static function getTypeAffichage($typeMouvement)
+   public static function getTypeAffichage($typeMouvement)
     {
-        // Types qui sont toujours des retraits (négatifs) - SORTIES
+        // Types qui sont des RETRAITS (affichage négatif)
         $typesRetrait = [
-            'paiement_credit',           // Remboursement de crédit
-            'paiement_credit_groupe',    // Paiement groupe
-            'frais_payes_credit',       // Frais payés crédit individuel
-            'frais_payes_credit_groupe', // Frais payés crédit groupe
-            'retrait_compte',            // Retrait normal
+            'paiement_credit',
+            'paiement_credit_groupe',
+            'frais_payes_credit',
+            'frais_payes_credit_groupe',
+            'retrait_compte',
             'frais_service',
             'commission',
             'frais_ouverture_compte',
             'frais_gestion',
             'debit_automatique',
             'frais_adhesion',
+            'paiement_credit_automatique',
+            'complement_paiement_groupe',
+            'achat_carnet_livre',
+            'delaisage_comptabilite',
         ];
         
-        // Types qui sont toujours des dépôts (positifs) - ENTREES
+        // Types qui sont des DÉPÔTS (affichage positif)
         $typesDepot = [
-            'credit_octroye',            // OCTROI DE CRÉDIT (nouveau !)
-            'credit_groupe_recu',        // Crédit reçu par membre groupe
-            'depot_compte',              // Dépôt normal
+            'credit_octroye',
+            'credit_groupe_recu',
+            'depot_compte',
             'excedent_groupe',
             'excedent_groupe_exact',
             'remboursement',
@@ -38,20 +42,17 @@ class MouvementHelper
             'bonus',
             'distribution_comptabilite',
             'paiement_salaire_charge',
-
-            
+            'versement_agent',
         ];
         
-        // Types neutres ou spéciaux
+        // Types NEUTRES (affichage sans signe)
         $typesNeutres = [
-            'caution_bloquee',           // Caution (montant 0)
+            'caution_bloquee',
+            'caution_bloquee_groupe',
             'transfert_sortant',
             'transfert_entrant',
-            'achat_carnet_livre',
-            'versement_agent',
             'conversion_devise_sortant',
             'conversion_devise_entrant',
-            'delaisage_comptabilite'
         ];
         
         if (in_array($typeMouvement, $typesRetrait)) {
@@ -71,8 +72,9 @@ class MouvementHelper
     
     /**
      * Retourne le signe (+ ou -) pour l'affichage
+     * Version simplifiée pour montants toujours positifs
      */
-    public static function getSigne($typeMouvement, $montant = null)
+    public static function getSigne($typeMouvement)
     {
         $typeAffichage = self::getTypeAffichage($typeMouvement);
         
@@ -81,11 +83,7 @@ class MouvementHelper
         } elseif ($typeAffichage === 'retrait') {
             return '-';
         } elseif ($typeAffichage === 'neutre') {
-            // Pour les neutres, on regarde le montant
-            if ($montant !== null) {
-                return $montant >= 0 ? '+' : '-';
-            }
-            return ''; // Pas de signe pour caution bloquée
+            return ''; // Pas de signe
         }
         
         return '+'; // Par défaut
@@ -204,7 +202,8 @@ class MouvementHelper
             'distribution_comptabilite' => 'Distribution comptabilité',
             'conversion_devise_sortant' => 'Conversion devise sortante',
             'conversion_devise_entrant' => 'Conversion devise entrante',
-            'delaisage_comptabilite' => 'Délaistage comptabilité'
+            'delaisage_comptabilite' => 'Délaistage comptabilité',
+            'paiement_credit_automatique' => 'Paiement crédit automatique',
         ];
         
         return $traductions[$typeMouvement] ?? ucfirst(str_replace('_', ' ', $typeMouvement));

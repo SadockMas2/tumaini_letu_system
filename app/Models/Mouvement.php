@@ -151,7 +151,12 @@ class Mouvement extends Model
             'paiement_salaire',
             'paiement_salaire_charge',
             'depense_comptabilite',
-            'depense_diverse_comptabilite'
+            'depense_diverse_comptabilite',
+            'paiement_credit_groupe',       
+            'complement_paiement_groupe',   
+            'excedent_groupe',              
+            'excedent_groupe_exact'  
+        
         ];
 
         if (in_array($mouvement->type_mouvement, $typesSoldeDejaMisAJour)) {
@@ -167,23 +172,42 @@ class Mouvement extends Model
     /**
      * Appliquer le mouvement au solde (pour les types normaux)
      */
-    private static function appliquerMouvementSolde($mouvement, $compte, $montant, $soldeActuel)
-    {
-        $nouveauSolde = $soldeActuel;
-
-        if ($mouvement->type === 'depot') {
-            $nouveauSolde = $soldeActuel + $montant;
-        } elseif ($mouvement->type === 'retrait') {
-            $nouveauSolde = $soldeActuel - $montant;
-        }
-
-        // Mettre à jour le compte seulement pour les types normaux
-        $compte->solde = $nouveauSolde;
-        $compte->save();
-
-        $mouvement->solde_avant = $soldeActuel;
-        $mouvement->solde_apres = $nouveauSolde;
+  /**
+ * Appliquer le mouvement au solde (pour les types normaux)
+ */
+private static function appliquerMouvementSolde($mouvement, $compte, $montant, $soldeActuel)
+{
+    // EXCEPTION : Pour les paiements de groupe, NE PAS recalculer
+    $typesExclusRecalcul = [
+        'paiement_credit_groupe',
+        'complement_paiement_groupe', 
+        'excedent_groupe',
+        'excedent_groupe_exact'
+    ];
+    
+    if (in_array($mouvement->type_mouvement, $typesExclusRecalcul)) {
+        // Pour ces types, les soldes sont déjà corrects dans le contrôleur
+        // Ne rien faire, garder les valeurs passées
+        Log::info("✅ Type mouvement exclu de recalcul: {$mouvement->type_mouvement}");
+        return;
     }
+    
+    $nouveauSolde = $soldeActuel;
+
+    if ($mouvement->type === 'depot') {
+        $nouveauSolde = $soldeActuel + $montant;
+    } elseif ($mouvement->type === 'retrait') {
+        $nouveauSolde = $soldeActuel - $montant;
+    }
+
+    // Mettre à jour le compte seulement pour les types normaux
+    $compte->solde = $nouveauSolde;
+    $compte->save();
+
+    $mouvement->solde_avant = $soldeActuel;
+    $mouvement->solde_apres = $nouveauSolde;
+}
+
 
     private static function determinerDevise($mouvement)
     {
@@ -237,63 +261,111 @@ class Mouvement extends Model
         return $creditsIndividuelsActifs || $creditsGroupeActifs;
     }
 
-    private static function validerRetraitStrict(Compte $compte, $montantRetrait)
-    {
-        // Convertir en float
-        $soldeActuel = (float) $compte->solde;
-        $montantRetrait = (float) $montantRetrait;
+ /**
+ * VALIDATION STRICTE - EMPÊCHER TOUT RETRAIT QUI TOUCHE À LA CAUTION
+ */
+/**
+ * VALIDATION STRICTE - EMPÊCHER TOUT RETRAIT QUI TOUCHE À LA CAUTION
+ */
+private static function validerRetraitStrict(Compte $compte, $montantRetrait)
+{
+    Log::info("=== VALIDATION RETRAIT STRICT ===");
+    Log::info("Compte ID: {$compte->id}");
+    Log::info("Type compte: {$compte->type_compte}");
+    Log::info("Numéro compte: {$compte->numero_compte}");
+    Log::info("Montant retrait: {$montantRetrait}");
+    
+    // Convertir en float
+    $soldeReel = DB::table('comptes')->where('id', $compte->id)->value('solde');
+    $soldeActuel = (float) $soldeReel;
+    
+    Log::info("Solde actuel: {$soldeActuel} USD");
 
-        // Vérification basique du solde
-        if ($soldeActuel < $montantRetrait) {
-            throw new \Exception('Solde insuffisant pour ce retrait. Solde actuel: ' . number_format($soldeActuel, 2) . ' USD');
+    // Vérification basique du solde
+    if ($soldeActuel < $montantRetrait) {
+        $message = 'Solde insuffisant pour ce retrait. Solde actuel: ' . number_format($soldeActuel, 2) . ' USD';
+        Log::warning("❌ {$message}");
+        throw new \Exception($message);
+    }
+
+    // IMPORTANT: EXEMPTER LES COMPTES GROUPE SOLIDAIRE DE LA VALIDATION STRICTE
+    if ($compte->type_compte === 'groupe_solidaire') {
+        Log::info("✅ Compte groupe solidaire - Validation spéciale appliquée");
+        
+        // Pour les groupes, on autorise le prélèvement même avec caution bloquée
+        // car c'est pour rembourser leur propre crédit
+        
+        // Vérifier seulement que le solde est suffisant
+        if ($montantRetrait > $soldeActuel) {
+            $message = "RETRAIT REFUSÉ ❌ Solde insuffisant pour le compte groupe.";
+            Log::warning("❌ {$message}");
+            throw new \Exception($message);
+        }
+        
+        Log::info("✅ Retrait autorisé pour compte groupe");
+        return;
+    }
+
+    // AJOUTER CETTE EXCEPTION : Pour les prélèvements de complément groupe
+    // On va permettre le prélèvement même si le membre a des crédits actifs
+    // car c'est pour compléter un paiement de crédit groupe
+    
+    // Récupérer le type de mouvement (si disponible dans le contexte)
+    // On ne peut pas le faire directement ici car c'est statique
+    // Mais on peut ajouter un flag temporaire
+    
+    // Pour l'instant, appliquer toujours la validation stricte pour les membres
+    Log::info("Compte individuel - Validation stricte normale");
+    $creditsActifs = self::aCreditsActifs($compte->id);
+
+    if ($creditsActifs) {
+        // Calculer la caution totale bloquée
+        $cautionTotale = self::getCautionBloquee($compte->id);
+        Log::info("Caution bloquée: {$cautionTotale} USD");
+
+        // Calculer le solde disponible (solde total - caution bloquée)
+        $soldeDisponible = self::getSoldeDisponible($compte->id);
+        Log::info("Solde disponible: {$soldeDisponible} USD");
+
+        // VALIDATION 1: Empêcher tout retrait qui dépasse le solde disponible
+        if ($montantRetrait > $soldeDisponible) {
+            $message = "RETRAIT REFUSÉ ❌\n\n" .
+                "Vous avez des crédits actifs. La caution est bloquée.\n" .
+                "Solde total: " . number_format($soldeActuel, 2) . " USD\n" .
+                "Caution bloquée: " . number_format($cautionTotale, 2) . " USD\n" .
+                "Solde disponible: " . number_format($soldeDisponible, 2) . " USD\n\n" .
+                "Montant maximum autorisé: " . number_format($soldeDisponible, 2) . " USD";
+            Log::warning("❌ {$message}");
+            throw new \Exception($message);
         }
 
-        // Vérifier si le compte a des crédits actifs
-        $creditsActifs = self::aCreditsActifs($compte->id);
+        // VALIDATION 2: Empêcher le retrait si le solde après serait inférieur à la caution
+        $soldeApresRetrait = $soldeActuel - $montantRetrait;
+        if ($soldeApresRetrait < $cautionTotale) {
+            $maxRetrait = $soldeActuel - $cautionTotale;
+            $message = "RETRAIT REFUSÉ ❌\n\n" .
+                "Ce retrait toucherait à la caution bloquée.\n" .
+                "Solde après retrait: " . number_format($soldeApresRetrait, 2) . " USD\n" .
+                "Caution à maintenir: " . number_format($cautionTotale, 2) . " USD\n\n" .
+                "Montant maximum autorisé: " . number_format($maxRetrait, 2) . " USD";
+            Log::warning("❌ {$message}");
+            throw new \Exception($message);
+        }
 
-        if ($creditsActifs) {
-            // Calculer la caution totale bloquée
-            $cautionTotale = self::getCautionBloquee($compte->id);
-
-            // Calculer le solde disponible (solde total - caution bloquée)
-            $soldeDisponible = self::getSoldeDisponible($compte->id);
-
-            // VALIDATION 1: Empêcher tout retrait qui dépasse le solde disponible
-            if ($montantRetrait > $soldeDisponible) {
-                throw new \Exception(
-                    "RETRAIT REFUSÉ ❌\n\n" .
-                    "Vous avez des crédits actifs. La caution est bloquée.\n" .
-                    "Solde total: " . number_format($soldeActuel, 2) . " USD\n" .
-                    "Caution bloquée: " . number_format($cautionTotale, 2) . " USD\n" .
-                    "Solde disponible: " . number_format($soldeDisponible, 2) . " USD\n\n" .
-                    "Montant maximum autorisé: " . number_format($soldeDisponible, 2) . " USD"
-                );
-            }
-
-            // VALIDATION 2: Empêcher le retrait si le solde après serait inférieur à la caution
-            $soldeApresRetrait = $soldeActuel - $montantRetrait;
-            if ($soldeApresRetrait < $cautionTotale) {
-                $maxRetrait = $soldeActuel - $cautionTotale;
-                throw new \Exception(
-                    "RETRAIT REFUSÉ ❌\n\n" .
-                    "Ce retrait toucherait à la caution bloquée.\n" .
-                    "Solde après retrait: " . number_format($soldeApresRetrait, 2) . " USD\n" .
-                    "Caution à maintenir: " . number_format($cautionTotale, 2) . " USD\n\n" .
-                    "Montant maximum autorisé: " . number_format($maxRetrait, 2) . " USD"
-                );
-            }
-
-            // VALIDATION 3: Empêcher le retrait total (laisser au moins 1 USD)
-            if ($soldeApresRetrait <= 1) {
-                throw new \Exception(
-                    "RETRAIT REFUSÉ ❌\n\n" .
-                    "Vous ne pouvez pas vider complètement le compte.\n" .
-                    "Un solde minimum doit être maintenu.\n" .
-                    "Montant maximum: " . number_format($soldeActuel - 1, 2) . " USD"
-                );
-            }
+        // VALIDATION 3: Empêcher le retrait total (laisser au moins 1 USD)
+        if ($soldeApresRetrait <= 1) {
+            $maxRetrait = $soldeActuel - 1;
+            $message = "RETRAIT REFUSÉ ❌\n\n" .
+                "Vous ne pouvez pas vider complètement le compte.\n" .
+                "Un solde minimum doit être maintenu.\n" .
+                "Montant maximum: " . number_format($maxRetrait, 2) . " USD";
+            Log::warning("❌ {$message}");
+            throw new \Exception($message);
         }
     }
+    
+    Log::info("✅ Validation réussie - Retrait autorisé");
+}
 
         public function compteEpargne()
     {

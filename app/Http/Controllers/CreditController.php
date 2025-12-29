@@ -559,7 +559,7 @@ public function processApprovalGroupe(Request $request, $credit_groupe_id)
             // 2. CRÉER LE MOUVEMENT "RETRAIT FRAIS" POUR LE GROUPE
             Mouvement::create([
                 'compte_id' => $compteGroupe->id,
-                'type' => 'retrait',
+                'type' => 'depot',
                 'type_mouvement' => 'frais_payes_credit_groupe',
                 'montant' => -$totalFraisGroupe,
                 'solde_avant' => $soldeDebutGroupe,
@@ -613,17 +613,17 @@ public function processApprovalGroupe(Request $request, $credit_groupe_id)
                 ]);
 
                 // ✅ CORRECTION : CRÉER UN MOUVEMENT DE "BLOQUAGE" SANS DÉDUCTION
-                Mouvement::create([
-                    'compte_id' => $compteGroupe->id,
-                    'type_mouvement' => 'caution_bloquee_groupe',
-                    'montant' => 0, // ❌ IMPORTANT : Montant 0 car pas de déduction
-                    'solde_avant' => $soldeActuelGroupe,
-                    'solde_apres' => $soldeActuelGroupe, // Même solde
-                    'description' => "Caution bloquée pour crédit groupe - Montant: {$totalCautionGroupe} USD (non déduit)",
-                    'reference' => 'CAUTION-GROUPE-' . $credit->id,
-                    'date_mouvement' => now(),
-                    'nom_deposant' => 'TUMAINI LETU Finances',
-                ]);
+                // Mouvement::create([
+                //     'compte_id' => $compteGroupe->id,
+                //     'type_mouvement' => 'caution_bloquee_groupe',
+                //     'montant' => 0, // ❌ IMPORTANT : Montant 0 car pas de déduction
+                //     'solde_avant' => $soldeActuelGroupe,
+                //     'solde_apres' => $soldeActuelGroupe, // Même solde
+                //     'description' => "Caution bloquée pour crédit groupe - Montant: {$totalCautionGroupe} USD (non déduit)",
+                //     'reference' => 'CAUTION-GROUPE-' . $credit->id,
+                //     'date_mouvement' => now(),
+                //     'nom_deposant' => 'TUMAINI LETU Finances',
+                // ]);
 
                 $cautionBloquee = true;
                 Log::info("🔒 CAUTION BLOQUÉE (NON DÉDUITE) - Montant: {$totalCautionGroupe} USD, Solde groupe inchangé: {$soldeActuelGroupe} USD");

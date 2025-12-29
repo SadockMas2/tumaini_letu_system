@@ -9,6 +9,7 @@ use App\Http\Controllers\GalerieClientsController;
 use App\Http\Controllers\MouvementController;
 use App\Http\Controllers\PaiementController;
 use App\Http\Controllers\PaiementGroupeController;
+use App\Http\Controllers\RapportRemboursementController;
 use App\Http\Controllers\RapportTresorerieController;
 use App\Http\Controllers\CompteEpargneController;
 use App\Models\Client;
@@ -613,3 +614,73 @@ Route::get('/verifier-soldes-finaux', function() {
     
     return response()->json($resultats, 200, [], JSON_PRETTY_PRINT);
 });
+
+
+Route::middleware(['auth'])->group(function () {
+    // Formulaire de sélection
+    Route::get('/rapport/remboursement/period/form', 
+        [App\Http\Controllers\RapportRemboursementController::class, 'showForm'])
+        ->name('rapport.remboursement.periode.form');
+    
+    // Génération du rapport
+    Route::post('/rapport/remboursement/period/generate', 
+        [App\Http\Controllers\RapportRemboursementController::class, 'generateReport'])
+        ->name('rapport.remboursement.periode.generate');
+});
+
+
+
+
+Route::get('/debug/remboursements', [RapportRemboursementController::class, 'debugRemboursements']);
+Route::get('/test/remboursements', function () {
+    $service = new \App\Services\RemboursementDirectService();
+    $dateDebut = \Carbon\Carbon::parse('2024-01-01');
+    $dateFin = \Carbon\Carbon::parse('2026-12-31');
+    
+    $result = $service->getRemboursementsDirects('mois', $dateDebut, $dateFin, 'all');
+    
+    return response()->json([
+        'count' => $result->count(),
+        'data' => $result->take(5)
+    ]);
+});
+
+
+
+// Dans votre routes/web.php
+Route::get('/test/remboursements', function () {
+    try {
+        $service = new \App\Services\RemboursementDirectService();
+        $dateDebut = \Carbon\Carbon::parse('2024-01-01');
+        $dateFin = \Carbon\Carbon::parse('2026-12-31');
+        
+        $result = $service->getRemboursementsDirects('mois', $dateDebut, $dateFin, 'all');
+        
+        return response()->json([
+            'count' => $result->count(),
+            'data' => $result->take(5),
+            'total_remboursement' => $result->sum('montant_total'),
+            'total_capital' => $result->sum('capital'),
+            'total_interets' => $result->sum('interets')
+        ]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ], 500);
+    }
+});
+
+
+Route::get('/rapport/comptes', [CompteController::class, 'rapportComptes'])
+    ->name('rapport.comptes')
+    ->middleware(['auth']);
+
+Route::get('/rapport/epargne', [CompteEpargneController::class, 'rapportEpargne'])
+    ->name('rapport.epargne')
+    ->middleware(['auth']);
+
+// Optionnel pour PDF
+Route::get('/rapport/epargne/pdf', [CompteEpargneController::class, 'rapportEpargnePDF'])
+    ->name('rapport.epargne.pdf')
+    ->middleware(['auth']);

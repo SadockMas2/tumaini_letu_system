@@ -39,14 +39,15 @@ class RapportStatsWidget extends BaseWidget
         $totalInteretsPayes = 0;
         
         // 1. Calcul pour les crédits individuels
-        foreach ($creditsIndividuels as $credit) {
-            $capitalRembourse = $this->calculerCapitalDejaRembourse($credit);
-            $interetsPayes = $this->calculerInteretsDejaPayes($credit);
-            
-            $totalCapitalRembourse += $capitalRembourse;
-            $totalInteretsPayes += $interetsPayes;
-        }
+         foreach ($creditsIndividuels as $credit) {
+        $capitalRembourse = \App\Helpers\CreditRepartitionHelper::calculerCapitalDejaRembourse($credit);
+        $interetsPayes = \App\Helpers\CreditRepartitionHelper::calculerInteretsDejaPayes($credit);
         
+        $totalCapitalRembourse += $capitalRembourse;
+        $totalInteretsPayes += $interetsPayes;
+    }
+
+    
         // 2. Calcul pour les crédits groupe (utiliser la structure factice)
         foreach ($creditsGroupe as $creditGroupe) {
             // Créer un modèle Credit factice pour les groupes

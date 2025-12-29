@@ -252,4 +252,119 @@ public function mouvements($compte_epargne_id)
 
         return $description;
     }
+
+
+    // Dans App\Http\Controllers\CompteEpargneController
+
+// Dans App\Http\Controllers\CompteEpargneController
+public function rapportEpargne()
+{
+    // Récupérer tous les comptes épargne avec leurs relations
+    $comptes = CompteEpargne::with([
+        'client',
+        'groupeSolidaire'
+    ])
+    ->orderBy('numero_compte')
+    ->get();
+
+    // Calculer les totaux par devise depuis la création
+    $totaux = [
+        'usd' => [
+            'solde_total' => 0,
+            'nombre_comptes' => 0,
+            'depots_total' => 0,
+            'retraits_total' => 0,
+            'comptes_actifs' => 0
+        ],
+        'cdf' => [
+            'solde_total' => 0,
+            'nombre_comptes' => 0,
+            'depots_total' => 0,
+            'retraits_total' => 0,
+            'comptes_actifs' => 0
+        ]
+    ];
+
+    // Calculer les statistiques pour chaque compte
+    foreach ($comptes as $compte) {
+        $devise = strtolower($compte->devise);
+        
+        // Totaux par devise
+        $totaux[$devise]['solde_total'] += floatval($compte->solde);
+        $totaux[$devise]['nombre_comptes']++;
+        
+        if ($compte->statut === 'actif') {
+            $totaux[$devise]['comptes_actifs']++;
+        }
+        
+        // Dépôts totaux depuis la création
+        if ($compte->type_compte === 'individuel' && $compte->client_id) {
+            $depotsTotal = Epargne::where('client_id', $compte->client_id)
+                ->where('statut', 'valide')
+                ->where('devise', $compte->devise)
+                ->sum('montant');
+        } elseif ($compte->type_compte === 'groupe_solidaire' && $compte->groupe_solidaire_id) {
+            $depotsTotal = Epargne::where('groupe_solidaire_id', $compte->groupe_solidaire_id)
+                ->where('statut', 'valide')
+                ->where('devise', $compte->devise)
+                ->sum('montant');
+        }
+        
+        $totaux[$devise]['depots_total'] += $depotsTotal;
+        
+        // Retraits totaux depuis la création
+        $retraitsTotal = Mouvement::where('compte_epargne_id', $compte->id)
+            ->where('type', 'retrait')
+            ->sum('montant');
+            
+        $totaux[$devise]['retraits_total'] += $retraitsTotal;
+        
+        // Ajouter les dépôts et retraits totaux au modèle pour la vue
+        $compte->depots_total = $depotsTotal ?? 0;
+        $compte->retraits_total = $retraitsTotal ?? 0;
+    }
+
+    // Préparer les données du rapport
+    $rapport = [
+        'date_rapport' => now()->format('d/m/Y'),
+        'heure_generation' => now()->format('H:i:s'),
+        'nombre_total_comptes' => $comptes->count(),
+        'comptes' => $comptes,
+        'totaux' => $totaux,
+        'logo_base64' => $this->getLogoBase64()
+    ];
+
+    return view('rapports.epargne', compact('rapport'));
+}
+private function getLogoBase64()
+{
+    // Chemin vers votre logo
+    $logoPath = public_path('images/logo-tumaini1.png');
+    
+    if (file_exists($logoPath)) {
+        $type = pathinfo($logoPath, PATHINFO_EXTENSION);
+        $data = file_get_contents($logoPath);
+        return 'data:image/' . $type . ';base64,' . base64_encode($data);
+    }
+    
+    // Logo par défaut si non trouvé
+    return 'data:image/svg+xml;base64,' . base64_encode('
+        <svg xmlns="http://www.w3.org/2000/svg" width="140" height="70" viewBox="0 0 140 70">
+            <rect width="140" height="70" fill="#f0f0f0"/>
+            <text x="70" y="35" text-anchor="middle" fill="#333" font-family="Arial" font-size="12">
+                TUMAINI LETU ÉPARGNE
+            </text>
+        </svg>
+    ');
+}
+
+// Optionnel : Export PDF
+public function rapportEpargnePDF()
+{
+    $rapport = $this->prepareRapportData(); // Vous pouvez réutiliser la logique ci-dessus
+    
+    $pdf = Pdf::loadView('rapports.epargne-pdf', compact('rapport'));
+    
+    return $pdf->download('rapport-epargne-' . now()->format('Y-m-d') . '.pdf');
+}
 }

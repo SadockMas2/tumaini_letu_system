@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class SmsLog extends Model
 {
     protected $fillable = [
+        'client_id', // AJOUTE CECI
         'telephone', 
         'message',
         'message_id',
@@ -49,9 +50,10 @@ class SmsLog extends Model
         return $this->belongsTo(Compte::class);
     }
 
-    public function client(): BelongsTo
+    // CORRIGE CECI - change le nom de la méthode
+    public function client(): BelongsTo // Était "clients()" au pluriel
     {
-        return $this->belongsTo(Client::class);
+        return $this->belongsTo(Client::class, 'client_id');
     }
     
     public function compteEpargne(): BelongsTo
@@ -63,6 +65,7 @@ class SmsLog extends Model
     {
         return $this->belongsTo(Mouvement::class);
     }
+    
     public function getPhoneNumberAttribute()
     {
         return $this->telephone; 
@@ -70,6 +73,10 @@ class SmsLog extends Model
 
     public function getRecipientNameAttribute(): string
     {
+        if ($this->client) {
+            return $this->client->nom_complet;
+        }
+        
         if ($this->compte && $this->compte->client) {
             return $this->compte->client->nom_complet;
         }
@@ -78,10 +85,29 @@ class SmsLog extends Model
             return $this->compteEpargne->getNomCompletAttribute();
         }
         
-        if ($this->client) {
-            return $this->client->nom_complet;
-        }
-        
         return 'N/A';
+    }
+    
+    /**
+     * Boot method pour gérer le téléphone automatiquement
+     */
+    protected static function boot()
+    {
+        parent::boot();
+        
+        static::creating(function ($smsLog) {
+            // Si pas de téléphone mais un client_id est fourni
+            if (empty($smsLog->telephone) && !empty($smsLog->client_id)) {
+                $client = Client::find($smsLog->client_id);
+                if ($client && !empty($client->telephone)) {
+                    $smsLog->telephone = $client->telephone;
+                }
+            }
+            
+            // Si toujours pas de téléphone, mettre une valeur par défaut
+            if (empty($smsLog->telephone)) {
+                $smsLog->telephone = 'N/A';
+            }
+        });
     }
 }

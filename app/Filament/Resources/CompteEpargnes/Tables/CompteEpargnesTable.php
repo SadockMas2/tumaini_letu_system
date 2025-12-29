@@ -4,6 +4,7 @@ namespace App\Filament\Resources\CompteEpargnes\Tables;
 
 use App\Filament\Exports\CompteEpargneExporter;
 use App\Models\CompteEpargne;
+use App\Models\User;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\ExportAction;
@@ -125,6 +126,18 @@ class CompteEpargnesTable
                     ]),
             ])
             ->headerActions([
+
+                Action::make('rapport_epargne')
+                  ->label('📊 Rapport Épargne')
+                    ->color('success')
+                    ->icon('heroicon-o-document-chart-bar')
+                    ->url(route('rapport.epargne'))
+                    ->openUrlInNewTab()
+                    ->visible(function () {
+                        /** @var User|null $user */
+                        $user = Auth::user();
+                        return $user && $user->can('view_comptespecial'); // Adaptez la permission
+                    }),
                 ExportAction::make()
                     ->exporter(CompteEpargneExporter::class)
                     ->label('Exporter')

@@ -227,7 +227,7 @@ class MouvementEpargneObserver
         
         // Signature 
         
-             $message .= "TUMAINI LETU\nRéussir Ensemble!";
+             $message .= "TUMAINI LETU";
 
     
         
@@ -274,7 +274,7 @@ class MouvementEpargneObserver
             now()->format('d/m/Y H:i')
         );
         
-        $message .= "TUMAINI-LETU ÉPARGNE GROUPE\nL'union fait la force, l'épargne fait la richesse!";
+        $message .= "TUMAINI-LETU ÉPARGNE ";
         
         return $message;
     }

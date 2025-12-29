@@ -26,7 +26,7 @@ class SmsCampaignsTable
                     ->dateTime('d/m/Y H:i')
                     ->sortable(),
                     
-                TextColumn::make('phone_number')
+                TextColumn::make('telephone')
                     ->label('Destinataire')
                     ->searchable(),
                     

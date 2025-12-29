@@ -26,6 +26,6 @@ class SyncCycleEpargnesCount extends Command
         $bar->finish();
         $this->info("\nSynchronisation terminée !");
         
-        return Command::SUCCESS;
+        return \Symfony\Component\Console\Command\Command::SUCCESS;
     }
 }
