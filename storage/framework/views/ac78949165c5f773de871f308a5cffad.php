@@ -204,65 +204,154 @@
         <div>Heure : <?php echo e($rapport['heure_generation']); ?></div>
     </div>
 
+    <!-- Afficher la période si spécifiée -->
+<?php if($rapport['periode_specifiee']): ?>
+<div style="margin-bottom: 15px; padding: 10px; background-color: #f0f7ff; border: 1px solid #007bff; border-radius: 5px;">
+    <div style="font-weight: bold; margin-bottom: 5px; color: #007bff;">📅 PÉRIODE SÉLECTIONNÉE :</div>
+    <div style="display: flex; gap: 30px; font-size: 11px;">
+        <?php if($rapport['date_debut']): ?>
+            <div><strong>Du :</strong> <?php echo e($rapport['date_debut']); ?></div>
+        <?php endif; ?>
+        <?php if($rapport['date_fin']): ?>
+            <div><strong>Au :</strong> <?php echo e($rapport['date_fin']); ?></div>
+        <?php endif; ?>
+        <?php if(!$rapport['date_debut'] && $rapport['date_fin']): ?>
+            <div><strong>Jusqu'au :</strong> <?php echo e($rapport['date_fin']); ?></div>
+        <?php endif; ?>
+        <?php if($rapport['date_debut'] && !$rapport['date_fin']): ?>
+            <div><strong>À partir du :</strong> <?php echo e($rapport['date_debut']); ?></div>
+        <?php endif; ?>
+    </div>
+    <div style="font-size: 10px; color: #666; margin-top: 5px; font-style: italic;">
+        Les totaux affichés concernent uniquement les transactions de cette période.
+    </div>
+</div>
+<?php endif; ?>
+
     <div class="separator"></div>
 
-    <!-- Titre du rapport -->
-    <div class="section">
-        <div style="text-align: center; margin-bottom: 15px;">
-            <h2 style="font-size: 16px; font-weight: bold; color: #000;">RAPPORT DES COMPTES ÉPARGNE</h2>
-            <p style="font-size: 12px; color: #000;">État instantané des comptes d'épargne - Totaux depuis création</p>
-        </div>
+   <!-- Titre du rapport -->
+<div class="section">
+    <div style="text-align: center; margin-bottom: 15px;">
+        <h2 style="font-size: 16px; font-weight: bold; color: #000;">RAPPORT DES COMPTES ÉPARGNE</h2>
+        <p style="font-size: 12px; color: #000;">
+            <?php if($rapport['periode_specifiee']): ?>
+                État des comptes d'épargne - Période du <?php echo e($rapport['date_debut'] ?? 'début'); ?> au <?php echo e($rapport['date_fin'] ?? 'fin'); ?>
+
+            <?php else: ?>
+                État instantané des comptes d'épargne - Totaux depuis création
+            <?php endif; ?>
+        </p>
     </div>
+</div>
 
-    <!-- Synthèse générale -->
-    <div class="section">
-        <div class="section-title">SYNTHÈSE GÉNÉRALE</div>
-        <div class="totals-grid">
-            <div class="total-card">
-                <div class="total-label">TOTAL COMPTES</div>
-                <div class="total-value"><?php echo e($rapport['nombre_total_comptes']); ?></div>
-            </div>
-            <div class="total-card">
-                <div class="total-label">COMPTES ACTIFS</div>
-                <div class="total-value">
-                    <?php echo e(($rapport['totaux']['usd']['comptes_actifs'] + $rapport['totaux']['cdf']['comptes_actifs'])); ?>
+   <!-- Synthèse générale -->
+<div class="section">
+    <div class="section-title">SYNTHÈSE GÉNÉRALE</div>
+    <div class="totals-grid">
+        <div class="total-card">
+            <div class="total-label">TOTAL COMPTES</div>
+            <div class="total-value"><?php echo e($rapport['nombre_total_comptes']); ?></div>
+        </div>
+        <div class="total-card">
+            <div class="total-label">COMPTES ACTIFS</div>
+            <div class="total-value">
+                <?php echo e(($rapport['totaux']['usd']['comptes_actifs'] + $rapport['totaux']['cdf']['comptes_actifs'])); ?>
 
-                </div>
-            </div>
-            <div class="total-card">
-                <div class="total-label">SOLDE TOTAL USD</div>
-                <div class="total-value devise-usd montant"><?php echo e(number_format($rapport['totaux']['usd']['solde_total'], 2)); ?> $</div>
-            </div>
-            <div class="total-card">
-                <div class="total-label">SOLDE TOTAL CDF</div>
-                <div class="total-value devise-cdf montant"><?php echo e(number_format($rapport['totaux']['cdf']['solde_total'], 2)); ?> FC</div>
-            </div>
-            <div class="total-card">
-                <div class="total-label">COMPTES USD</div>
-                <div class="total-value"><?php echo e($rapport['totaux']['usd']['nombre_comptes']); ?></div>
-            </div>
-            <div class="total-card">
-                <div class="total-label">COMPTES CDF</div>
-                <div class="total-value"><?php echo e($rapport['totaux']['cdf']['nombre_comptes']); ?></div>
-            </div>
-            <div class="total-card">
-                <div class="total-label">DÉPÔTS TOT. USD</div>
-                <div class="total-value devise-usd montant depot-positive"><?php echo e(number_format($rapport['totaux']['usd']['depots_total'], 2)); ?> $</div>
-            </div>
-            <div class="total-card">
-                <div class="total-label">DÉPÔTS TOT. CDF</div>
-                <div class="total-value devise-cdf montant depot-positive"><?php echo e(number_format($rapport['totaux']['cdf']['depots_total'], 2)); ?> FC</div>
-            </div>
-            <div class="total-card">
-                <div class="total-label">RETRAITS TOT. USD</div>
-                <div class="total-value devise-usd montant retrait-negative"><?php echo e(number_format($rapport['totaux']['usd']['retraits_total'], 2)); ?> $</div>
-            </div>
-            <div class="total-card">
-                <div class="total-label">RETRAITS TOT. CDF</div>
-                <div class="total-value devise-cdf montant retrait-negative"><?php echo e(number_format($rapport['totaux']['cdf']['retraits_total'], 2)); ?> FC</div>
             </div>
         </div>
+        <div class="total-card">
+            <div class="total-label">
+                <?php if($rapport['periode_specifiee']): ?>
+                    SOLDE PÉRIODE USD
+                <?php else: ?>
+                    SOLDE TOTAL USD
+                <?php endif; ?>
+            </div>
+            <div class="total-value devise-usd montant">
+                <?php if($rapport['periode_specifiee']): ?>
+                    <?php echo e(number_format($rapport['totaux']['usd']['solde_periode_total'], 2)); ?> $
+                <?php else: ?>
+                    <?php echo e(number_format($rapport['totaux']['usd']['solde_actuel_total'], 2)); ?> $
+                <?php endif; ?>
+            </div>
+        </div>
+        <div class="total-card">
+            <div class="total-label">
+                <?php if($rapport['periode_specifiee']): ?>
+                    SOLDE PÉRIODE CDF
+                <?php else: ?>
+                    SOLDE TOTAL CDF
+                <?php endif; ?>
+            </div>
+            <div class="total-value devise-cdf montant">
+                <?php if($rapport['periode_specifiee']): ?>
+                    <?php echo e(number_format($rapport['totaux']['cdf']['solde_periode_total'], 2)); ?> FC
+                <?php else: ?>
+                    <?php echo e(number_format($rapport['totaux']['cdf']['solde_actuel_total'], 2)); ?> FC
+                <?php endif; ?>
+            </div>
+        </div>
+        <div class="total-card">
+            <div class="total-label">COMPTES USD</div>
+            <div class="total-value"><?php echo e($rapport['totaux']['usd']['nombre_comptes']); ?></div>
+        </div>
+        <div class="total-card">
+            <div class="total-label">COMPTES CDF</div>
+            <div class="total-value"><?php echo e($rapport['totaux']['cdf']['nombre_comptes']); ?></div>
+        </div>
+        <?php if($rapport['periode_specifiee']): ?>
+        <div class="total-card">
+            <div class="total-label">COMPTES AVEC MOUV. USD</div>
+            <div class="total-value"><?php echo e($rapport['totaux']['usd']['comptes_avec_mouvements']); ?></div>
+        </div>
+        <div class="total-card">
+            <div class="total-label">COMPTES AVEC MOUV. CDF</div>
+            <div class="total-value"><?php echo e($rapport['totaux']['cdf']['comptes_avec_mouvements']); ?></div>
+        </div>
+        <?php endif; ?>
+        <div class="total-card">
+            <div class="total-label">
+                <?php if($rapport['periode_specifiee']): ?>
+                    DÉPÔTS PÉRIODE USD
+                <?php else: ?>
+                    DÉPÔTS TOT. USD
+                <?php endif; ?>
+            </div>
+            <div class="total-value devise-usd montant depot-positive"><?php echo e(number_format($rapport['totaux']['usd']['depots_total'], 2)); ?> $</div>
+        </div>
+        <div class="total-card">
+            <div class="total-label">
+                <?php if($rapport['periode_specifiee']): ?>
+                    DÉPÔTS PÉRIODE CDF
+                <?php else: ?>
+                    DÉPÔTS TOT. CDF
+                <?php endif; ?>
+            </div>
+            <div class="total-value devise-cdf montant depot-positive"><?php echo e(number_format($rapport['totaux']['cdf']['depots_total'], 2)); ?> FC</div>
+        </div>
+        <div class="total-card">
+            <div class="total-label">
+                <?php if($rapport['periode_specifiee']): ?>
+                    RETRAITS PÉRIODE USD
+                <?php else: ?>
+                    RETRAITS TOT. USD
+                <?php endif; ?>
+            </div>
+            <div class="total-value devise-usd montant retrait-negative"><?php echo e(number_format($rapport['totaux']['usd']['retraits_total'], 2)); ?> $</div>
+        </div>
+        <div class="total-card">
+            <div class="total-label">
+                <?php if($rapport['periode_specifiee']): ?>
+                    RETRAITS PÉRIODE CDF
+                <?php else: ?>
+                    RETRAITS TOT. CDF
+                <?php endif; ?>
+            </div>
+            <div class="total-value devise-cdf montant retrait-negative"><?php echo e(number_format($rapport['totaux']['cdf']['retraits_total'], 2)); ?> FC</div>
+        </div>
     </div>
+</div>
 
     <div class="separator"></div>
 
@@ -272,170 +361,236 @@
         
         <table class="table">
             <thead>
-                <tr>
-                    <th style="width: 12%">N° Compte</th>
-                    <th style="width: 20%">Titulaire</th>
-                    <th style="width: 10%">Type</th>
-                    <th style="width: 8%">Devise</th>
-                    <th style="width: 12%" class="text-right">Solde Actuel</th>
-                    <th style="width: 12%" class="text-right">Dépôts Total</th>
-                    <th style="width: 12%" class="text-right">Retraits Total</th>
-                    <th style="width: 8%" class="text-center">Statut</th>
-                    <th style="width: 16%">Date Ouverture</th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php $__currentLoopData = $rapport['comptes']; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $compte): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
-                <?php
-                    $deviseClass = $compte->devise === 'USD' ? 'devise-usd' : 'devise-cdf';
-                ?>
-                <tr>
-                    <td><strong><?php echo e($compte->numero_compte); ?></strong></td>
-                    <td>
-                        <?php if($compte->type_compte === 'individuel' && $compte->client): ?>
-                             <?php echo e($compte->client->nom); ?>  <?php echo e($compte->client->postnom); ?> <?php echo e($compte->client->prenom); ?>
+    <tr>
+        <th style="width: 12%">N° Compte</th>
+        <th style="width: 20%">Titulaire</th>
+        <th style="width: 10%">Type</th>
+        <th style="width: 8%">Devise</th>
+        <?php if($rapport['periode_specifiee']): ?>
+            <th style="width: 12%" class="text-right">Solde Période</th>
+            <th style="width: 12%" class="text-right">Dépôts Période</th>
+            <th style="width: 12%" class="text-right">Retraits Période</th>
+        <?php else: ?>
+            <th style="width: 12%" class="text-right">Solde Total</th>
+            <th style="width: 12%" class="text-right">Dépôts Total</th>
+            <th style="width: 12%" class="text-right">Retraits Total</th>
+        <?php endif; ?>
+        <th style="width: 8%" class="text-center">Statut</th>
+        <th style="width: 16%">Date Ouverture</th>
+    </tr>
+</thead>
 
-                        <?php elseif($compte->type_compte === 'groupe_solidaire' && $compte->groupeSolidaire): ?>
-                            <?php echo e($compte->groupeSolidaire->nom_groupe); ?>
+         <tbody>
+    <?php $__currentLoopData = $rapport['comptes']; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $compte): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+    <?php
+        $deviseClass = $compte->devise === 'USD' ? 'devise-usd' : 'devise-cdf';
+        // Toujours afficher le solde de la période pour le rapport filtré
+        // Pour le rapport sans filtre, solde_periode = total depuis création
+        $soldeAAfficher = $compte->solde_periode;
+        $depotsAAfficher = $compte->depots_total_periode;
+        $retraitsAAfficher = $compte->retraits_total_periode;
+    ?>
+    <tr>
+        <td><strong><?php echo e($compte->numero_compte); ?></strong></td>
+        <td>
+            <?php if($compte->type_compte === 'individuel' && $compte->client): ?>
+                 <?php echo e($compte->client->nom); ?>  <?php echo e($compte->client->postnom); ?> <?php echo e($compte->client->prenom); ?>
 
-                        <?php else: ?>
-                            N/A
-                        <?php endif; ?>
-                    </td>
-                    <td class="text-center">
-                        <?php if($compte->type_compte === 'individuel'): ?>
-                            <span class="type-individuel">INDIVIDUEL</span>
-                        <?php else: ?>
-                            <span class="type-groupe">GROUPE</span>
-                        <?php endif; ?>
-                    </td>
-                    <td class="text-center <?php echo e($deviseClass); ?>">
-                        <?php echo e($compte->devise); ?>
+            <?php elseif($compte->type_compte === 'groupe_solidaire' && $compte->groupeSolidaire): ?>
+                <?php echo e($compte->groupeSolidaire->nom_groupe); ?>
 
-                    </td>
-                    <td class="text-right montant <?php echo e($deviseClass); ?> <?php echo e($compte->solde > 0 ? 'solde-positif' : ''); ?>">
-                        <?php echo e(number_format($compte->solde, 2)); ?>
+            <?php else: ?>
+                N/A
+            <?php endif; ?>
+        </td>
+        <td class="text-center">
+            <?php if($compte->type_compte === 'individuel'): ?>
+                <span class="type-individuel">INDIVIDUEL</span>
+            <?php else: ?>
+                <span class="type-groupe">GROUPE</span>
+            <?php endif; ?>
+        </td>
+        <td class="text-center <?php echo e($deviseClass); ?>">
+            <?php echo e($compte->devise); ?>
 
-                    </td>
-                    <td class="text-right montant depot-positive <?php echo e($deviseClass); ?>">
-                        <?php echo e(number_format($compte->depots_total, 2)); ?>
+        </td>
+        <td class="text-right montant <?php echo e($deviseClass); ?> <?php echo e($soldeAAfficher > 0 ? 'solde-positif' : ''); ?>">
+            <?php echo e(number_format($soldeAAfficher, 2)); ?>
 
-                    </td>
-                    <td class="text-right montant retrait-negative <?php echo e($deviseClass); ?>">
-                        <?php echo e(number_format($compte->retraits_total, 2)); ?>
+        </td>
+        <td class="text-right montant depot-positive <?php echo e($deviseClass); ?>">
+            <?php echo e(number_format($depotsAAfficher, 2)); ?>
 
-                    </td>
-                    <td class="text-center">
-                        <?php if($compte->statut === 'actif'): ?>
-                            <span class="statut-actif">ACTIF</span>
-                        <?php else: ?>
-                            <span class="statut-inactif">INACTIF</span>
-                        <?php endif; ?>
-                    </td>
-                    <td class="text-center">
-                        <?php echo e($compte->date_ouverture ? $compte->date_ouverture->format('d/m/Y') : 'N/A'); ?>
+        </td>
+        <td class="text-right montant retrait-negative <?php echo e($deviseClass); ?>">
+            <?php echo e(number_format($retraitsAAfficher, 2)); ?>
 
-                    </td>
-                </tr>
-                <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
-            </tbody>
+        </td>
+        <td class="text-center">
+            <?php if($compte->statut === 'actif'): ?>
+                <span class="statut-actif">ACTIF</span>
+            <?php else: ?>
+                <span class="statut-inactif">INACTIF</span>
+            <?php endif; ?>
+        </td>
+        <td class="text-center">
+            <?php echo e($compte->date_ouverture ? $compte->date_ouverture->format('d/m/Y') : 'N/A'); ?>
+
+        </td>
+    </tr>
+    <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
+</tbody>
+
             <tfoot>
-                <tr class="total-row">
-                    <td colspan="4"><strong>TOTAUX GÉNÉRAUX</strong></td>
-                    <td class="text-right montant">
-                        <div class="devise-usd"><?php echo e(number_format($rapport['totaux']['usd']['solde_total'], 2)); ?> $</div>
-                        <div class="devise-cdf"><?php echo e(number_format($rapport['totaux']['cdf']['solde_total'], 2)); ?> FC</div>
-                    </td>
-                    <td class="text-right montant">
-                        <div class="devise-usd"><?php echo e(number_format($rapport['totaux']['usd']['depots_total'], 2)); ?> $</div>
-                        <div class="devise-cdf"><?php echo e(number_format($rapport['totaux']['cdf']['depots_total'], 2)); ?> FC</div>
-                    </td>
-                    <td class="text-right montant">
-                        <div class="devise-usd"><?php echo e(number_format($rapport['totaux']['usd']['retraits_total'], 2)); ?> $</div>
-                        <div class="devise-cdf"><?php echo e(number_format($rapport['totaux']['cdf']['retraits_total'], 2)); ?> FC</div>
-                    </td>
-                    <td class="text-center">
-                        <div>USD: <?php echo e($rapport['totaux']['usd']['comptes_actifs']); ?>/<?php echo e($rapport['totaux']['usd']['nombre_comptes']); ?></div>
-                        <div>CDF: <?php echo e($rapport['totaux']['cdf']['comptes_actifs']); ?>/<?php echo e($rapport['totaux']['cdf']['nombre_comptes']); ?></div>
-                    </td>
-                    <td></td>
-                </tr>
-            </tfoot>
+    <tr class="total-row">
+        <td colspan="4"><strong>TOTAUX GÉNÉRAUX</strong></td>
+        <td class="text-right montant">
+            <div class="devise-usd"><?php echo e(number_format($rapport['totaux']['usd']['solde_periode_total'], 2)); ?> $</div>
+            <div class="devise-cdf"><?php echo e(number_format($rapport['totaux']['cdf']['solde_periode_total'], 2)); ?> FC</div>
+        </td>
+        <td class="text-right montant">
+            <div class="devise-usd"><?php echo e(number_format($rapport['totaux']['usd']['depots_total'], 2)); ?> $</div>
+            <div class="devise-cdf"><?php echo e(number_format($rapport['totaux']['cdf']['depots_total'], 2)); ?> FC</div>
+        </td>
+        <td class="text-right montant">
+            <div class="devise-usd"><?php echo e(number_format($rapport['totaux']['usd']['retraits_total'], 2)); ?> $</div>
+            <div class="devise-cdf"><?php echo e(number_format($rapport['totaux']['cdf']['retraits_total'], 2)); ?> FC</div>
+        </td>
+        <td class="text-center">
+            <div>USD: <?php echo e($rapport['totaux']['usd']['comptes_actifs']); ?>/<?php echo e($rapport['totaux']['usd']['nombre_comptes']); ?></div>
+            <div>CDF: <?php echo e($rapport['totaux']['cdf']['comptes_actifs']); ?>/<?php echo e($rapport['totaux']['cdf']['nombre_comptes']); ?></div>
+            <?php if($rapport['periode_specifiee']): ?>
+            <div style="font-size: 8px; margin-top: 2px;">
+                USD avec mouvements: <?php echo e($rapport['totaux']['usd']['comptes_avec_mouvements']); ?><br>
+                CDF avec mouvements: <?php echo e($rapport['totaux']['cdf']['comptes_avec_mouvements']); ?>
+
+            </div>
+            <?php endif; ?>
+        </td>
+        <td></td>
+    </tr>
+</tfoot>
         </table>
     </div>
 
-    <!-- Résumé par devise -->
-    <div class="section">
-        <div class="section-title">RÉSUMÉ PAR DEVISE</div>
-        
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-            <!-- Section USD -->
-            <div style="border: 1px solid #000; padding: 10px; border-radius: 5px;">
-                <h4 style="text-align: center; margin-bottom: 10px; color: #28a745;">DEVISE USD</h4>
-                <div style="font-size: 10px;">
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                        <span>Nombre de comptes:</span>
-                        <strong><?php echo e($rapport['totaux']['usd']['nombre_comptes']); ?></strong>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                        <span>Comptes actifs:</span>
-                        <strong><?php echo e($rapport['totaux']['usd']['comptes_actifs']); ?></strong>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                        <span>Solde total:</span>
-                        <strong class="montant devise-usd"><?php echo e(number_format($rapport['totaux']['usd']['solde_total'], 2)); ?> $</strong>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                        <span>Dépôts totaux:</span>
-                        <strong class="montant devise-usd depot-positive"><?php echo e(number_format($rapport['totaux']['usd']['depots_total'], 2)); ?> $</strong>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                        <span>Retraits totaux:</span>
-                        <strong class="montant devise-usd retrait-negative"><?php echo e(number_format($rapport['totaux']['usd']['retraits_total'], 2)); ?> $</strong>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; margin-top: 8px; padding-top: 4px; border-top: 1px solid #ddd;">
-                        <span>Mouvement net:</span>
-                        <strong class="montant devise-usd <?php echo e(($rapport['totaux']['usd']['depots_total'] - $rapport['totaux']['usd']['retraits_total']) >= 0 ? 'depot-positive' : 'retrait-negative'); ?>">
-                            <?php echo e(number_format($rapport['totaux']['usd']['depots_total'] - $rapport['totaux']['usd']['retraits_total'], 2)); ?> $
-                        </strong>
-                    </div>
+<!-- Résumé par devise -->
+<div class="section">
+    <div class="section-title">RÉSUMÉ PAR DEVISE</div>
+    
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+        <!-- Section USD -->
+        <div style="border: 1px solid #000; padding: 10px; border-radius: 5px;">
+            <h4 style="text-align: center; margin-bottom: 10px; color: #28a745;">DEVISE USD</h4>
+            <div style="font-size: 10px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                    <span>Nombre de comptes:</span>
+                    <strong><?php echo e($rapport['totaux']['usd']['nombre_comptes']); ?></strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                    <span>Comptes actifs:</span>
+                    <strong><?php echo e($rapport['totaux']['usd']['comptes_actifs']); ?></strong>
+                </div>
+                <?php if($rapport['periode_specifiee']): ?>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                    <span>Comptes avec mouvements:</span>
+                    <strong><?php echo e($rapport['totaux']['usd']['comptes_avec_mouvements']); ?></strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                    <span>Solde période:</span>
+                    <strong class="montant devise-usd"><?php echo e(number_format($rapport['totaux']['usd']['solde_periode_total'], 2)); ?> $</strong>
+                </div>
+                <?php else: ?>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                    <span>Solde total:</span>
+                    <strong class="montant devise-usd"><?php echo e(number_format($rapport['totaux']['usd']['solde_actuel_total'], 2)); ?> $</strong>
+                </div>
+                <?php endif; ?>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                    <span>Dépôts totaux:</span>
+                    <strong class="montant devise-usd depot-positive">
+                        <?php if($rapport['periode_specifiee']): ?>
+                            <?php echo e(number_format($rapport['totaux']['usd']['depots_total'], 2)); ?> $
+                        <?php else: ?>
+                            <?php echo e(number_format($rapport['totaux']['usd']['depots_total'], 2)); ?> $
+                        <?php endif; ?>
+                    </strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                    <span>Retraits totaux:</span>
+                    <strong class="montant devise-usd retrait-negative">
+                        <?php if($rapport['periode_specifiee']): ?>
+                            <?php echo e(number_format($rapport['totaux']['usd']['retraits_total'], 2)); ?> $
+                        <?php else: ?>
+                            <?php echo e(number_format($rapport['totaux']['usd']['retraits_total'], 2)); ?> $
+                        <?php endif; ?>
+                    </strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-top: 8px; padding-top: 4px; border-top: 1px solid #ddd;">
+                    <span>Mouvement net:</span>
+                    <strong class="montant devise-usd <?php echo e(($rapport['totaux']['usd']['depots_total'] - $rapport['totaux']['usd']['retraits_total']) >= 0 ? 'depot-positive' : 'retrait-negative'); ?>">
+                        <?php echo e(number_format($rapport['totaux']['usd']['depots_total'] - $rapport['totaux']['usd']['retraits_total'], 2)); ?> $
+                    </strong>
                 </div>
             </div>
-            
-            <!-- Section CDF -->
-            <div style="border: 1px solid #000; padding: 10px; border-radius: 5px;">
-                <h4 style="text-align: center; margin-bottom: 10px; color: #007bff;">DEVISE CDF</h4>
-                <div style="font-size: 10px;">
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                        <span>Nombre de comptes:</span>
-                        <strong><?php echo e($rapport['totaux']['cdf']['nombre_comptes']); ?></strong>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                        <span>Comptes actifs:</span>
-                        <strong><?php echo e($rapport['totaux']['cdf']['comptes_actifs']); ?></strong>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                        <span>Solde total:</span>
-                        <strong class="montant devise-cdf"><?php echo e(number_format($rapport['totaux']['cdf']['solde_total'], 2)); ?> FC</strong>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                        <span>Dépôts totaux:</span>
-                        <strong class="montant devise-cdf depot-positive"><?php echo e(number_format($rapport['totaux']['cdf']['depots_total'], 2)); ?> FC</strong>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                        <span>Retraits totaux:</span>
-                        <strong class="montant devise-cdf retrait-negative"><?php echo e(number_format($rapport['totaux']['cdf']['retraits_total'], 2)); ?> FC</strong>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; margin-top: 8px; padding-top: 4px; border-top: 1px solid #ddd;">
-                        <span>Mouvement net:</span>
-                        <strong class="montant devise-cdf <?php echo e(($rapport['totaux']['cdf']['depots_total'] - $rapport['totaux']['cdf']['retraits_total']) >= 0 ? 'depot-positive' : 'retrait-negative'); ?>">
-                            <?php echo e(number_format($rapport['totaux']['cdf']['depots_total'] - $rapport['totaux']['cdf']['retraits_total'], 2)); ?> FC
-                        </strong>
-                    </div>
+        </div>
+        
+        <!-- Section CDF -->
+        <div style="border: 1px solid #000; padding: 10px; border-radius: 5px;">
+            <h4 style="text-align: center; margin-bottom: 10px; color: #007bff;">DEVISE CDF</h4>
+            <div style="font-size: 10px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                    <span>Nombre de comptes:</span>
+                    <strong><?php echo e($rapport['totaux']['cdf']['nombre_comptes']); ?></strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                    <span>Comptes actifs:</span>
+                    <strong><?php echo e($rapport['totaux']['cdf']['comptes_actifs']); ?></strong>
+                </div>
+                <?php if($rapport['periode_specifiee']): ?>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                    <span>Comptes avec mouvements:</span>
+                    <strong><?php echo e($rapport['totaux']['cdf']['comptes_avec_mouvements']); ?></strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                    <span>Solde période:</span>
+                    <strong class="montant devise-cdf"><?php echo e(number_format($rapport['totaux']['cdf']['solde_periode_total'], 2)); ?> FC</strong>
+                </div>
+                <?php else: ?>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                    <span>Solde total:</span>
+                    <strong class="montant devise-cdf"><?php echo e(number_format($rapport['totaux']['cdf']['solde_actuel_total'], 2)); ?> FC</strong>
+                </div>
+                <?php endif; ?>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                    <span>Dépôts totaux:</span>
+                    <strong class="montant devise-cdf depot-positive">
+                        <?php if($rapport['periode_specifiee']): ?>
+                            <?php echo e(number_format($rapport['totaux']['cdf']['depots_total'], 2)); ?> FC
+                        <?php else: ?>
+                            <?php echo e(number_format($rapport['totaux']['cdf']['depots_total'], 2)); ?> FC
+                        <?php endif; ?>
+                    </strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                    <span>Retraits totaux:</span>
+                    <strong class="montant devise-cdf retrait-negative">
+                        <?php if($rapport['periode_specifiee']): ?>
+                            <?php echo e(number_format($rapport['totaux']['cdf']['retraits_total'], 2)); ?> FC
+                        <?php else: ?>
+                            <?php echo e(number_format($rapport['totaux']['cdf']['retraits_total'], 2)); ?> FC
+                        <?php endif; ?>
+                    </strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-top: 8px; padding-top: 4px; border-top: 1px solid #ddd;">
+                    <span>Mouvement net:</span>
+                    <strong class="montant devise-cdf <?php echo e(($rapport['totaux']['cdf']['depots_total'] - $rapport['totaux']['cdf']['retraits_total']) >= 0 ? 'depot-positive' : 'retrait-negative'); ?>">
+                        <?php echo e(number_format($rapport['totaux']['cdf']['depots_total'] - $rapport['totaux']['cdf']['retraits_total'], 2)); ?> FC
+                    </strong>
                 </div>
             </div>
         </div>
     </div>
+</div>
 
     <div class="separator"></div>
 
@@ -449,10 +604,19 @@
 
     <!-- Pied de page -->
     <div class="footer">
-        <div>Rapport généré automatiquement par le Système de Gestion Épargne Tumaini Letu</div>
-        <div>Document confidentiel - <?php echo e(\Carbon\Carbon::now()->format('d/m/Y H:i:s')); ?></div>
-        <div><em>Totaux calculés depuis la création des comptes</em></div>
+    <div>Rapport généré automatiquement par le Système de Gestion Épargne Tumaini Letu</div>
+    <div>Document confidentiel - <?php echo e(\Carbon\Carbon::now()->format('d/m/Y H:i:s')); ?></div>
+    <div>
+        <em>
+            <?php if($rapport['periode_specifiee']): ?>
+                Totaux calculés pour la période du <?php echo e($rapport['date_debut'] ?? 'début'); ?> au <?php echo e($rapport['date_fin'] ?? 'fin'); ?>
+
+            <?php else: ?>
+                Totaux calculés depuis la création des comptes
+            <?php endif; ?>
+        </em>
     </div>
+</div>
 
     <!-- Script pour impression -->
     <script>

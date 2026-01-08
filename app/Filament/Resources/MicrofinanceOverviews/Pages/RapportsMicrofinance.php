@@ -14,6 +14,7 @@ use App\Models\EcritureComptable;
 use App\Models\JournalComptable;
 use App\Models\Mouvement;
 use App\Models\User;
+use App\Services\ComptabilityService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
@@ -34,6 +35,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Contracts\Pagination\Paginator;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Response;
@@ -466,6 +468,18 @@ private function calculerTotalPaiementsPourTable($credit): float
     {
         return [
 
+//             // Dans RapportsMicrofinance.php
+// Action::make('diagnostic_soldes')
+//     ->label('🔍 Diagnostic Soldes')
+//     ->color('warning')
+//     ->icon('heroicon-m-magnifying-glass')
+//     ->action(function () {
+//         $this->executerDiagnosticSoldes();
+//     })
+//     ->modalHeading('Diagnostic des Soldes')
+//     ->modalSubmitActionLabel('Exécuter le Diagnostic'),
+
+
     //                  Action::make('recalculer_paiements_passes')
     // ->label('🔄 Recalculer Paiements Passés')
     // ->color('danger')
@@ -548,10 +562,65 @@ Action::make('remboursement_periode')
             //     ->action(fn () => null), // Pas d'action directe
 
             // Actions séparées pour chaque type (maintenues pour compatibilité)
+                 Action::make('rapport_classe6_charges')
+    ->label('Rapport Classe 6 (Charges)')
+    ->icon('heroicon-o-exclamation-triangle')
+    ->color('danger')
+    ->schema([
+        DatePicker::make('date_debut')
+            ->label('Date de début')
+            ->default(now()->startOfMonth())
+            ->required(),
+        DatePicker::make('date_fin')
+            ->label('Date de fin')
+            ->default(now()->endOfMonth())
+            ->required(),
+        Select::make('detail_niveau')
+            ->label('Niveau de détail')
+            ->options([
+                'synthese' => 'Synthèse seulement',
+                'par_compte' => 'Par compte',
+                'complet' => 'Complet avec toutes les opérations'
+            ])
+            ->default('synthese'),
+    ])
+    ->action(function (array $data) {
+        try {
+            $comptabilityService = app(ComptabilityService::class);
+            $rapport = $comptabilityService->rapportClasse6Charges(
+                $data['date_debut'],
+                $data['date_fin']
+            );
+            
+            // Export HTML
+            $html = view('pdf.rapport-classe6-charges', [
+                'rapport' => $rapport,
+                'detail_niveau' => $data['detail_niveau']
+            ])->render();
+
+            $filename = 'rapport-classe6-charges-' . $data['date_debut'] . '-a-' . $data['date_fin'] . '.html';
+            
+            return response()->streamDownload(function () use ($html) {
+                echo $html;
+            }, $filename);
+            
+        } catch (\Exception $e) {
+            Notification::make()
+                ->title('Erreur')
+                ->body('Impossible de générer le rapport: ' . $e->getMessage())
+                ->danger()
+                ->send();
+        }
+    })
+    ->modalDescription('Générer un rapport détaillé des charges (Classe 6)'),
             Action::make('paiement_individuels')
                 ->label('Paiement Crédits Individuels')
                 ->color('primary')
                 ->icon('heroicon-m-user')
+                ->visible(auth::user()->can('view_comptespecial'))
+                
+                
+            
                 ->schema([
                     Section::make('Paramètres de Paiement - Crédits Individuels')
                         ->schema([
@@ -575,6 +644,7 @@ Action::make('remboursement_periode')
                 ->modalDescription('Exécuter le paiement automatique des remboursements pour tous les crédits individuels actifs')
                 ->modalSubmitActionLabel('Exécuter les Paiements Individuels')
                 ->modalCancelActionLabel('Annuler'),
+                
 
                 // Action::make('paiement_groupes')
                 //     ->label('Paiement Crédits Groupe')
@@ -973,80 +1043,467 @@ private function calculerProchainRemboursementGroupe($creditGroupe): float
      * Traite le paiement d'un crédit individuel (version avec 3 paramètres)
      */
 
+    /**
+ * Validation spéciale pour les paiements de crédit
+ * NE PAS soustraire la caution
+ */
+public static function validerRetraitPourCredit(Compte $compte, $montantRetrait, $creditId = null)
+{
+    Log::info("=== VALIDATION RETRAIT POUR CRÉDIT ===");
+    Log::info("Compte: {$compte->numero_compte}");
+    Log::info("Solde: {$compte->solde}");
+    Log::info("Montant: {$montantRetrait}");
+    Log::info("Crédit ID: {$creditId}");
+    
+    $soldeActuel = (float) $compte->solde;
+    
+    // Validation simple : est-ce qu'on a assez d'argent ?
+    if ($soldeActuel < $montantRetrait) {
+        $message = "Solde insuffisant pour payer le crédit. Solde: " . 
+                  number_format($soldeActuel, 2) . " USD, Nécessaire: " . 
+                  number_format($montantRetrait, 2) . " USD";
+        Log::warning("❌ {$message}");
+        throw new \Exception($message);
+    }
+    
+    // Vérifier que le solde après retrait reste au moins égal à la caution
+    if ($creditId) {
+        $cautionCredit = DB::table('credits')
+            ->where('id', $creditId)
+            ->value('caution');
+        $cautionCredit = (float) $cautionCredit;
+        
+        $soldeApres = $soldeActuel - $montantRetrait;
+        
+        if ($soldeApres < $cautionCredit) {
+            $maxPaiement = $soldeActuel - $cautionCredit;
+            $message = "⚠️ Attention : Ce paiement réduirait le solde en dessous de la caution.\n" .
+                      "Solde actuel: " . number_format($soldeActuel, 2) . " USD\n" .
+                      "Caution: " . number_format($cautionCredit, 2) . " USD\n" .
+                      "Maximum recommandé: " . number_format($maxPaiement, 2) . " USD";
+            Log::warning($message);
+            // Note : on ne bloque pas, on avertit seulement
+        }
+    }
+    
+    Log::info("✅ Validation réussie pour paiement crédit");
+    return true;
+}
+
     
 private function traiterPaiementCreditIndividuel($credit, $datePaiement, $forcerPaiement = true)
 {
-    $this->verifierCalculsCredit($credit);
-    $this->verifierEtCorrigerRemboursementHebdo($credit);
-
     $compte = $credit->compte;
-    $soldeDisponible = $this->calculerSoldeDisponible($compte->id);
-    $montantDu = $this->calculerMontantDuCetteSemaine($credit);
-
-    Log::info('🏦 DÉBUT TRAITEMENT PAIEMENT INDIVIDUEL SELON POURCENTAGES', [
+    
+    Log::info('🏦 DÉBUT TRAITEMENT PAIEMENT INDIVIDUEL - VERSION PERMISSIVE', [
         'credit_id' => $credit->id,
         'compte' => $compte->numero_compte,
-        'montant_accorde' => $credit->montant_accorde,
-        'montant_du' => $montantDu,
-        'remboursement_hebdo' => $credit->remboursement_hebdo,
-        'solde_disponible' => $soldeDisponible
+        'solde_total' => $compte->solde,
+        'caution_credit' => $credit->caution ?? 0
     ]);
+
+    // 1. Calculer le montant dû cette semaine
+    $montantDu = $this->calculerMontantDuCetteSemaine($credit);
     
-    if ($soldeDisponible <= 0 && !$forcerPaiement) {
-        return [
-            'type' => 'individuel',
-            'compte' => $compte->numero_compte,
-            'statut' => 'echec',
-            'raison' => 'Solde disponible insuffisant',
-            'solde_disponible' => $soldeDisponible,
-            'montant_du' => $montantDu
-        ];
+    if ($montantDu <= 0) {
+        Log::info('❌ Montant dû = 0, crédit déjà remboursé');
+        return null;
     }
 
-    // Montant à prélever
-    $montantAPrelever = $forcerPaiement ? min($soldeDisponible, $montantDu) : $montantDu;
+    // 2. Calculer le solde disponible (on prend TOUT le solde sauf la caution si possible)
+    $soldeDisponible = (float) $compte->solde;
     
-    if ($montantAPrelever <= 0) {
+    Log::info('💰 SOLDE ET MONTANT', [
+        'solde_total' => $soldeDisponible,
+        'montant_du' => $montantDu,
+        'pourcentage_disponible' => ($soldeDisponible / $montantDu) * 100 . '%'
+    ]);
+
+    // 3. Décider du montant à prélever
+    // IMPORTANT : Prélever TOUT ce qui est disponible (même si c'est partiel)
+    $montantAPrelever = $soldeDisponible;
+    
+    // Mais on ne peut pas prélever plus que le montant dû
+    if ($montantAPrelever > $montantDu) {
+        $montantAPrelever = $montantDu;
+    }
+    
+    // On ne prélève RIEN si le montant est trop faible (< 0.01 USD)
+    if ($montantAPrelever < 0.01) {
+        Log::warning('⚠️ MONTANT TROP FAIBLE POUR PRÉLÈVEMENT', [
+            'solde_disponible' => $soldeDisponible,
+            'montant_a_prelever' => $montantAPrelever
+        ]);
+        
         return [
             'type' => 'individuel',
             'compte' => $compte->numero_compte,
             'statut' => 'echec',
-            'raison' => 'Aucun montant à prélever',
+            'raison' => 'Solde trop faible pour prélèvement (< 0.01 USD)',
             'solde_disponible' => $soldeDisponible,
             'montant_du' => $montantDu
         ];
     }
     
-    // ✅ IMPORTANT : Utiliser le helper avec pourcentages
+    Log::info('🎯 DÉCISION DE PRÉLÈVEMENT', [
+        'solde_disponible' => $soldeDisponible,
+        'montant_du' => $montantDu,
+        'montant_a_prelever' => $montantAPrelever,
+        'type_paiement' => $montantAPrelever < $montantDu ? 'PARTIEL' : 'COMPLET'
+    ]);
+
+    // 4. Vérifier la caution AVANT prélèvement
+    $cautionCredit = (float) $credit->caution ?? 0;
+    $soldeApresPrelevement = $soldeDisponible - $montantAPrelever;
+    
+    Log::info('🔒 VÉRIFICATION CAUTION', [
+        'solde_avant' => $soldeDisponible,
+        'montant_prelevement' => $montantAPrelever,
+        'solde_apres' => $soldeApresPrelevement,
+        'caution_minimum' => $cautionCredit,
+        'verification' => $soldeApresPrelevement >= $cautionCredit ? '✅ OK' : '❌ INTERDIT'
+    ]);
+    
+    // BLOCAGE ABSOLU si on touche à la caution
+    if ($soldeApresPrelevement < $cautionCredit) {
+        // Ajuster le montant pour laisser la caution intacte
+        $montantAPrelever = max(0, $soldeDisponible - $cautionCredit);
+        
+        if ($montantAPrelever < 0.01) {
+            Log::warning('⚠️ PRÉLÈVEMENT IMPOSSIBLE SANS TOUCHER À LA CAUTION', [
+                'solde_total' => $soldeDisponible,
+                'caution' => $cautionCredit,
+                'montant_max_sans_caution' => $montantAPrelever
+            ]);
+            
+            return [
+                'type' => 'individuel',
+                'compte' => $compte->numero_compte,
+                'statut' => 'echec',
+                'raison' => 'Prélèvement impossible sans toucher à la caution',
+                'solde_total' => $soldeDisponible,
+                'caution' => $cautionCredit
+            ];
+        }
+        
+        Log::info('🔄 MONTANT AJUSTÉ POUR PRÉSERVER CAUTION', [
+            'ancien_montant' => $montantAPrelever + $cautionCredit,
+            'nouveau_montant' => $montantAPrelever,
+            'caution_preservee' => $cautionCredit
+        ]);
+    }
+
+    // 5. Calculer la répartition proportionnelle
+    $pourcentagePaye = ($montantAPrelever / $montantDu) * 100;
+    
     $repartition = CreditRepartitionHelper::calculerRepartition($credit, $montantAPrelever);
     
-    Log::info('📈 CALCUL RÉPARTITION POUR PAIEMENT', [
+    Log::info('📈 RÉPARTITION POUR PAIEMENT', [
         'montant_preleve' => $montantAPrelever,
-        'montant_du' => $montantDu,
+        'pourcentage_paye' => $pourcentagePaye . '%',
         'repartition_capital' => $repartition['capital'],
         'repartition_interets' => $repartition['interets'],
-        'numero_echeance' => $repartition['numero_echeance'],
-        'pourcentage_utilise' => $repartition['pourcentage_utilise']
+        'numero_echeance' => $repartition['numero_echeance'] ?? 'N/A'
     ]);
 
-    // Effectuer le prélèvement avec la nouvelle méthode
-    $this->effectuerPrelevement($compte, $credit, $montantAPrelever, $repartition, $datePaiement);
-    
-    // Vérifier si en retard
+    // 6. Effectuer le prélèvement
+    try {
+        $this->effectuerPrelevementPartiel($compte, $credit, $montantAPrelever, $repartition, $datePaiement);
+    } catch (\Exception $e) {
+        Log::error('❌ ERREUR LORS DU PRÉLÈVEMENT', [
+            'erreur' => $e->getMessage(),
+            'montant' => $montantAPrelever
+        ]);
+        
+        return [
+            'type' => 'individuel',
+            'compte' => $compte->numero_compte,
+            'statut' => 'echec',
+            'raison' => 'Erreur: ' . $e->getMessage(),
+            'montant_tente' => $montantAPrelever
+        ];
+    }
+
+    // 7. Déterminer le statut
     $enRetard = $montantAPrelever < $montantDu;
+    $statut = $enRetard ? 'partiel' : 'succes';
+    
+    Log::info('✅ FIN TRAITEMENT', [
+        'compte' => $compte->numero_compte,
+        'statut' => $statut,
+        'montant_du' => $montantDu,
+        'montant_preleve' => $montantAPrelever,
+        'pourcentage_paye' => $pourcentagePaye . '%',
+        'caution_intacte' => $cautionCredit,
+        'retard' => $enRetard ? 'OUI' : 'NON'
+    ]);
     
     return [
         'type' => 'individuel',
         'compte' => $compte->numero_compte,
-        'statut' => $enRetard ? 'partiel' : 'succes',
+        'statut' => $statut,
         'montant_preleve' => $montantAPrelever,
         'montant_du' => $montantDu,
+        'pourcentage_paye' => $pourcentagePaye,
         'capital' => $repartition['capital'],
         'interets' => $repartition['interets'],
-        'numero_echeance' => $repartition['numero_echeance'],
-        'pourcentage_utilise' => $repartition['pourcentage_utilise'],
-        'en_retard' => $enRetard
+        'numero_echeance' => $repartition['numero_echeance'] ?? null,
+        'en_retard' => $enRetard,
+        'raison' => $enRetard ? 'Paiement partiel - Solde disponible insuffisant' : 'Paiement complet'
     ];
+}
+
+
+// Dans RapportsMicrofinance.php
+
+private function effectuerPrelevementPartiel($compte, $credit, $montant, $repartition, $datePaiement)
+{
+    DB::transaction(function () use ($compte, $credit, $montant, $repartition, $datePaiement) {
+        // 1. Vérifier qu'on ne touche pas à la caution
+        $soldeAvant = (float) $compte->solde;
+        $cautionCredit = (float) $credit->caution ?? 0;
+        $soldeApres = $soldeAvant - $montant;
+        
+        Log::info('🔒 VÉRIFICATION CAUTION', [
+            'solde_avant' => $soldeAvant,
+            'montant_prelevement' => $montant,
+            'solde_apres' => $soldeApres,
+            'caution_minimum' => $cautionCredit,
+            'verification' => $soldeApres >= $cautionCredit ? '✅ OK' : '❌ INTERDIT'
+        ]);
+        
+        // BLOCAGE SI on touche à la caution
+        if ($soldeApres < $cautionCredit) {
+            $message = "PRÉLÈVEMENT REFUSÉ ❌\n\n" .
+                      "Ce prélèvement toucherait à la caution bloquée.\n" .
+                      "Solde avant: " . number_format($soldeAvant, 2) . " USD\n" .
+                      "Montant: " . number_format($montant, 2) . " USD\n" .
+                      "Solde après: " . number_format($soldeApres, 2) . " USD\n" .
+                      "Caution minimum: " . number_format($cautionCredit, 2) . " USD\n\n" .
+                      "Maximum autorisé: " . number_format($soldeAvant - $cautionCredit, 2) . " USD";
+            
+            Log::error($message);
+            throw new \Exception($message);
+        }
+        
+        // 2. Effectuer le prélèvement
+        $ancienSolde = $compte->solde;
+        $compte->solde -= $montant;
+        $compte->save();
+        
+        Log::info('💸 PRÉLÈVEMENT EFFECTUÉ', [
+            'ancien_solde' => $ancienSolde,
+            'nouveau_solde' => $compte->solde,
+            'difference' => $montant,
+            'caution_intacte' => $cautionCredit
+        ]);
+
+        // 3. Créer le paiement avec mention "partiel"
+        $montantDuCetteSemaine = $this->calculerMontantDuCetteSemaine($credit);
+        $statutPaiement = ($montant >= $montantDuCetteSemaine) ? 'complet' : 'partiel';
+
+        $paiement = PaiementCredit::create([
+            'credit_id' => $credit->id,
+            'compte_id' => $compte->id,
+            'montant_paye' => $montant,
+            'date_paiement' => $datePaiement,
+            'type_paiement' => TypePaiement::AUTOMATIQUE->value,
+            'reference' => 'PAY-PARTIEL-' . $credit->id . '-' . now()->format('YmdHis'),
+            'statut' => $montant < $this->calculerMontantDuCetteSemaine($credit) ? 'partiel' : 'complet',
+            'capital_rembourse' => $repartition['capital'],
+            'interets_payes' => $repartition['interets'],
+            'numero_echeance' => $repartition['numero_echeance'] ?? null,
+            'pourcentage_utilise' => $repartition['pourcentage_utilise'] ?? null
+        ]);
+
+        // 4. CRÉER LE MOUVEMENT SANS PASSER PAR L'OBSERVER
+        $mouvementData = [
+            'compte_id' => $compte->id,
+            'type' => 'retrait',
+            'type_mouvement' => 'paiement_credit',
+            'montant' => $montant,
+            'solde_avant' => $ancienSolde,
+            'solde_apres' => $compte->solde,
+            'description' => "Paiement crédit  - " .
+                           "Capital: " . number_format($repartition['capital'], 2) . " USD, " .
+                           "Intérêts: " . number_format($repartition['interets'], 2) . " USD - " .
+                           "Dû: " . number_format($this->calculerMontantDuCetteSemaine($credit), 2) . " USD - " .
+                           "Payé: " . number_format($montant, 2) . " USD (" . 
+                           round(($montant / $this->calculerMontantDuCetteSemaine($credit)) * 100, 2) . "%)",
+            'reference' => $paiement->reference,
+            'date_mouvement' => $datePaiement,
+            'nom_deposant' => 'Système Automatique - Paiement Partiel',
+            'client_nom' => $compte->nom . ($compte->prenom ? ' ' . $compte->prenom : ''),
+            'numero_compte' => $compte->numero_compte,
+            'operateur_id' => Auth::id() ?? 1, // ID système
+            'devise' => $compte->devise,
+            'created_at' => now(),
+            'updated_at' => now()
+        ];
+        
+        // Insérer directement dans la base pour éviter l'Observer
+        DB::table('mouvements')->insert($mouvementData);
+        
+        // Récupérer l'ID du mouvement créé
+        $mouvementId = DB::getPdo()->lastInsertId();
+        
+        Log::info('📝 MOUVEMENT CRÉÉ DIRECTEMENT SANS OBSERVER', [
+            'mouvement_id' => $mouvementId,
+            'reference' => $paiement->reference
+        ]);
+
+        // 5. Réduire uniquement les intérêts
+        $this->reduireCapitalEtInteretsCredit($credit, $repartition);
+
+        // 6. Générer l'écriture comptable
+        $this->genererEcritureComptablePaiement($compte, $credit, $montant, $repartition, $paiement->reference);
+
+        Log::info('✅ PRÉLÈVEMENT PARTIEL TERMINÉ', [
+            'paiement_id' => $paiement->id,
+            'mouvement_id' => $mouvementId,
+            'solde_final' => $compte->solde,
+            'caution_protegee' => $cautionCredit
+        ]);
+    });
+}
+
+
+/**
+ * Calcule le solde disponible SANS toucher à la caution
+ * Vérifie dans les DEUX tables (credits ET cautions)
+ */
+/**
+ * Calcule le solde disponible SANS toucher à la caution
+ * Version simplifiée et plus permissive
+ */
+private function calculerSoldeDisponibleSansCaution($compteId, $creditId = null): float
+{
+    // Récupérer le solde réel
+    $compte = Compte::find($compteId);
+    $soldeTotal = (float) $compte->solde;
+    
+    // IMPORTANT : Pour le paiement de crédit, on autorise à descendre jusqu'à 0
+    // La caution sera vérifiée dans effectuerPrelevementPartiel
+    return max(0, $soldeTotal);
+}
+private function effectuerPrelevementAvecValidation($compte, $credit, $montant, $repartition, $datePaiement)
+{
+    DB::transaction(function () use ($compte, $credit, $montant, $repartition, $datePaiement) {
+        // 1. VÉRIFICATION : Ne pas descendre en dessous de la caution
+        $soldeAvant = (float) $compte->solde;
+        $cautionCredit = (float) $credit->caution ?? 0;
+        $soldeApres = $soldeAvant - $montant;
+        
+        Log::info('🔒 VÉRIFICATION CAUTION AVANT PRÉLÈVEMENT', [
+            'solde_avant' => $soldeAvant,
+            'montant_prelevement' => $montant,
+            'solde_apres_calcule' => $soldeApres,
+            'caution_minimum' => $cautionCredit,
+            'verification' => $soldeApres >= $cautionCredit ? '✅ OK' : '❌ INTERDIT'
+        ]);
+        
+        // BLOCAGE SI on touche à la caution
+        if ($soldeApres < $cautionCredit) {
+            $message = "PRÉLÈVEMENT REFUSÉ ❌\n\n" .
+                      "Ce prélèvement toucherait à la caution bloquée.\n" .
+                      "Solde avant: " . number_format($soldeAvant, 2) . " USD\n" .
+                      "Montant: " . number_format($montant, 2) . " USD\n" .
+                      "Solde après: " . number_format($soldeApres, 2) . " USD\n" .
+                      "Caution minimum: " . number_format($cautionCredit, 2) . " USD\n\n" .
+                      "Maximum autorisé: " . number_format($soldeAvant - $cautionCredit, 2) . " USD";
+            
+            Log::error($message);
+            throw new \Exception($message);
+        }
+        
+        // 2. Effectuer le prélèvement
+        $ancienSolde = $compte->solde;
+        $compte->solde -= $montant;
+        $compte->save();
+        
+        Log::info('💸 PRÉLÈVEMENT EFFECTUÉ', [
+            'ancien_solde' => $ancienSolde,
+            'nouveau_solde' => $compte->solde,
+            'difference' => $montant,
+            'caution_intacte' => $cautionCredit
+        ]);
+
+        // 3. Créer le paiement avec répartition
+        $paiement = PaiementCredit::create([
+            'credit_id' => $credit->id,
+            'compte_id' => $compte->id,
+            'montant_paye' => $montant,
+            'date_paiement' => $datePaiement,
+            'type_paiement' => TypePaiement::AUTOMATIQUE->value,
+            'reference' => 'PAY-AUTO-PCT-NOCAUTION-' . $credit->id . '-' . now()->format('YmdHis'),
+            'statut' => 'complet',
+            'capital_rembourse' => $repartition['capital'],
+            'interets_payes' => $repartition['interets'],
+            'numero_echeance' => $repartition['numero_echeance'] ?? null,
+            'pourcentage_utilise' => $repartition['pourcentage_utilise'] ?? null
+        ]);
+
+        // 4. Créer le mouvement avec mention explicite
+        // Mouvement::create([
+        //     'compte_id' => $compte->id,
+        //     'type' => 'retrait',
+        //     'type_mouvement' => 'paiement_credit_sans_caution',
+        //     'montant' => $montant,
+        //     'solde_avant' => $ancienSolde,
+        //     'solde_apres' => $compte->solde,
+        //     'description' => "Paiement crédit SANS toucher à la caution - " .
+        //                    "Capital: " . number_format($repartition['capital'], 2) . " USD, " .
+        //                    "Intérêts: " . number_format($repartition['interets'], 2) . " USD - " .
+        //                    "Caution intacte: " . number_format($cautionCredit, 2) . " USD",
+        //     'reference' => $paiement->reference,
+        //     'date_mouvement' => $datePaiement,
+        //     'nom_deposant' => 'Système Automatique - Caution Protégée'
+        // ]);
+
+        // 5. Réduire uniquement les intérêts (NE JAMAIS réduire le capital accordé)
+        $this->reduireCapitalEtInteretsCredit($credit, $repartition);
+
+        // 6. Générer l'écriture comptable
+        $this->genererEcritureComptablePaiement($compte, $credit, $montant, $repartition, $paiement->reference);
+
+        Log::info('✅ PRÉLÈVEMENT TERMINÉ - CAUTION PROTÉGÉE', [
+            'paiement_id' => $paiement->id,
+            'solde_final' => $compte->solde,
+            'caution_protegee' => $cautionCredit,
+            'vérification' => $compte->solde >= $cautionCredit ? 'OK' : 'ALERTE'
+        ]);
+    });
+}
+
+
+
+
+/**
+ * Calcule le solde disponible pour retrait
+ * CORRECTION : Ne pas soustraire la caution du crédit en cours de remboursement
+ */
+private function calculerSoldeDisponiblePourCreditIndividuel($compteId, $creditId = null)
+{
+    $compte = Compte::find($compteId);
+    $soldeTotal = $compte->solde;
+    
+    // Calculer la caution totale bloquée
+    $cautionTotale = DB::table('cautions')
+        ->where('compte_id', $compteId)
+        ->where('statut', 'bloquee')
+        ->sum('montant');
+    
+    // Si on a un creditId, exclure la caution de CE crédit
+    if ($creditId) {
+        $cautionCeCredit = DB::table('credits')
+            ->where('id', $creditId)
+            ->where('compte_id', $compteId)
+            ->value('caution');
+            
+        $cautionTotale = max(0, $cautionTotale - $cautionCeCredit);
+    }
+    
+    return max(0, $soldeTotal - $cautionTotale);
 }
 
 // private function verifierCapitalNonModifie(Credit $credit)
@@ -1793,23 +2250,22 @@ private function calculerMontantDuCetteSemaine($credit)
     $semainesEcoulees = $dateDebut->diffInWeeks(now());
     $semaineActuelle = min($semainesEcoulees + 1, 16);
     
+    // Si le crédit est déjà remboursé
+    $totalDejaPaye = PaiementCredit::where('credit_id', $credit->id)
+        ->sum('montant_paye');
+    
+    if ($totalDejaPaye >= $credit->montant_total) {
+        return 0;
+    }
+    
     // Pour la dernière semaine, montant restant
     if ($semaineActuelle == 16) {
-        $totalDejaPaye = $credit->paiements->sum('montant_paye');
         return max(0, $credit->montant_total - $totalDejaPaye);
     }
     
-    // IMPORTANT : VÉRIFIER ET CORRIGER le remboursement hebdo d'abord
-    if ($credit instanceof Credit && $credit->type_credit === 'individuel') {
-        $remboursementHebdoCorrige = $this->verifierEtCorrigerRemboursementHebdo($credit);
-        return $remboursementHebdoCorrige;
-    } elseif ($credit instanceof CreditGroupe) {
-        return $credit->remboursement_hebdo_total ?? ($credit->montant_total / 16);
-    }
-    
+    // Remboursement hebdomadaire normal
     return $credit->remboursement_hebdo ?? ($credit->montant_total / 16);
 }
-
 
     /**
  * Calcule le remboursement hebdomadaire pour un crédit individuel
@@ -2576,5 +3032,56 @@ private function determinerEcheanceDuPaiement($paiement, $credit): int
     
     $semainesEcoulees = $dateDebut->diffInWeeks($datePaiement);
     return min($semainesEcoulees + 1, 16);
+}
+
+
+private function executerDiagnosticSoldes()
+{
+    $diagnostic = [];
+    
+    // 1. Vérifier les comptes avec crédits
+    $comptesAvecCredits = Compte::whereHas('credits', function($q) {
+        $q->where('statut_demande', 'approuve')
+          ->where('montant_total', '>', 0);
+    })->get();
+    
+    foreach ($comptesAvecCredits as $compte) {
+        $soldeDirect = DB::table('comptes')->where('id', $compte->id)->value('solde');
+        $cautionCredits = DB::table('credits')
+            ->where('compte_id', $compte->id)
+            ->where('statut_demande', 'approuve')
+            ->sum('caution');
+        $cautionCautions = DB::table('cautions')
+            ->where('compte_id', $compte->id)
+            ->where('statut', 'bloquee')
+            ->sum('montant');
+        
+        $diagnostic[] = [
+            'compte' => $compte->numero_compte,
+            'solde_modele' => $compte->solde,
+            'solde_table' => $soldeDirect,
+            'caution_credits' => $cautionCredits,
+            'caution_cautions' => $cautionCautions,
+            'solde_disponible_calcule' => $soldeDirect - max($cautionCredits, $cautionCautions),
+            'coherence' => abs($compte->solde - $soldeDirect) < 0.01 ? '✅' : '❌'
+        ];
+    }
+    
+    // Afficher les résultats
+    $message = "📊 **Diagnostic des Soldes**\n\n";
+    foreach ($diagnostic as $item) {
+        $message .= "**{$item['compte']}**:\n";
+        $message .= "• Solde modèle: {$item['solde_modele']} USD\n";
+        $message .= "• Solde table: {$item['solde_table']} USD\n";
+        $message .= "• Caution crédits: {$item['caution_credits']} USD\n";
+        $message .= "• Caution cautions: {$item['caution_cautions']} USD\n";
+        $message .= "• Cohérence: {$item['coherence']}\n\n";
+    }
+    
+    Notification::make()
+        ->title('Diagnostic Terminé')
+        ->body($message)
+        ->success()
+        ->send();
 }
 }

@@ -164,6 +164,7 @@
         .entree { color: #28a745; font-weight: bold; }
         .sortie { color: #dc3545; font-weight: bold; }
     </style>
+    
 </head>
 <body>
     <!-- En-tête Tumaini Letu avec logo en base64 -->
@@ -182,20 +183,22 @@
 
     <div class="separator"></div>
 
-    <!-- Informations du rapport -->
+  <!-- Informations du rapport -->
     <div class="ref-date">
-        <div>N/REF : RAPP-COFFRES-{{ \Carbon\Carbon::now()->format('Ymd-His') }}</div>
-        <div>Date : {{ $rapport['date_rapport'] }}</div>
+        <div>N/REF : RAPP-COFFRES-{{ \Carbon\Carbon::parse($date_rapport ?? now())->format('Ymd') }}</div>
+        <div>Date du rapport : {{ $rapport['date_rapport'] }}</div>
         <div>Généré le : {{ \Carbon\Carbon::now()->format('d/m/Y H:i') }}</div>
     </div>
 
     <div class="separator"></div>
 
-    <!-- Titre du rapport -->
+   <!-- Titre du rapport -->
     <div class="section">
         <div style="text-align: center; margin-bottom: 15px;">
             <h2 style="font-size: 16px; font-weight: bold; color: #000;">RAPPORT GLOBAL DES COFFRES</h2>
-            <p style="font-size: 12px; color: #000;">Synthèse de tous les coffres - {{ $rapport['total_coffres'] }} coffre(s)</p>
+            <p style="font-size: 12px; color: #000;">
+                Synthèse de tous les coffres au {{ $rapport['date_rapport'] }} - {{ $rapport['total_coffres'] }} coffre(s)
+            </p>
         </div>
     </div>
 

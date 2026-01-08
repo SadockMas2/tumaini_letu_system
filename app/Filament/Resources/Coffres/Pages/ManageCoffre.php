@@ -146,143 +146,166 @@ class ManageCoffre extends ManageRecords
                 }),
 
             // 3. Rapport Global des Coffres
-            Action::make('rapport_coffres_global')
-                ->label('Rapport Global des Coffres')
-                ->icon('heroicon-o-document-chart-bar')
-                ->color('info')
-                ->schema([
-                    DatePicker::make('date_rapport')
-                        ->label('Date du rapport')
-                        ->default(now())
-                        ->required(),
-                    Toggle::make('inclure_mouvements')
-                        ->label('Inclure le détail des mouvements')
-                        ->default(true),
-                ])
-                // Dans l'action rapport_coffres_global
-->action(function (array $data) {
-    try {
-        // Récupérer tous les coffres
-        $coffres = CashRegister::all();
-        
-        // Récupérer les mouvements pour tous les coffres
-        $mouvements = $data['inclure_mouvements'] ? 
-            MouvementCoffre::whereDate('date_mouvement', $data['date_rapport'])
-                ->with(['coffre', 'operateur']) // CORRECTION: utiliser 'coffre' au lieu de 'coffreSource'
-                ->get() : collect([]);
+Action::make('rapport_coffres_global')
+    ->label('Rapport Global des Coffres')
+    ->icon('heroicon-o-document-chart-bar')
+    ->color('info')
+    ->schema([
+        DatePicker::make('date_rapport')
+            ->label('Date du rapport')
+            ->default(now())
+            ->required(),
+        Toggle::make('inclure_mouvements')
+            ->label('Inclure le détail des mouvements')
+            ->default(true),
+    ])
+    ->action(function (array $data) {
+        try {
+            // Utiliser le service pour générer le rapport
+            $coffreService = app(CoffreService::class);
+            $rapport = $coffreService->genererRapportGlobal(
+                $data['date_rapport'],
+                $data['inclure_mouvements']
+            );
+            
+            // Inclure le logo
+            $rapport['logo_base64'] = self::getLogoBase64();
 
-        // Générer les données du rapport global
-        $rapportData = self::genererRapportGlobalCoffres($coffres, $mouvements, $data['date_rapport']);
-        
-        // Inclure le logo
-        $rapportData['logo_base64'] = self::getLogoBase64();
+            $html = view('pdf.rapport-coffres-global', [
+                'rapport' => $rapport,
+                'date_rapport' => $data['date_rapport'],
+                'inclure_mouvements' => $data['inclure_mouvements']
+            ])->render();
 
-        $html = view('pdf.rapport-coffres-global', [
-            'rapport' => $rapportData,
-            'coffres' => $coffres,
-            'mouvements' => $mouvements,
-            'date_rapport' => $data['date_rapport'],
-            'inclure_mouvements' => $data['inclure_mouvements']
-        ])->render();
+            $filename = 'rapport-global-coffres-' . Carbon::parse($data['date_rapport'])->format('Y-m-d') . '.html';
+            
+            return response()->streamDownload(function () use ($html) {
+                echo $html;
+            }, $filename);
 
-        $filename = 'rapport-global-coffres-' . $data['date_rapport'] . '.html';
-        
-        return response()->streamDownload(function () use ($html) {
-            echo $html;
-        }, $filename);
+        } catch (\Exception $e) {
+            Notification::make()
+                ->title('Erreur')
+                ->body('Impossible de générer le rapport: ' . $e->getMessage())
+                ->danger()
+                ->send();
+        }
+    }),
 
-    } catch (\Exception $e) {
-        Notification::make()
-            ->title('Erreur')
-            ->body('Impossible de générer le rapport: ' . $e->getMessage())
-            ->danger()
-            ->send();
-    }
-}),
-        ];
-    }
-private static function genererRapportGlobalCoffres($coffres, $mouvements, $dateRapport)
-{
-    // Convertir la date en objet Carbon si c'est une chaîne
-    if (is_string($dateRapport)) {
-        $dateRapport = Carbon::parse($dateRapport);
-    }
+    // Dans ManageCoffre.php, ajoutez une nouvelle action
+// Action::make('evolution_coffres')
+//     ->label('Évolution des Coffres')
+//     ->icon('heroicon-o-chart-bar')
+//     ->color('success')
+//     ->schema([
+//         DatePicker::make('date_debut')
+//             ->label('Date de début')
+//             ->default(now()->subMonth())
+//             ->required(),
+//         DatePicker::make('date_fin')
+//             ->label('Date de fin')
+//             ->default(now())
+//             ->required(),
+//     ])
+//     ->action(function (array $data) {
+//         try {
+//             $coffreService = app(CoffreService::class);
+//             $evolution = $coffreService->getEvolutionGlobale(
+//                 $data['date_debut'],
+//                 $data['date_fin']
+//             );
+            
+//             $html = view('pdf.evolution-coffres', [
+//                 'evolution' => $evolution
+//             ])->render();
+
+//             $filename = 'evolution-coffres-' . 
+//                 Carbon::parse($data['date_debut'])->format('Y-m-d') . '_a_' .
+//                 Carbon::parse($data['date_fin'])->format('Y-m-d') . '.html';
+            
+//             return response()->streamDownload(function () use ($html) {
+//                 echo $html;
+//             }, $filename);
+
+//         } catch (\Exception $e) {
+//             Notification::make()
+//                 ->title('Erreur')
+//                 ->body('Impossible de générer le rapport d\'évolution: ' . $e->getMessage())
+//                 ->danger()
+//                 ->send();
+//         }
+//     }),
+
+// Dans ManageCoffre.php, modifiez l'action rapport_mouvements_periode
+Action::make('rapport_mouvements_periode')
+    ->label('Rapport Mouvements Période')
+    ->icon('heroicon-o-document-text')
+    ->color('gray')
+    ->schema([
+        DatePicker::make('date_debut')
+            ->label('Date de début')
+            ->default(now()->subWeek())
+            ->required(),
+        DatePicker::make('date_fin')
+            ->label('Date de fin')
+            ->default(now())
+            ->required(),
+        Select::make('devise')
+            ->label('Devise')
+            ->options([
+                '' => 'Toutes',
+                'USD' => 'USD seulement',
+                'CDF' => 'CDF seulement'
+            ])
+            ->default(''),
+    ])
+    ->action(function (array $data) {
+        try {
+            $coffreService = app(CoffreService::class);
+            $resultats = $coffreService->getMouvementsParPeriode(
+                $data['date_debut'],
+                $data['date_fin'],
+                $data['devise'] ?: null
+            );
+            
+            // Calculer le nombre de jours dans la période
+            $dateDebut = Carbon::parse($data['date_debut']);
+            $dateFin = Carbon::parse($data['date_fin']);
+            $periodeJours = $dateDebut->diffInDays($dateFin) + 1;
+            
+            $html = view('pdf.mouvements-periode', [
+                'periode' => $resultats['periode'],
+                'mouvements' => $resultats['mouvements'],
+                'total_usd_entrees' => $resultats['total_usd_entrees'],
+                'total_usd_sorties' => $resultats['total_usd_sorties'],
+                'total_cdf_entrees' => $resultats['total_cdf_entrees'],
+                'total_cdf_sorties' => $resultats['total_cdf_sorties'],
+                'count_total' => $resultats['count_total'],
+                'count_usd' => $resultats['count_usd'],
+                'count_cdf' => $resultats['count_cdf'],
+                'periode_jours' => $periodeJours,
+                'logo_base64' => self::getLogoBase64() // AJOUTEZ CETTE LIGNE
+            ])->render();
+
+            $filename = 'mouvements-coffres-' . 
+                Carbon::parse($data['date_debut'])->format('Y-m-d') . '_a_' .
+                Carbon::parse($data['date_fin'])->format('Y-m-d') . '.html';
+            
+            return response()->streamDownload(function () use ($html) {
+                echo $html;
+            }, $filename);
+
+        } catch (\Exception $e) {
+            Notification::make()
+                ->title('Erreur')
+                ->body('Impossible de générer le rapport: ' . $e->getMessage())
+                ->danger()
+                ->send();
+        }
+    }),
     
-    $rapport = [
-        'date_rapport' => $dateRapport->format('d/m/Y'),
-        'total_coffres' => $coffres->count(),
-        'usd' => [
-            'solde_total' => 0,
-            'total_entrees' => 0,
-            'total_sorties' => 0,
-            'coffres' => []
-        ],
-        'cdf' => [
-            'solde_total' => 0,
-            'total_entrees' => 0,
-            'total_sorties' => 0,
-            'coffres' => []
-        ],
-        'mouvements_detail' => []
-    ];
-
-    foreach ($coffres as $coffre) {
-        // CORRECTION: Rechercher les mouvements par coffre_id
-        $mouvementsCoffre = $mouvements->where('coffre_id', $coffre->id);
-        
-        // CORRECTION: Calcul des entrées et sorties
-        $entrees = $mouvementsCoffre->where('type_mouvement', 'entree')->sum('montant');
-        $sorties = $mouvementsCoffre->where('type_mouvement', 'sortie')->sum('montant');
-        
-        $coffreData = [
-            'nom' => $coffre->nom,
-            'solde_initial' => $coffre->solde_actuel - $entrees + $sorties,
-            'solde_final' => $coffre->solde_actuel,
-            'entrees' => $entrees,
-            'sorties' => $sorties,
-            'operations' => $mouvementsCoffre->count(),
-            'responsable' => $coffre->responsable->name ?? 'Non assigné'
-        ];
-
-        if ($coffre->devise === 'USD') {
-            $rapport['usd']['coffres'][] = $coffreData;
-            $rapport['usd']['solde_total'] += $coffre->solde_actuel;
-            $rapport['usd']['total_entrees'] += $entrees;
-            $rapport['usd']['total_sorties'] += $sorties;
-        } else {
-            $rapport['cdf']['coffres'][] = $coffreData;
-            $rapport['cdf']['solde_total'] += $coffre->solde_actuel;
-            $rapport['cdf']['total_entrees'] += $entrees;
-            $rapport['cdf']['total_sorties'] += $sorties;
-        }
-    }
-
-    // Détail des mouvements - CORRECTION SIMPLIFIÉE
-    foreach ($mouvements as $mouvement) {
-        // Convertir la date du mouvement en Carbon si nécessaire
-        $dateMouvement = $mouvement->date_mouvement;
-        if (is_string($dateMouvement)) {
-            $dateMouvement = Carbon::parse($dateMouvement);
-        }
-        
-        // CORRECTION: Utiliser directement la relation coffre
-        $coffreNom = $mouvement->coffre ? $mouvement->coffre->nom : 'N/A';
-        
-        $rapport['mouvements_detail'][] = [
-            'heure' => $dateMouvement->format('H:i'),
-            'coffre' => $coffreNom,
-            'type' => $mouvement->type_mouvement === 'entree' ? 'depot' : 'retrait',
-            'montant' => $mouvement->montant,
-            'devise' => $mouvement->devise,
-            'description' => $mouvement->description,
-            'source_destination' => $mouvement->source_type ?? $mouvement->destination_type ?? 'N/A',
-            'reference' => $mouvement->reference,
-            'operateur' => $mouvement->operateur->name ?? 'Système'
         ];
     }
-
-    return $rapport;
-}
 
     private static function getLogoBase64()
     {

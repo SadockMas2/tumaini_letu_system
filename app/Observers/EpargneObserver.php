@@ -106,7 +106,7 @@ class EpargneObserver
         $nom = $this->getNomCourt($recipientInfo['clientName']);
         
         $message = sprintf(
-            "%s membre %s, un dépôt de %s %s a été effectué sur votre compte épargne %s, le %s. Nouveau solde : %s %s.\nTUMAINI LETU \"Réussir ensemble !\"",
+            "%s membre %s, un dépôt de %s %s a été effectué sur votre compte épargne %s, le %s. Nouveau solde : %s %s. \"",
             $genre,
             $nom,
             number_format($epargne->montant, 0, ',', ' '),

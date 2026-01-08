@@ -25,20 +25,27 @@ class CyclesTable
                     ->sortable()
                     ->searchable(),
 
+
                 TextColumn::make('client_nom')
                     ->label('Client/Groupe')
                     ->searchable()
                     ->sortable(),
 
-                TextColumn::make('type_cycle')
-                    ->label('Type')
-                    ->colors([
-                        'success' => 'individuel',
-                        'warning' => 'groupe_solidaire',
-                    ])
-                    ->formatStateUsing(fn ($state) => $state === 'individuel' ? 'Individuel' : 'Groupe'),
+                // TextColumn::make('type_cycle')
+                //     ->label('Type')
+                //     ->colors([
+                //         'success' => 'individuel',
+                //         'warning' => 'groupe_solidaire',
+                //     ])
+                //     ->formatStateUsing(fn ($state) => $state === 'individuel' ? 'Individuel' : 'Groupe'),
 
-                TextColumn::make('devise')
+                 TextColumn::make('agent_nom')
+                    ->label('Agent')
+                    ->sortable()
+                    ->searchable(),
+
+
+                Badgecolumn::make('devise')
                     ->colors([
                         'primary' => 'USD',
                         'success' => 'CDF',
@@ -49,6 +56,12 @@ class CyclesTable
                     ->money(fn ($record) => $record->devise)
                     ->sortable(),
 
+                TextColumn::make('nombre_epargnes_actuel')
+                    ->label('épargnes actuelles')
+                    ->sortable()
+                    ->searchable(),
+
+               
                 TextColumn::make('date_debut')
                     ->label('Début')
                     ->date()

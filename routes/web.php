@@ -15,6 +15,7 @@ use App\Http\Controllers\CompteEpargneController;
 use App\Models\Client;
 use App\Models\CompteTransitoire;
 use App\Services\CycleService;
+use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Auth;
@@ -22,6 +23,7 @@ use Illuminate\Support\Facades\Request\Http;
 use Illuminate\Support\Facades\DB;
 use App\Services\SmsService;
 use App\Models\Mouvement;
+use App\Filament\Resources\Tresoreries\Pages\ManageTresorerie;
 
 Route::get('/', function () {
     return view('welcome');
@@ -438,7 +440,7 @@ Route::prefix('sms')->group(function () {
 });
 
 
-// Dans routes/web.php, ajoutez temporairement :
+
 
 Route::get('/test-soldes', function() {
     $comptes = App\Models\CompteEpargne::take(95)->get();
@@ -647,7 +649,7 @@ Route::get('/test/remboursements', function () {
 
 
 
-// Dans votre routes/web.php
+
 Route::get('/test/remboursements', function () {
     try {
         $service = new \App\Services\RemboursementDirectService();
@@ -684,3 +686,88 @@ Route::get('/rapport/epargne', [CompteEpargneController::class, 'rapportEpargne'
 Route::get('/rapport/epargne/pdf', [CompteEpargneController::class, 'rapportEpargnePDF'])
     ->name('rapport.epargne.pdf')
     ->middleware(['auth']);
+
+Route::post('/admin/tresorerie/confirm-operation', function (\Illuminate\Http\Request $request) {
+    $operationId = $request->input('operation_id');
+    $action = $request->input('action');
+    
+    if (!$operationId) {
+        \Filament\Notifications\Notification::make()
+            ->title('Erreur')
+            ->body('ID d\'opération manquant')
+            ->danger()
+            ->send();
+        return back();
+    }
+    
+    // Récupérer les données de la session
+    $data = session()->get("operation_{$operationId}");
+    
+    if (!$data) {
+        \Filament\Notifications\Notification::make()
+            ->title('Session expirée')
+            ->body('La session de confirmation a expiré. Veuillez recommencer.')
+            ->warning()
+            ->send();
+        return back();
+    }
+    
+    if ($action === 'confirm') {
+        try {
+            // Nettoyer la session
+            session()->forget("operation_{$operationId}");
+            
+            // Exécuter l'opération
+            \App\Filament\Resources\TresorerieResource\Pages\ManageTresorerie::executerOperationFinale($data);
+            
+            \Filament\Notifications\Notification::make()
+                ->title('✅ Opération réussie')
+                ->body('L\'opération a été exécutée avec succès')
+                ->success()
+                ->send();
+                
+        } catch (\Exception $e) {
+            \Filament\Notifications\Notification::make()
+                ->title('❌ Erreur lors de l\'exécution')
+                ->body($e->getMessage())
+                ->danger()
+                ->send();
+        }
+    } else {
+        // Annulation
+        session()->forget("operation_{$operationId}");
+        
+        \Filament\Notifications\Notification::make()
+            ->title('Opération annulée')
+            ->body('L\'opération a été annulée par l\'utilisateur')
+            ->success()
+            ->send();
+    }
+    
+    return back();
+})->name('filament.admin.resources.tresorerie.confirm-operation');
+
+
+
+Route::get('/admin/tresorerie/final-confirmation', function () {
+    // Récupérer les données encodées
+    $encodedData = request()->input('data');
+    
+    if (!$encodedData) {
+        abort(404, 'Données non fournies');
+    }
+    
+    $data = json_decode(base64_decode($encodedData), true);
+    
+    // Retourner vers la page de gestion avec les données
+    return redirect()->to(Filament::getUrl())
+        ->with('final_confirmation_data', $data);
+})->name('filament.admin.resources.tresorerie.final-confirmation');
+
+
+// Routes pour les rapports d'épargne
+Route::prefix('rapports')->group(function () {
+    Route::get('/epargne/filtre', [CompteEpargneController::class, 'filtreRapportEpargne'])->name('rapport.epargne.filtre');
+    Route::get('/epargne', [CompteEpargneController::class, 'rapportEpargne'])->name('rapport.epargne');
+    Route::get('/epargne/export', [CompteEpargneController::class, 'exportRapportEpargne'])->name('rapport.epargne.export');
+});

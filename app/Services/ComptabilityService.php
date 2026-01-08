@@ -1550,4 +1550,292 @@ private function getCompteChargeSalaire(string $typeCharge): string
         return 'data:image/svg+xml;base64,' . base64_encode($svg);
     }
 
+    /**
+ * Enregistre un virement vers un compte (similaire au paiement salaire)
+ */
+public function enregistrerVirement($mouvement, $compte, $motif, $description, $beneficiaire)
+{
+    return DB::transaction(function () use ($mouvement, $compte, $motif, $description, $beneficiaire) {
+        $journal = $this->getJournal('caisse');
+        
+        $reference = 'VIR-' . now()->format('Ymd-His');
+        
+        // Débit: Compte de charge selon le motif
+        $compteCharge = $this->getCompteChargeVirement($motif);
+        
+        EcritureComptable::create([
+            'journal_comptable_id' => $journal->id,
+            'reference_operation' => $reference,
+            'type_operation' => 'virement_comptabilite',
+            'compte_number' => $compteCharge,
+            'libelle' => "Virement {$motif} - {$beneficiaire} - {$description}",
+            'montant_debit' => $mouvement->montant,
+            'montant_credit' => 0,
+            'date_ecriture' => now(),
+            'date_valeur' => now(),
+            'devise' => $mouvement->devise,
+            'statut' => 'comptabilise',
+            'created_by' => Auth::id(),
+        ]);
+
+        // Crédit: Compte du membre (le membre reçoit l'argent)
+        EcritureComptable::create([
+            'journal_comptable_id' => $journal->id,
+            'reference_operation' => $reference,
+            'type_operation' => 'virement_comptabilite',
+            'compte_number' => '422000', // Compte membres
+            'libelle' => "Virement {$motif} - {$beneficiaire} - {$description}",
+            'montant_debit' => 0,
+            'montant_credit' => $mouvement->montant,
+            'date_ecriture' => now(),
+            'date_valeur' => now(),
+            'devise' => $mouvement->devise,
+            'statut' => 'comptabilise',
+            'created_by' => Auth::id(),
+        ]);
+
+        Log::info("Écriture comptable créée pour virement", [
+            'reference' => $reference,
+            'montant' => $mouvement->montant,
+            'devise' => $mouvement->devise,
+            'motif' => $motif,
+            'compte_beneficiaire' => $compte->numero_compte,
+            'beneficiaire' => $beneficiaire
+        ]);
+
+        return true;
+    });
+}
+
+/**
+ * Détermine le compte de charge pour les virements
+ */
+private function getCompteChargeVirement(string $motif): string
+{
+    return match($motif) {
+        'remboursement' => '658200', // Compte remboursements
+        'avance' => '658300',        // Compte avances
+        'commission' => '658400',    // Compte commissions
+        'facture_client' => '658500',         // Compte Factures clients
+        'transfert' => '658100',     // Compte transferts divers
+        'autres' => '658600',        // Autres charges
+        default => '658100'          // Par défaut
+    };
+}
+
+
+public function rapportClasse6Charges($dateDebut, $dateFin = null)
+{
+    $dateDebut = Carbon::parse($dateDebut)->startOfDay();
+    $dateFin = $dateFin ? Carbon::parse($dateFin)->endOfDay() : Carbon::now()->endOfDay();
+
+    // Les comptes de la classe 6 commencent par '6'
+    $comptesClasse6 = EcritureComptable::where('compte_number', 'like', '6%')
+        ->whereBetween('date_ecriture', [$dateDebut, $dateFin])
+        ->orderBy('date_ecriture', 'asc')
+        ->get();
+
+    // Regrouper par type de compte (premier chiffre après '6')
+    $chargesParType = [];
+    $totalUSD = 0;
+    $totalCDF = 0;
+
+    foreach ($comptesClasse6 as $ecriture) {
+        // Déterminer le type de charge basé sur le numéro de compte
+        $typeCharge = $this->getTypeChargeFromCompte($ecriture->compte_number);
+        $montant = $ecriture->montant_debit > 0 ? $ecriture->montant_debit : $ecriture->montant_credit;
+        
+        if (!isset($chargesParType[$typeCharge])) {
+            $chargesParType[$typeCharge] = [
+                'type' => $typeCharge,
+                'comptes' => [],
+                'total_usd' => 0,
+                'total_cdf' => 0,
+                'operations' => 0
+            ];
+        }
+
+        // Regrouper par compte spécifique
+        $compteKey = $ecriture->compte_number;
+        if (!isset($chargesParType[$typeCharge]['comptes'][$compteKey])) {
+            $chargesParType[$typeCharge]['comptes'][$compteKey] = [
+                'compte_number' => $ecriture->compte_number,
+                'libelle' => $this->getLibelleCompte($ecriture->compte_number),
+                'operations' => [],
+                'total_usd' => 0,
+                'total_cdf' => 0,
+                'nombre_operations' => 0
+            ];
+        }
+
+        // Ajouter l'opération
+        $chargesParType[$typeCharge]['comptes'][$compteKey]['operations'][] = [
+            'date' => $ecriture->date_ecriture->format('d/m/Y H:i'),
+            'reference' => $ecriture->reference_operation,
+            'type_operation' => $ecriture->type_operation,
+            'libelle' => $ecriture->libelle,
+            'montant' => $montant,
+            'devise' => $ecriture->devise,
+            'operateur' => $ecriture->createdBy->name ?? 'N/A',
+            'journal' => $ecriture->journal_comptable->code_journal ?? 'N/A'
+        ];
+
+        // Mettre à jour les totaux
+        if ($ecriture->devise === 'USD') {
+            $chargesParType[$typeCharge]['comptes'][$compteKey]['total_usd'] += $montant;
+            $chargesParType[$typeCharge]['total_usd'] += $montant;
+            $totalUSD += $montant;
+        } elseif ($ecriture->devise === 'CDF') {
+            $chargesParType[$typeCharge]['comptes'][$compteKey]['total_cdf'] += $montant;
+            $chargesParType[$typeCharge]['total_cdf'] += $montant;
+            $totalCDF += $montant;
+        }
+
+        $chargesParType[$typeCharge]['comptes'][$compteKey]['nombre_operations']++;
+        $chargesParType[$typeCharge]['operations']++;
+    }
+
+    // Calculer les pourcentages
+    foreach ($chargesParType as &$type) {
+        $type['pourcentage_usd'] = $totalUSD > 0 ? ($type['total_usd'] / $totalUSD * 100) : 0;
+        $type['pourcentage_cdf'] = $totalCDF > 0 ? ($type['total_cdf'] / $totalCDF * 100) : 0;
+        
+        // Convertir les comptes en tableau indexé
+        $type['comptes'] = array_values($type['comptes']);
+    }
+
+    // Trier par montant total décroissant
+    uasort($chargesParType, function($a, $b) {
+        $totalA = $a['total_usd'] + $a['total_cdf'];
+        $totalB = $b['total_usd'] + $b['total_cdf'];
+        return $totalB <=> $totalA;
+    });
+
+    return [
+        'periode' => [
+            'debut' => $dateDebut->format('d/m/Y'),
+            'fin' => $dateFin->format('d/m/Y'),
+            'jours' => $dateDebut->diffInDays($dateFin) + 1
+        ],
+        'date_generation' => Carbon::now()->format('d/m/Y H:i:s'),
+        'type' => 'rapport_classe6_charges',
+        'logo_base64' => $this->getLogoBase64(),
+        
+        'totaux_generaux' => [
+            'total_usd' => $totalUSD,
+            'total_cdf' => $totalCDF,
+            'total_operations' => $comptesClasse6->count(),
+            'nombre_types_charges' => count($chargesParType)
+        ],
+        
+        'charges_par_type' => $chargesParType,
+        
+        'distribution_periodique' => $this->getDistributionPeriodiqueCharges($dateDebut, $dateFin),
+        
+        'top_operations' => $comptesClasse6->take(10)->map(function($ecriture) {
+            return [
+                'date' => $ecriture->date_ecriture->format('d/m/Y'),
+                'compte' => $ecriture->compte_number,
+                'libelle' => $ecriture->libelle,
+                'montant' => $ecriture->montant_debit > 0 ? $ecriture->montant_debit : $ecriture->montant_credit,
+                'devise' => $ecriture->devise,
+                'type' => $ecriture->type_operation
+            ];
+        })->values()->toArray()
+    ];
+}
+/**
+ * Détermine le type de charge à partir du numéro de compte
+ */
+private function getTypeChargeFromCompte(string $compteNumber): string
+{
+    // Les deux premiers chiffres déterminent la catégorie
+    $categorie = substr($compteNumber, 0, 2);
+    
+    return match($categorie) {
+        '60' => 'Achats',
+        '61' => 'Services extérieurs',
+        '62' => 'Autres services extérieurs',
+        '63' => 'Impôts et taxes',
+        '64' => 'Charges de personnel',
+        '65' => 'Autres charges d\'exploitation',
+        '66' => 'Charges financières',
+        '67' => 'Charges exceptionnelles',
+        '68' => 'Dotations aux amortissements',
+        '69' => 'Dotations aux provisions',
+        default => 'Charges diverses'
+    };
+}
+
+/**
+ * Obtient le libellé d'un compte
+ */
+private function getLibelleCompte(string $compteNumber): string
+{
+    $libelles = [
+        '661100' => 'Salaires et appointements',
+        '661200' => 'Primes et gratifications',
+        '661800' => 'Autres charges de personnel',
+        '613100' => 'Frais de bureau',
+        '613200' => 'Frais de transport',
+        '613300' => 'Frais de communication',
+        '613400' => 'Frais d\'entretien',
+        '613500' => 'Frais de fournitures',
+        '613600' => 'Autres frais généraux',
+        '658100' => 'Charges diverses d\'exploitation',
+        '658200' => 'Remboursements',
+        '658300' => 'Avances',
+        '658400' => 'Commissions',
+        '658500' => 'Frais de facturation',
+        '658600' => 'Autres charges',
+    ];
+    
+    return $libelles[$compteNumber] ?? "Compte {$compteNumber}";
+}
+
+/**
+ * Calcule la distribution périodique des charges
+ */
+private function getDistributionPeriodiqueCharges($dateDebut, $dateFin): array
+{
+    $distribution = [];
+    $dateCourante = $dateDebut->copy();
+    
+    while ($dateCourante <= $dateFin) {
+        $jour = $dateCourante->format('Y-m-d');
+        
+        $chargesJour = EcritureComptable::where('compte_number', 'like', '6%')
+            ->whereDate('date_ecriture', $dateCourante)
+            ->get();
+        
+        $totalUSD = 0;
+        $totalCDF = 0;
+        
+        foreach ($chargesJour as $ecriture) {
+            $montant = $ecriture->montant_debit > 0 ? $ecriture->montant_debit : $ecriture->montant_credit;
+            
+            if ($ecriture->devise === 'USD') {
+                $totalUSD += $montant;
+            } elseif ($ecriture->devise === 'CDF') {
+                $totalCDF += $montant;
+            }
+        }
+        
+        $distribution[] = [
+            'date' => $dateCourante->format('d/m/Y'),
+            'jour_semaine' => $dateCourante->format('l'),
+            'total_usd' => $totalUSD,
+            'total_cdf' => $totalCDF,
+            'operations' => $chargesJour->count(),
+            'moyenne_usd' => $chargesJour->count() > 0 ? $totalUSD / $chargesJour->count() : 0,
+            'moyenne_cdf' => $chargesJour->count() > 0 ? $totalCDF / $chargesJour->count() : 0
+        ];
+        
+        $dateCourante->addDay();
+    }
+    
+    return $distribution;
+}
+
+
 }

@@ -11,9 +11,6 @@ use Barryvdh\DomPDF\Facade\Pdf;
 
 class CompteEpargneController extends Controller
 {
-
- 
-
 public function details($compte_epargne_id)
 {
     $compte = CompteEpargne::with(['client', 'groupeSolidaire'])
@@ -254,11 +251,12 @@ public function mouvements($compte_epargne_id)
     }
 
 
-    // Dans App\Http\Controllers\CompteEpargneController
-
-// Dans App\Http\Controllers\CompteEpargneController
-public function rapportEpargne()
+public function rapportEpargne(Request $request)
 {
+    // Récupérer les dates de filtrage depuis la requête
+    $dateDebut = $request->input('date_debut') ? \Carbon\Carbon::parse($request->input('date_debut'))->startOfDay() : null;
+    $dateFin = $request->input('date_fin') ? \Carbon\Carbon::parse($request->input('date_fin'))->endOfDay() : null;
+    
     // Récupérer tous les comptes épargne avec leurs relations
     $comptes = CompteEpargne::with([
         'client',
@@ -267,75 +265,196 @@ public function rapportEpargne()
     ->orderBy('numero_compte')
     ->get();
 
-    // Calculer les totaux par devise depuis la création
+    // Calculer les totaux par devise avec filtrage par dates
     $totaux = [
         'usd' => [
-            'solde_total' => 0,
+            'solde_periode_total' => 0, // Solde pour la période uniquement
+            'solde_actuel_total' => 0,  // Solde total depuis création (AJOUTÉ)
             'nombre_comptes' => 0,
             'depots_total' => 0,
             'retraits_total' => 0,
-            'comptes_actifs' => 0
+            'comptes_actifs' => 0,
+            'comptes_avec_mouvements' => 0
         ],
         'cdf' => [
-            'solde_total' => 0,
+            'solde_periode_total' => 0, // Solde pour la période uniquement
+            'solde_actuel_total' => 0,  // Solde total depuis création (AJOUTÉ)
             'nombre_comptes' => 0,
             'depots_total' => 0,
             'retraits_total' => 0,
-            'comptes_actifs' => 0
+            'comptes_actifs' => 0,
+            'comptes_avec_mouvements' => 0
         ]
     ];
 
+    // Tableau pour stocker les comptes à afficher
+    $comptesAAfficher = collect();
+    
     // Calculer les statistiques pour chaque compte
     foreach ($comptes as $compte) {
         $devise = strtolower($compte->devise);
         
         // Totaux par devise
-        $totaux[$devise]['solde_total'] += floatval($compte->solde);
         $totaux[$devise]['nombre_comptes']++;
         
         if ($compte->statut === 'actif') {
             $totaux[$devise]['comptes_actifs']++;
         }
         
-        // Dépôts totaux depuis la création
+        // ============ CALCULER LE SOLDE TOTAL ACTUEL (sans filtre) ============
+        $soldeActuelTotal = 0;
+        
         if ($compte->type_compte === 'individuel' && $compte->client_id) {
-            $depotsTotal = Epargne::where('client_id', $compte->client_id)
+            $queryDepotsTotal = Epargne::where('client_id', $compte->client_id)
                 ->where('statut', 'valide')
-                ->where('devise', $compte->devise)
-                ->sum('montant');
+                ->where('devise', $compte->devise);
+            
+            $depotsTotalActuel = $queryDepotsTotal->sum('montant');
+            
+            $queryRetraitsTotal = Mouvement::where('compte_epargne_id', $compte->id)
+                ->where('type', 'retrait');
+            
+            $retraitsTotalActuel = $queryRetraitsTotal->sum('montant');
+            
+            $soldeActuelTotal = $depotsTotalActuel - $retraitsTotalActuel;
+            
         } elseif ($compte->type_compte === 'groupe_solidaire' && $compte->groupe_solidaire_id) {
-            $depotsTotal = Epargne::where('groupe_solidaire_id', $compte->groupe_solidaire_id)
+            $queryDepotsTotal = Epargne::where('groupe_solidaire_id', $compte->groupe_solidaire_id)
                 ->where('statut', 'valide')
-                ->where('devise', $compte->devise)
-                ->sum('montant');
+                ->where('devise', $compte->devise);
+            
+            $depotsTotalActuel = $queryDepotsTotal->sum('montant');
+            
+            $queryRetraitsTotal = Mouvement::where('compte_epargne_id', $compte->id)
+                ->where('type', 'retrait');
+            
+            $retraitsTotalActuel = $queryRetraitsTotal->sum('montant');
+            
+            $soldeActuelTotal = $depotsTotalActuel - $retraitsTotalActuel;
         }
         
-        $totaux[$devise]['depots_total'] += $depotsTotal;
+        // Ajouter au solde total actuel
+        $totaux[$devise]['solde_actuel_total'] += $soldeActuelTotal;
         
-        // Retraits totaux depuis la création
-        $retraitsTotal = Mouvement::where('compte_epargne_id', $compte->id)
-            ->where('type', 'retrait')
-            ->sum('montant');
+        // ============ CALCULER LE SOLDE PÉRIODE (avec filtre) ============
+        // Dépôts totaux avec filtrage par dates
+        $queryDepots = null;
+        
+        if ($compte->type_compte === 'individuel' && $compte->client_id) {
+            $queryDepots = Epargne::where('client_id', $compte->client_id)
+                ->where('statut', 'valide')
+                ->where('devise', $compte->devise);
+        } elseif ($compte->type_compte === 'groupe_solidaire' && $compte->groupe_solidaire_id) {
+            $queryDepots = Epargne::where('groupe_solidaire_id', $compte->groupe_solidaire_id)
+                ->where('statut', 'valide')
+                ->where('devise', $compte->devise);
+        }
+        
+        $depotsTotalPeriode = 0;
+        if ($queryDepots) {
+            // Appliquer le filtrage par dates si spécifié
+            if ($dateDebut && $dateFin) {
+                $queryDepots->whereBetween('date_apport', [$dateDebut, $dateFin]);
+            } elseif ($dateDebut) {
+                $queryDepots->where('date_apport', '>=', $dateDebut);
+            } elseif ($dateFin) {
+                $queryDepots->where('date_apport', '<=', $dateFin);
+            } else {
+                // Pas de filtre : prendre toutes les épargnes
+            }
             
-        $totaux[$devise]['retraits_total'] += $retraitsTotal;
+            $depotsTotalPeriode = $queryDepots->sum('montant');
+            $totaux[$devise]['depots_total'] += $depotsTotalPeriode;
+        }
         
-        // Ajouter les dépôts et retraits totaux au modèle pour la vue
-        $compte->depots_total = $depotsTotal ?? 0;
-        $compte->retraits_total = $retraitsTotal ?? 0;
+        $compte->depots_total_periode = $depotsTotalPeriode;
+        
+        // Retraits totaux avec filtrage par dates
+        $queryRetraits = Mouvement::where('compte_epargne_id', $compte->id)
+            ->where('type', 'retrait');
+        
+        $retraitsTotalPeriode = 0;
+        
+        // Appliquer le filtrage par dates si spécifié
+        if ($dateDebut && $dateFin) {
+            $queryRetraits->whereBetween('date_mouvement', [$dateDebut, $dateFin]);
+        } elseif ($dateDebut) {
+            $queryRetraits->where('date_mouvement', '>=', $dateDebut);
+        } elseif ($dateFin) {
+            $queryRetraits->where('date_mouvement', '<=', $dateFin);
+        } else {
+            // Pas de filtre : prendre tous les retraits
+        }
+        
+        $retraitsTotalPeriode = $queryRetraits->sum('montant');
+        $totaux[$devise]['retraits_total'] += $retraitsTotalPeriode;
+        $compte->retraits_total_periode = $retraitsTotalPeriode;
+        
+        // Calculer le solde pour la période spécifiée
+        $compte->solde_periode = $compte->depots_total_periode - $compte->retraits_total_periode;
+        
+        // Ajouter au solde total de la période
+        $totaux[$devise]['solde_periode_total'] += $compte->solde_periode;
+        
+        // Pour les comptes à afficher :
+        // 1. Sans filtres : afficher TOUS les comptes (même avec solde 0)
+        // 2. Avec filtres : afficher seulement ceux avec mouvements dans la période
+        
+        $aDesMouvements = ($compte->depots_total_periode > 0 || $compte->retraits_total_periode > 0);
+        
+        if (!$dateDebut && !$dateFin) {
+            // SANS FILTRES : afficher TOUS les comptes
+            $comptesAAfficher->push($compte);
+            if ($aDesMouvements) {
+                $totaux[$devise]['comptes_avec_mouvements']++;
+            }
+        } else {
+            // AVEC FILTRES : afficher seulement les comptes avec mouvements
+            if ($aDesMouvements) {
+                $totaux[$devise]['comptes_avec_mouvements']++;
+                $comptesAAfficher->push($compte);
+            }
+        }
     }
 
     // Préparer les données du rapport
     $rapport = [
         'date_rapport' => now()->format('d/m/Y'),
         'heure_generation' => now()->format('H:i:s'),
-        'nombre_total_comptes' => $comptes->count(),
-        'comptes' => $comptes,
+        'nombre_total_comptes' => $comptesAAfficher->count(),
+        'comptes' => $comptesAAfficher,
         'totaux' => $totaux,
-        'logo_base64' => $this->getLogoBase64()
+        'logo_base64' => $this->getLogoBase64(),
+        'date_debut' => $dateDebut ? $dateDebut->format('d/m/Y') : null,
+        'date_fin' => $dateFin ? $dateFin->format('d/m/Y') : null,
+        'periode_specifiee' => $dateDebut || $dateFin
     ];
 
     return view('rapports.epargne', compact('rapport'));
 }
+    
+
+public function filtreRapportEpargne()
+{
+    return view('rapports.formulaire-epargne');
+}
+
+ private function prepareRapportData($dateDebut = null, $dateFin = null)
+    {
+        // La même logique que dans rapportEpargne() mais retourne seulement les données
+        // Vous pouvez factoriser cette logique dans une méthode privée
+        // Pour l'instant, on appelle directement rapportEpargne()
+        $request = new Request([
+            'date_debut' => $dateDebut ? $dateDebut->format('Y-m-d') : null,
+            'date_fin' => $dateFin ? $dateFin->format('Y-m-d') : null,
+        ]);
+        
+        // Pour simplifier, on crée une nouvelle instance et on appelle la méthode
+        $controller = new self();
+        $rapport = $controller->rapportEpargne($request);
+        
+        return $rapport->getData()['rapport'];
+    }
 private function getLogoBase64()
 {
     // Chemin vers votre logo

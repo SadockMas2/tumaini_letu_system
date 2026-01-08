@@ -176,8 +176,9 @@ public function processApproval(Request $request, $credit_id)
             // 2. CRÉER LE MOUVEMENT "FRAIS PAYÉS" POUR LE CLIENT
             Mouvement::create([
                 'compte_id' => $compte->id,
+                'type' => 'retrait' ,
                 'type_mouvement' => 'frais_payes_credit',
-                'montant' => -$totalFrais,
+                'montant' => $totalFrais,
                 'solde_avant' => $soldeDebut,
                 'solde_apres' => $soldeApresFrais,
                 'description' => "Paiement frais pour octroi crédit - Dossier: {$frais['dossier']}, Alerte: {$frais['alerte']}",
@@ -224,6 +225,20 @@ public function processApproval(Request $request, $credit_id)
             $compte->save();
 
             Log::info("💳 CRÉDIT AJOUTÉ - Solde après crédit: {$soldeApresCredit}");
+
+            
+                // // CRÉER LE MOUVEMENT "DÉPÔT" POUR LE MEMBRE
+                // Mouvement::create([
+                //     'compte_id' => $compteMembre->id,
+                //     'type_mouvement' => 'credit_octroye',
+                //     'montant' => $montant,
+                //     'solde_avant' => $soldeDebutMembre,
+                //     'solde_apres' => $nouveauSolde,
+                //     'description' => "Crédit individuel reçu - Montant: {$montant} USD - : {$credit->compte->nom}",
+                //     'reference' => 'CREDIT-IND-' . $credit->id,
+                //     'date_mouvement' => now(),
+                //     'nom_deposant' => 'TUMAINI LETU Finances',
+                // ]);
 
             // 7. BLOQUER LA CAUTION DANS LE COMPTE
             $caution = $frais['caution'];
@@ -373,9 +388,9 @@ private function creerHistoriqueCompteSpecial($montantFrais, $devise, $credit, $
             $ancienSoldeCompte = $compte->solde;
             $ancienMontantCredit = $credit->montant_total;
 
-            // Mettre à jour le montant total du crédit
-            $credit->montant_total -= $request->montant_paye;
-            $credit->save();
+            // NE PAS MODIFIER montant_total ici
+            // On garde le montant_total original
+            // $credit->montant_total reste inchangé
 
             // Débiter le compte
             $compte->solde -= $request->montant_paye;
@@ -559,9 +574,9 @@ public function processApprovalGroupe(Request $request, $credit_groupe_id)
             // 2. CRÉER LE MOUVEMENT "RETRAIT FRAIS" POUR LE GROUPE
             Mouvement::create([
                 'compte_id' => $compteGroupe->id,
-                'type' => 'depot',
+                'type' => 'retrait',
                 'type_mouvement' => 'frais_payes_credit_groupe',
-                'montant' => -$totalFraisGroupe,
+                'montant' => $totalFraisGroupe,
                 'solde_avant' => $soldeDebutGroupe,
                 'solde_apres' => $soldeApresFraisGroupe,
                 'description' => "Paiement frais crédit groupe - Total: {$totalFraisGroupe} USD",
@@ -1373,8 +1388,9 @@ private function creerMouvementsCreditGroupe($creditGroupe, $compteGroupe, $tota
             
             Mouvement::create([
                 'compte_id' => $compteGroupe->id,
+                'type' => 'retrait',
                 'type_mouvement' => 'frais_payes_credit_groupe',
-                'montant' => -$totalFrais,
+                'montant' => $totalFrais,
                 'solde_avant' => $soldeDebut,
                 'solde_apres' => $soldeApresFrais,
                 'description' => "Paiement frais crédit groupe - Dossier: {$creditGroupe->frais_dossier}, Alerte: {$creditGroupe->frais_alerte}, Carnet: {$creditGroupe->frais_carnet}",

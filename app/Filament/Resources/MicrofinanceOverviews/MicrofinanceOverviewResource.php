@@ -61,6 +61,6 @@ class MicrofinanceOverviewResource extends Resource
     {
         /** @var \App\Models\User|null $user */
         $user = Auth::user();
-        return $user && $user->can('view_comptespecial');
+        return $user && $user->can('view_autorisation');
     }
 }

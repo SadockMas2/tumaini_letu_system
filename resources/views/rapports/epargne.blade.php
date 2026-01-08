@@ -204,64 +204,152 @@
         <div>Heure : {{ $rapport['heure_generation'] }}</div>
     </div>
 
+    <!-- Afficher la période si spécifiée -->
+@if($rapport['periode_specifiee'])
+<div style="margin-bottom: 15px; padding: 10px; background-color: #f0f7ff; border: 1px solid #007bff; border-radius: 5px;">
+    <div style="font-weight: bold; margin-bottom: 5px; color: #007bff;">📅 PÉRIODE SÉLECTIONNÉE :</div>
+    <div style="display: flex; gap: 30px; font-size: 11px;">
+        @if($rapport['date_debut'])
+            <div><strong>Du :</strong> {{ $rapport['date_debut'] }}</div>
+        @endif
+        @if($rapport['date_fin'])
+            <div><strong>Au :</strong> {{ $rapport['date_fin'] }}</div>
+        @endif
+        @if(!$rapport['date_debut'] && $rapport['date_fin'])
+            <div><strong>Jusqu'au :</strong> {{ $rapport['date_fin'] }}</div>
+        @endif
+        @if($rapport['date_debut'] && !$rapport['date_fin'])
+            <div><strong>À partir du :</strong> {{ $rapport['date_debut'] }}</div>
+        @endif
+    </div>
+    <div style="font-size: 10px; color: #666; margin-top: 5px; font-style: italic;">
+        Les totaux affichés concernent uniquement les transactions de cette période.
+    </div>
+</div>
+@endif
+
     <div class="separator"></div>
 
-    <!-- Titre du rapport -->
-    <div class="section">
-        <div style="text-align: center; margin-bottom: 15px;">
-            <h2 style="font-size: 16px; font-weight: bold; color: #000;">RAPPORT DES COMPTES ÉPARGNE</h2>
-            <p style="font-size: 12px; color: #000;">État instantané des comptes d'épargne - Totaux depuis création</p>
-        </div>
+   <!-- Titre du rapport -->
+<div class="section">
+    <div style="text-align: center; margin-bottom: 15px;">
+        <h2 style="font-size: 16px; font-weight: bold; color: #000;">RAPPORT DES COMPTES ÉPARGNE</h2>
+        <p style="font-size: 12px; color: #000;">
+            @if($rapport['periode_specifiee'])
+                État des comptes d'épargne - Période du {{ $rapport['date_debut'] ?? 'début' }} au {{ $rapport['date_fin'] ?? 'fin' }}
+            @else
+                État instantané des comptes d'épargne - Totaux depuis création
+            @endif
+        </p>
     </div>
+</div>
 
-    <!-- Synthèse générale -->
-    <div class="section">
-        <div class="section-title">SYNTHÈSE GÉNÉRALE</div>
-        <div class="totals-grid">
-            <div class="total-card">
-                <div class="total-label">TOTAL COMPTES</div>
-                <div class="total-value">{{ $rapport['nombre_total_comptes'] }}</div>
-            </div>
-            <div class="total-card">
-                <div class="total-label">COMPTES ACTIFS</div>
-                <div class="total-value">
-                    {{ ($rapport['totaux']['usd']['comptes_actifs'] + $rapport['totaux']['cdf']['comptes_actifs']) }}
-                </div>
-            </div>
-            <div class="total-card">
-                <div class="total-label">SOLDE TOTAL USD</div>
-                <div class="total-value devise-usd montant">{{ number_format($rapport['totaux']['usd']['solde_total'], 2) }} $</div>
-            </div>
-            <div class="total-card">
-                <div class="total-label">SOLDE TOTAL CDF</div>
-                <div class="total-value devise-cdf montant">{{ number_format($rapport['totaux']['cdf']['solde_total'], 2) }} FC</div>
-            </div>
-            <div class="total-card">
-                <div class="total-label">COMPTES USD</div>
-                <div class="total-value">{{ $rapport['totaux']['usd']['nombre_comptes'] }}</div>
-            </div>
-            <div class="total-card">
-                <div class="total-label">COMPTES CDF</div>
-                <div class="total-value">{{ $rapport['totaux']['cdf']['nombre_comptes'] }}</div>
-            </div>
-            <div class="total-card">
-                <div class="total-label">DÉPÔTS TOT. USD</div>
-                <div class="total-value devise-usd montant depot-positive">{{ number_format($rapport['totaux']['usd']['depots_total'], 2) }} $</div>
-            </div>
-            <div class="total-card">
-                <div class="total-label">DÉPÔTS TOT. CDF</div>
-                <div class="total-value devise-cdf montant depot-positive">{{ number_format($rapport['totaux']['cdf']['depots_total'], 2) }} FC</div>
-            </div>
-            <div class="total-card">
-                <div class="total-label">RETRAITS TOT. USD</div>
-                <div class="total-value devise-usd montant retrait-negative">{{ number_format($rapport['totaux']['usd']['retraits_total'], 2) }} $</div>
-            </div>
-            <div class="total-card">
-                <div class="total-label">RETRAITS TOT. CDF</div>
-                <div class="total-value devise-cdf montant retrait-negative">{{ number_format($rapport['totaux']['cdf']['retraits_total'], 2) }} FC</div>
+   <!-- Synthèse générale -->
+<div class="section">
+    <div class="section-title">SYNTHÈSE GÉNÉRALE</div>
+    <div class="totals-grid">
+        <div class="total-card">
+            <div class="total-label">TOTAL COMPTES</div>
+            <div class="total-value">{{ $rapport['nombre_total_comptes'] }}</div>
+        </div>
+        <div class="total-card">
+            <div class="total-label">COMPTES ACTIFS</div>
+            <div class="total-value">
+                {{ ($rapport['totaux']['usd']['comptes_actifs'] + $rapport['totaux']['cdf']['comptes_actifs']) }}
             </div>
         </div>
+        <div class="total-card">
+            <div class="total-label">
+                @if($rapport['periode_specifiee'])
+                    SOLDE PÉRIODE USD
+                @else
+                    SOLDE TOTAL USD
+                @endif
+            </div>
+            <div class="total-value devise-usd montant">
+                @if($rapport['periode_specifiee'])
+                    {{ number_format($rapport['totaux']['usd']['solde_periode_total'], 2) }} $
+                @else
+                    {{ number_format($rapport['totaux']['usd']['solde_actuel_total'], 2) }} $
+                @endif
+            </div>
+        </div>
+        <div class="total-card">
+            <div class="total-label">
+                @if($rapport['periode_specifiee'])
+                    SOLDE PÉRIODE CDF
+                @else
+                    SOLDE TOTAL CDF
+                @endif
+            </div>
+            <div class="total-value devise-cdf montant">
+                @if($rapport['periode_specifiee'])
+                    {{ number_format($rapport['totaux']['cdf']['solde_periode_total'], 2) }} FC
+                @else
+                    {{ number_format($rapport['totaux']['cdf']['solde_actuel_total'], 2) }} FC
+                @endif
+            </div>
+        </div>
+        <div class="total-card">
+            <div class="total-label">COMPTES USD</div>
+            <div class="total-value">{{ $rapport['totaux']['usd']['nombre_comptes'] }}</div>
+        </div>
+        <div class="total-card">
+            <div class="total-label">COMPTES CDF</div>
+            <div class="total-value">{{ $rapport['totaux']['cdf']['nombre_comptes'] }}</div>
+        </div>
+        @if($rapport['periode_specifiee'])
+        <div class="total-card">
+            <div class="total-label">COMPTES AVEC MOUV. USD</div>
+            <div class="total-value">{{ $rapport['totaux']['usd']['comptes_avec_mouvements'] }}</div>
+        </div>
+        <div class="total-card">
+            <div class="total-label">COMPTES AVEC MOUV. CDF</div>
+            <div class="total-value">{{ $rapport['totaux']['cdf']['comptes_avec_mouvements'] }}</div>
+        </div>
+        @endif
+        <div class="total-card">
+            <div class="total-label">
+                @if($rapport['periode_specifiee'])
+                    DÉPÔTS PÉRIODE USD
+                @else
+                    DÉPÔTS TOT. USD
+                @endif
+            </div>
+            <div class="total-value devise-usd montant depot-positive">{{ number_format($rapport['totaux']['usd']['depots_total'], 2) }} $</div>
+        </div>
+        <div class="total-card">
+            <div class="total-label">
+                @if($rapport['periode_specifiee'])
+                    DÉPÔTS PÉRIODE CDF
+                @else
+                    DÉPÔTS TOT. CDF
+                @endif
+            </div>
+            <div class="total-value devise-cdf montant depot-positive">{{ number_format($rapport['totaux']['cdf']['depots_total'], 2) }} FC</div>
+        </div>
+        <div class="total-card">
+            <div class="total-label">
+                @if($rapport['periode_specifiee'])
+                    RETRAITS PÉRIODE USD
+                @else
+                    RETRAITS TOT. USD
+                @endif
+            </div>
+            <div class="total-value devise-usd montant retrait-negative">{{ number_format($rapport['totaux']['usd']['retraits_total'], 2) }} $</div>
+        </div>
+        <div class="total-card">
+            <div class="total-label">
+                @if($rapport['periode_specifiee'])
+                    RETRAITS PÉRIODE CDF
+                @else
+                    RETRAITS TOT. CDF
+                @endif
+            </div>
+            <div class="total-value devise-cdf montant retrait-negative">{{ number_format($rapport['totaux']['cdf']['retraits_total'], 2) }} FC</div>
+        </div>
     </div>
+</div>
 
     <div class="separator"></div>
 
@@ -271,163 +359,228 @@
         
         <table class="table">
             <thead>
-                <tr>
-                    <th style="width: 12%">N° Compte</th>
-                    <th style="width: 20%">Titulaire</th>
-                    <th style="width: 10%">Type</th>
-                    <th style="width: 8%">Devise</th>
-                    <th style="width: 12%" class="text-right">Solde Actuel</th>
-                    <th style="width: 12%" class="text-right">Dépôts Total</th>
-                    <th style="width: 12%" class="text-right">Retraits Total</th>
-                    <th style="width: 8%" class="text-center">Statut</th>
-                    <th style="width: 16%">Date Ouverture</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach($rapport['comptes'] as $compte)
-                @php
-                    $deviseClass = $compte->devise === 'USD' ? 'devise-usd' : 'devise-cdf';
-                @endphp
-                <tr>
-                    <td><strong>{{ $compte->numero_compte }}</strong></td>
-                    <td>
-                        @if($compte->type_compte === 'individuel' && $compte->client)
-                             {{ $compte->client->nom }}  {{ $compte->client->postnom }} {{ $compte->client->prenom }}
-                        @elseif($compte->type_compte === 'groupe_solidaire' && $compte->groupeSolidaire)
-                            {{ $compte->groupeSolidaire->nom_groupe }}
-                        @else
-                            N/A
-                        @endif
-                    </td>
-                    <td class="text-center">
-                        @if($compte->type_compte === 'individuel')
-                            <span class="type-individuel">INDIVIDUEL</span>
-                        @else
-                            <span class="type-groupe">GROUPE</span>
-                        @endif
-                    </td>
-                    <td class="text-center {{ $deviseClass }}">
-                        {{ $compte->devise }}
-                    </td>
-                    <td class="text-right montant {{ $deviseClass }} {{ $compte->solde > 0 ? 'solde-positif' : '' }}">
-                        {{ number_format($compte->solde, 2) }}
-                    </td>
-                    <td class="text-right montant depot-positive {{ $deviseClass }}">
-                        {{ number_format($compte->depots_total, 2) }}
-                    </td>
-                    <td class="text-right montant retrait-negative {{ $deviseClass }}">
-                        {{ number_format($compte->retraits_total, 2) }}
-                    </td>
-                    <td class="text-center">
-                        @if($compte->statut === 'actif')
-                            <span class="statut-actif">ACTIF</span>
-                        @else
-                            <span class="statut-inactif">INACTIF</span>
-                        @endif
-                    </td>
-                    <td class="text-center">
-                        {{ $compte->date_ouverture ? $compte->date_ouverture->format('d/m/Y') : 'N/A' }}
-                    </td>
-                </tr>
-                @endforeach
-            </tbody>
+    <tr>
+        <th style="width: 12%">N° Compte</th>
+        <th style="width: 20%">Titulaire</th>
+        <th style="width: 10%">Type</th>
+        <th style="width: 8%">Devise</th>
+        @if($rapport['periode_specifiee'])
+            <th style="width: 12%" class="text-right">Solde Période</th>
+            <th style="width: 12%" class="text-right">Dépôts Période</th>
+            <th style="width: 12%" class="text-right">Retraits Période</th>
+        @else
+            <th style="width: 12%" class="text-right">Solde Total</th>
+            <th style="width: 12%" class="text-right">Dépôts Total</th>
+            <th style="width: 12%" class="text-right">Retraits Total</th>
+        @endif
+        <th style="width: 8%" class="text-center">Statut</th>
+        <th style="width: 16%">Date Ouverture</th>
+    </tr>
+</thead>
+
+         <tbody>
+    @foreach($rapport['comptes'] as $compte)
+    @php
+        $deviseClass = $compte->devise === 'USD' ? 'devise-usd' : 'devise-cdf';
+        // Toujours afficher le solde de la période pour le rapport filtré
+        // Pour le rapport sans filtre, solde_periode = total depuis création
+        $soldeAAfficher = $compte->solde_periode;
+        $depotsAAfficher = $compte->depots_total_periode;
+        $retraitsAAfficher = $compte->retraits_total_periode;
+    @endphp
+    <tr>
+        <td><strong>{{ $compte->numero_compte }}</strong></td>
+        <td>
+            @if($compte->type_compte === 'individuel' && $compte->client)
+                 {{ $compte->client->nom }}  {{ $compte->client->postnom }} {{ $compte->client->prenom }}
+            @elseif($compte->type_compte === 'groupe_solidaire' && $compte->groupeSolidaire)
+                {{ $compte->groupeSolidaire->nom_groupe }}
+            @else
+                N/A
+            @endif
+        </td>
+        <td class="text-center">
+            @if($compte->type_compte === 'individuel')
+                <span class="type-individuel">INDIVIDUEL</span>
+            @else
+                <span class="type-groupe">GROUPE</span>
+            @endif
+        </td>
+        <td class="text-center {{ $deviseClass }}">
+            {{ $compte->devise }}
+        </td>
+        <td class="text-right montant {{ $deviseClass }} {{ $soldeAAfficher > 0 ? 'solde-positif' : '' }}">
+            {{ number_format($soldeAAfficher, 2) }}
+        </td>
+        <td class="text-right montant depot-positive {{ $deviseClass }}">
+            {{ number_format($depotsAAfficher, 2) }}
+        </td>
+        <td class="text-right montant retrait-negative {{ $deviseClass }}">
+            {{ number_format($retraitsAAfficher, 2) }}
+        </td>
+        <td class="text-center">
+            @if($compte->statut === 'actif')
+                <span class="statut-actif">ACTIF</span>
+            @else
+                <span class="statut-inactif">INACTIF</span>
+            @endif
+        </td>
+        <td class="text-center">
+            {{ $compte->date_ouverture ? $compte->date_ouverture->format('d/m/Y') : 'N/A' }}
+        </td>
+    </tr>
+    @endforeach
+</tbody>
+
             <tfoot>
-                <tr class="total-row">
-                    <td colspan="4"><strong>TOTAUX GÉNÉRAUX</strong></td>
-                    <td class="text-right montant">
-                        <div class="devise-usd">{{ number_format($rapport['totaux']['usd']['solde_total'], 2) }} $</div>
-                        <div class="devise-cdf">{{ number_format($rapport['totaux']['cdf']['solde_total'], 2) }} FC</div>
-                    </td>
-                    <td class="text-right montant">
-                        <div class="devise-usd">{{ number_format($rapport['totaux']['usd']['depots_total'], 2) }} $</div>
-                        <div class="devise-cdf">{{ number_format($rapport['totaux']['cdf']['depots_total'], 2) }} FC</div>
-                    </td>
-                    <td class="text-right montant">
-                        <div class="devise-usd">{{ number_format($rapport['totaux']['usd']['retraits_total'], 2) }} $</div>
-                        <div class="devise-cdf">{{ number_format($rapport['totaux']['cdf']['retraits_total'], 2) }} FC</div>
-                    </td>
-                    <td class="text-center">
-                        <div>USD: {{ $rapport['totaux']['usd']['comptes_actifs'] }}/{{ $rapport['totaux']['usd']['nombre_comptes'] }}</div>
-                        <div>CDF: {{ $rapport['totaux']['cdf']['comptes_actifs'] }}/{{ $rapport['totaux']['cdf']['nombre_comptes'] }}</div>
-                    </td>
-                    <td></td>
-                </tr>
-            </tfoot>
+    <tr class="total-row">
+        <td colspan="4"><strong>TOTAUX GÉNÉRAUX</strong></td>
+        <td class="text-right montant">
+            <div class="devise-usd">{{ number_format($rapport['totaux']['usd']['solde_periode_total'], 2) }} $</div>
+            <div class="devise-cdf">{{ number_format($rapport['totaux']['cdf']['solde_periode_total'], 2) }} FC</div>
+        </td>
+        <td class="text-right montant">
+            <div class="devise-usd">{{ number_format($rapport['totaux']['usd']['depots_total'], 2) }} $</div>
+            <div class="devise-cdf">{{ number_format($rapport['totaux']['cdf']['depots_total'], 2) }} FC</div>
+        </td>
+        <td class="text-right montant">
+            <div class="devise-usd">{{ number_format($rapport['totaux']['usd']['retraits_total'], 2) }} $</div>
+            <div class="devise-cdf">{{ number_format($rapport['totaux']['cdf']['retraits_total'], 2) }} FC</div>
+        </td>
+        <td class="text-center">
+            <div>USD: {{ $rapport['totaux']['usd']['comptes_actifs'] }}/{{ $rapport['totaux']['usd']['nombre_comptes'] }}</div>
+            <div>CDF: {{ $rapport['totaux']['cdf']['comptes_actifs'] }}/{{ $rapport['totaux']['cdf']['nombre_comptes'] }}</div>
+            @if($rapport['periode_specifiee'])
+            <div style="font-size: 8px; margin-top: 2px;">
+                USD avec mouvements: {{ $rapport['totaux']['usd']['comptes_avec_mouvements'] }}<br>
+                CDF avec mouvements: {{ $rapport['totaux']['cdf']['comptes_avec_mouvements'] }}
+            </div>
+            @endif
+        </td>
+        <td></td>
+    </tr>
+</tfoot>
         </table>
     </div>
 
-    <!-- Résumé par devise -->
-    <div class="section">
-        <div class="section-title">RÉSUMÉ PAR DEVISE</div>
-        
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-            <!-- Section USD -->
-            <div style="border: 1px solid #000; padding: 10px; border-radius: 5px;">
-                <h4 style="text-align: center; margin-bottom: 10px; color: #28a745;">DEVISE USD</h4>
-                <div style="font-size: 10px;">
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                        <span>Nombre de comptes:</span>
-                        <strong>{{ $rapport['totaux']['usd']['nombre_comptes'] }}</strong>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                        <span>Comptes actifs:</span>
-                        <strong>{{ $rapport['totaux']['usd']['comptes_actifs'] }}</strong>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                        <span>Solde total:</span>
-                        <strong class="montant devise-usd">{{ number_format($rapport['totaux']['usd']['solde_total'], 2) }} $</strong>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                        <span>Dépôts totaux:</span>
-                        <strong class="montant devise-usd depot-positive">{{ number_format($rapport['totaux']['usd']['depots_total'], 2) }} $</strong>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                        <span>Retraits totaux:</span>
-                        <strong class="montant devise-usd retrait-negative">{{ number_format($rapport['totaux']['usd']['retraits_total'], 2) }} $</strong>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; margin-top: 8px; padding-top: 4px; border-top: 1px solid #ddd;">
-                        <span>Mouvement net:</span>
-                        <strong class="montant devise-usd {{ ($rapport['totaux']['usd']['depots_total'] - $rapport['totaux']['usd']['retraits_total']) >= 0 ? 'depot-positive' : 'retrait-negative' }}">
-                            {{ number_format($rapport['totaux']['usd']['depots_total'] - $rapport['totaux']['usd']['retraits_total'], 2) }} $
-                        </strong>
-                    </div>
+<!-- Résumé par devise -->
+<div class="section">
+    <div class="section-title">RÉSUMÉ PAR DEVISE</div>
+    
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+        <!-- Section USD -->
+        <div style="border: 1px solid #000; padding: 10px; border-radius: 5px;">
+            <h4 style="text-align: center; margin-bottom: 10px; color: #28a745;">DEVISE USD</h4>
+            <div style="font-size: 10px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                    <span>Nombre de comptes:</span>
+                    <strong>{{ $rapport['totaux']['usd']['nombre_comptes'] }}</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                    <span>Comptes actifs:</span>
+                    <strong>{{ $rapport['totaux']['usd']['comptes_actifs'] }}</strong>
+                </div>
+                @if($rapport['periode_specifiee'])
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                    <span>Comptes avec mouvements:</span>
+                    <strong>{{ $rapport['totaux']['usd']['comptes_avec_mouvements'] }}</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                    <span>Solde période:</span>
+                    <strong class="montant devise-usd">{{ number_format($rapport['totaux']['usd']['solde_periode_total'], 2) }} $</strong>
+                </div>
+                @else
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                    <span>Solde total:</span>
+                    <strong class="montant devise-usd">{{ number_format($rapport['totaux']['usd']['solde_actuel_total'], 2) }} $</strong>
+                </div>
+                @endif
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                    <span>Dépôts totaux:</span>
+                    <strong class="montant devise-usd depot-positive">
+                        @if($rapport['periode_specifiee'])
+                            {{ number_format($rapport['totaux']['usd']['depots_total'], 2) }} $
+                        @else
+                            {{ number_format($rapport['totaux']['usd']['depots_total'], 2) }} $
+                        @endif
+                    </strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                    <span>Retraits totaux:</span>
+                    <strong class="montant devise-usd retrait-negative">
+                        @if($rapport['periode_specifiee'])
+                            {{ number_format($rapport['totaux']['usd']['retraits_total'], 2) }} $
+                        @else
+                            {{ number_format($rapport['totaux']['usd']['retraits_total'], 2) }} $
+                        @endif
+                    </strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-top: 8px; padding-top: 4px; border-top: 1px solid #ddd;">
+                    <span>Mouvement net:</span>
+                    <strong class="montant devise-usd {{ ($rapport['totaux']['usd']['depots_total'] - $rapport['totaux']['usd']['retraits_total']) >= 0 ? 'depot-positive' : 'retrait-negative' }}">
+                        {{ number_format($rapport['totaux']['usd']['depots_total'] - $rapport['totaux']['usd']['retraits_total'], 2) }} $
+                    </strong>
                 </div>
             </div>
-            
-            <!-- Section CDF -->
-            <div style="border: 1px solid #000; padding: 10px; border-radius: 5px;">
-                <h4 style="text-align: center; margin-bottom: 10px; color: #007bff;">DEVISE CDF</h4>
-                <div style="font-size: 10px;">
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                        <span>Nombre de comptes:</span>
-                        <strong>{{ $rapport['totaux']['cdf']['nombre_comptes'] }}</strong>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                        <span>Comptes actifs:</span>
-                        <strong>{{ $rapport['totaux']['cdf']['comptes_actifs'] }}</strong>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                        <span>Solde total:</span>
-                        <strong class="montant devise-cdf">{{ number_format($rapport['totaux']['cdf']['solde_total'], 2) }} FC</strong>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                        <span>Dépôts totaux:</span>
-                        <strong class="montant devise-cdf depot-positive">{{ number_format($rapport['totaux']['cdf']['depots_total'], 2) }} FC</strong>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                        <span>Retraits totaux:</span>
-                        <strong class="montant devise-cdf retrait-negative">{{ number_format($rapport['totaux']['cdf']['retraits_total'], 2) }} FC</strong>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; margin-top: 8px; padding-top: 4px; border-top: 1px solid #ddd;">
-                        <span>Mouvement net:</span>
-                        <strong class="montant devise-cdf {{ ($rapport['totaux']['cdf']['depots_total'] - $rapport['totaux']['cdf']['retraits_total']) >= 0 ? 'depot-positive' : 'retrait-negative' }}">
-                            {{ number_format($rapport['totaux']['cdf']['depots_total'] - $rapport['totaux']['cdf']['retraits_total'], 2) }} FC
-                        </strong>
-                    </div>
+        </div>
+        
+        <!-- Section CDF -->
+        <div style="border: 1px solid #000; padding: 10px; border-radius: 5px;">
+            <h4 style="text-align: center; margin-bottom: 10px; color: #007bff;">DEVISE CDF</h4>
+            <div style="font-size: 10px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                    <span>Nombre de comptes:</span>
+                    <strong>{{ $rapport['totaux']['cdf']['nombre_comptes'] }}</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                    <span>Comptes actifs:</span>
+                    <strong>{{ $rapport['totaux']['cdf']['comptes_actifs'] }}</strong>
+                </div>
+                @if($rapport['periode_specifiee'])
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                    <span>Comptes avec mouvements:</span>
+                    <strong>{{ $rapport['totaux']['cdf']['comptes_avec_mouvements'] }}</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                    <span>Solde période:</span>
+                    <strong class="montant devise-cdf">{{ number_format($rapport['totaux']['cdf']['solde_periode_total'], 2) }} FC</strong>
+                </div>
+                @else
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                    <span>Solde total:</span>
+                    <strong class="montant devise-cdf">{{ number_format($rapport['totaux']['cdf']['solde_actuel_total'], 2) }} FC</strong>
+                </div>
+                @endif
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                    <span>Dépôts totaux:</span>
+                    <strong class="montant devise-cdf depot-positive">
+                        @if($rapport['periode_specifiee'])
+                            {{ number_format($rapport['totaux']['cdf']['depots_total'], 2) }} FC
+                        @else
+                            {{ number_format($rapport['totaux']['cdf']['depots_total'], 2) }} FC
+                        @endif
+                    </strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                    <span>Retraits totaux:</span>
+                    <strong class="montant devise-cdf retrait-negative">
+                        @if($rapport['periode_specifiee'])
+                            {{ number_format($rapport['totaux']['cdf']['retraits_total'], 2) }} FC
+                        @else
+                            {{ number_format($rapport['totaux']['cdf']['retraits_total'], 2) }} FC
+                        @endif
+                    </strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-top: 8px; padding-top: 4px; border-top: 1px solid #ddd;">
+                    <span>Mouvement net:</span>
+                    <strong class="montant devise-cdf {{ ($rapport['totaux']['cdf']['depots_total'] - $rapport['totaux']['cdf']['retraits_total']) >= 0 ? 'depot-positive' : 'retrait-negative' }}">
+                        {{ number_format($rapport['totaux']['cdf']['depots_total'] - $rapport['totaux']['cdf']['retraits_total'], 2) }} FC
+                    </strong>
                 </div>
             </div>
         </div>
     </div>
+</div>
 
     <div class="separator"></div>
 
@@ -446,10 +599,18 @@
 
     <!-- Pied de page -->
     <div class="footer">
-        <div>Rapport généré automatiquement par le Système de Gestion Épargne Tumaini Letu</div>
-        <div>Document confidentiel - {{ \Carbon\Carbon::now()->format('d/m/Y H:i:s') }}</div>
-        <div><em>Totaux calculés depuis la création des comptes</em></div>
+    <div>Rapport généré automatiquement par le Système de Gestion Épargne Tumaini Letu</div>
+    <div>Document confidentiel - {{ \Carbon\Carbon::now()->format('d/m/Y H:i:s') }}</div>
+    <div>
+        <em>
+            @if($rapport['periode_specifiee'])
+                Totaux calculés pour la période du {{ $rapport['date_debut'] ?? 'début' }} au {{ $rapport['date_fin'] ?? 'fin' }}
+            @else
+                Totaux calculés depuis la création des comptes
+            @endif
+        </em>
     </div>
+</div>
 
     <!-- Script pour impression -->
     <script>

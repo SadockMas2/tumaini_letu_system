@@ -535,7 +535,7 @@
             <div style="margin-bottom: 5px;"></div>
             <div style="margin-bottom: 20px; font-weight: bold;">Tumaini Letu asbl</div>
             <div class="signature-line">
-                Le Responsable
+                Le Gérant
             </div>
         </div>
     </div>

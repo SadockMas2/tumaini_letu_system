@@ -6,6 +6,31 @@
     <title>Paiement Crédits Groupe - Tumaini Letu</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+
+    <style>
+    .toggle-switch:checked + label {
+        background-color: #10b981;
+    }
+    
+    .toggle-switch:checked + label span {
+        transform: translateX(1rem);
+    }
+    
+    .mode-complement .member-card:not(.membre-selectionne) {
+        opacity: 0.6;
+        background-color: #f9fafb;
+    }
+    
+    .mode-complement .member-card:not(.membre-selectionne) .paiement-input {
+        background-color: #f3f4f6;
+        color: #6b7280;
+    }
+    
+    .membre-selectionne {
+        border-left-color: #10b981;
+        background-color: #f0fdf4;
+    }
+</style>
     <style>
         body {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -221,8 +246,6 @@
                             <p class="text-xs text-gray-500 mt-1">USD</p>
                         </div>
 
-<!-- Dans les statistiques du groupe -->
-<!-- Dans les statistiques du groupe -->
 <div class="info-card bg-gradient-to-br from-orange-50 to-red-50 rounded-xl p-6 border-l-orange-400">
     <div class="flex items-center justify-between mb-3">
         <div class="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
@@ -242,7 +265,6 @@
         Dû jusqu'à présent: <?php echo e(number_format($groupeSelectionne->montant_du_jusqu_present, 2)); ?> USD
     </p>
     
-    <!-- AJOUTER CE BLOC POUR AFFICHER LE SOLDE DISPONIBLE -->
     <div class="mt-2 p-2 bg-blue-50 rounded-lg">
         <div class="flex justify-between items-center">
             <span class="text-xs text-blue-700 font-medium">Solde du compte groupe:</span>
@@ -297,7 +319,7 @@
                             </div>
                             <div>
                                 <p class="text-sm text-gray-600">Semaine Actuelle</p>
-                                <p class="font-semibold text-gray-800"><?php echo e($groupeSelectionne->semaine_actuelle ?? 1); ?>/16</p>
+                                <p class="font-semibold text-gray-800"><?php echo e(intval($groupeSelectionne->semaine_actuelle)); ?>/16</p>
                             </div>
                             <div>
                                 <p class="text-sm text-gray-600">Date Échéance</p>
@@ -313,89 +335,186 @@
                     <div class="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-6 border border-green-200 mb-6">
                         <h4 class="text-lg font-semibold text-gray-800 mb-6 flex items-center">
                             <i class="fas fa-money-bill-wave mr-2 text-green-500"></i>
-                            Paiements des Membres - Semaine <?php echo e($groupeSelectionne->semaine_actuelle ?? 1); ?>
+                            Paiements des Membres - Semaine <?php echo e(intval($groupeSelectionne->semaine_actuelle)); ?>
 
                         </h4>
 
-                        <form method="POST" action="<?php echo e(route('paiement.credits.groupe.processer')); ?>" id="paiementForm">
-                            <?php echo csrf_field(); ?>
-                            <input type="hidden" name="selected_groupe_id" value="<?php echo e(request('selected_groupe_id')); ?>">
-                            
-                            <div class="space-y-4">
-                                <?php $__currentLoopData = $groupeSelectionne->membres_avec_soldes; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $membre): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
-                                <div class="member-card bg-white rounded-xl p-6 border-l-green-400 shadow-sm">
-                                    <div class="flex items-center justify-between mb-4">
-                                        <div class="flex items-center">
-                                            <div class="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center mr-4">
-                                                <i class="fas fa-user text-green-600 text-lg"></i>
-                                            </div>
-                                            <div>
-                                                <p class="text-lg font-semibold text-gray-800"><?php echo e($membre['nom_complet']); ?></p>
-                                                <p class="text-sm text-gray-600"><?php echo e($membre['numero_compte']); ?></p>
-                                            </div>
-                                        </div>
-                                        <div class="text-right">
-                                            <p class="text-sm text-gray-600">
-                                                Solde: <span class="font-semibold"><?php echo e(number_format($membre['solde_disponible'], 2)); ?> USD</span>
-                                            </p>
-                                            <p class="text-sm font-semibold text-green-600">
-                                                Dû: <?php echo e(number_format($membre['montant_du'], 2)); ?> USD
-                                            </p>
-                                        </div>
-                                    </div>
+                  <!-- Mode de paiement -->
+    <div class="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-xl">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center">
+                <i class="fas fa-cog mr-2 text-yellow-600"></i>
+                <span class="font-medium text-gray-700">Mode de paiement:</span>
+            </div>
+            <div class="flex space-x-4">
+                <button type="button" 
+                        onclick="activerMode('normal')"
+                        id="btnModeNormal"
+                        class="px-4 py-2 bg-green-500 text-white rounded-lg font-medium flex items-center">
+                    <i class="fas fa-check-circle mr-2"></i>
+                    Normal
+                </button>
+                <button type="button" 
+                        onclick="activerMode('complement')"
+                        id="btnModeComplement"
+                        class="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg font-medium flex items-center">
+                    <i class="fas fa-user-check mr-2"></i>
+                    Complément uniquement
+                </button>
+            </div>
+        </div>
+        <div class="mt-2 text-sm text-yellow-700" id="explicationMode">
+            <i class="fas fa-info-circle mr-1"></i>
+            Mode normal: Tous les membres paient normalement. Mode complément: Seuls les membres cochés seront complétés depuis leur compte.
+        </div>
+    </div>
 
-                                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                                        <div>
-                                            <label class="block text-sm font-medium text-gray-700 mb-3">
-                                                Montant payé par le membre:
+    <form method="POST" action="<?php echo e(route('paiement.credits.groupe.processer')); ?>" id="paiementForm">
+        <?php echo csrf_field(); ?>
+        <input type="hidden" name="selected_groupe_id" value="<?php echo e(request('selected_groupe_id')); ?>">
+        <input type="hidden" name="mode_paiement" id="modePaiement" value="normal">
+        
+        <div class="space-y-4" id="listeMembres">
+            <?php $__currentLoopData = $groupeSelectionne->membres_avec_soldes; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $membre): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+            <?php
+                // Calculer le solde disponible réel
+                $soldeReel = $membre['solde_disponible'];
+                $cautionMembre = DB::table('cautions')
+                    ->where('compte_id', App\Models\Compte::where('client_id', $membre['membre_id'])->first()->id ?? 0)
+                    ->where('statut', 'bloquee')
+                    ->sum('montant');
+                $soldeDisponibleReel = max(0, $soldeReel - $cautionMembre);
+            ?>
+            <div class="member-card bg-white rounded-xl p-6 border-l-green-400 shadow-sm" 
+                 id="membre-<?php echo e($membre['membre_id']); ?>">
+                <div class="flex items-start justify-between mb-4">
+                    <!-- Checkbox pour sélectionner ce membre (visible uniquement en mode complément) -->
+                    <div class="flex items-center mr-4 mode-complement-only" style="display: none;">
+                        <div class="flex items-center">
+                            <input type="checkbox" 
+                                   id="select_membre_<?php echo e($membre['membre_id']); ?>"
+                                   name="membres_complement[]"
+                                   value="<?php echo e($membre['membre_id']); ?>"
+                                   class="h-5 w-5 text-green-600 rounded border-gray-300 focus:ring-green-500"
+                                   onchange="toggleMembreComplement(<?php echo e($membre['membre_id']); ?>, this.checked)">
+                            <label for="select_membre_<?php echo e($membre['membre_id']); ?>" class="ml-2 text-sm text-gray-700">
+                                Sélectionner
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <!-- Informations du membre -->
+                    <div class="flex-1">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center">
+                                <div class="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center mr-4">
+                                    <i class="fas fa-user text-green-600 text-lg"></i>
+                                </div>
+                                <div>
+                                    <p class="text-lg font-semibold text-gray-800"><?php echo e($membre['nom_complet']); ?></p>
+                                    <p class="text-sm text-gray-600"><?php echo e($membre['numero_compte']); ?></p>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <p class="text-sm text-gray-600">
+                                    Solde: <span class="font-semibold"><?php echo e(number_format($soldeDisponibleReel, 2)); ?> USD</span>
+                                </p>
+                                <p class="text-sm font-semibold text-green-600">
+                                    Dû: <?php echo e(number_format($membre['montant_du'], 2)); ?> USD
+                                </p>
+                            </div>
+                        </div>
+
+                        <!-- Champ montant -->
+                        <div class="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <div>
+                                <div class="flex items-center justify-between mb-3">
+                                    <label class="block text-sm font-medium text-gray-700">
+                                        Montant payé par le membre:
+                                    </label>
+                                    <div class="flex items-center text-sm">
+                                        <span class="text-gray-500 mr-2">Complément:</span>
+                                        <div class="relative">
+                                            <input type="checkbox" 
+                                                   id="toggle_complement_<?php echo e($membre['membre_id']); ?>"
+                                                   data-membre-id="<?php echo e($membre['membre_id']); ?>"
+                                                   class="toggle-switch sr-only"
+                                                   onchange="toggleComplement(<?php echo e($membre['membre_id']); ?>, this.checked)">
+                                            <label for="toggle_complement_<?php echo e($membre['membre_id']); ?>" 
+                                                   class="block w-10 h-6 bg-gray-300 rounded-full cursor-pointer relative">
+                                                <span class="block w-4 h-4 bg-white rounded-full absolute top-1 left-1 transition-transform duration-200"></span>
                                             </label>
-                                            <div class="relative">
-                                                <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                                                    <span class="text-gray-500 font-medium">USD</span>
-                                                </div>
-                                              <input 
-                                                    type="number"
-                                                    step="0.01"
-                                                    min="0"
-                                                    name="paiements_membres[<?php echo e($membre['membre_id']); ?>]"
-                                                    value="<?php echo e(old('paiements_membres.'.$membre['membre_id'], 0)); ?>"
-                                                    class="paiement-input block w-full pl-20 pr-4 py-3 text-lg border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200"
-                                                    placeholder="0.00"
-                                                    oninput="updateTotal()"
-                                                >
-                                                </div>
-                                                    <div class="mt-2 text-sm text-gray-500">
-                                                            <i class="fas fa-info-circle mr-1 text-blue-500"></i>
-                                                            Dû cette semaine: <?php echo e(number_format($membre['montant_du'], 2)); ?> USD
-                                                            <?php if($membre['solde_disponible'] > 0): ?>
-                                                                | Solde disponible: <?php echo e(number_format($membre['solde_disponible'], 2)); ?> USD
-                                                            <?php else: ?>
-                                                                | <span class="text-orange-600">Solde insuffisant - Paiement depuis compte groupe</span>
-                                                            <?php endif; ?>
-                                                        </div>
-                                        </div>
-
-                                        <div class="bg-gray-50 rounded-xl p-4">
-                                            <div class="text-sm text-gray-600 mb-3 font-medium">Détails du crédit:</div>
-                                            <div class="space-y-2 text-sm">
-                                                <div class="flex justify-between items-center">
-                                                    <span class="text-gray-600">Montant accordé:</span>
-                                                    <span class="font-semibold text-blue-600"><?php echo e(number_format($membre['montant_accorde'], 2)); ?> USD</span>
-                                                </div>
-                                                <div class="flex justify-between items-center">
-                                                    <span class="text-gray-600">Montant total:</span>
-                                                    <span class="font-semibold text-purple-600"><?php echo e(number_format($membre['montant_total'], 2)); ?> USD</span>
-                                                </div>
-                                                <div class="flex justify-between items-center">
-                                                    <span class="text-gray-600">Remboursement hebdo:</span>
-                                                    <span class="font-semibold text-green-600"><?php echo e(number_format($membre['montant_du'], 2)); ?> USD</span>
-                                                </div>
-                                            </div>
                                         </div>
                                     </div>
                                 </div>
-                                <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
+                                
+                                <div class="relative">
+                                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                        <span class="text-gray-500 font-medium">USD</span>
+                                    </div>
+                                    <input 
+                                        type="number"
+                                        step="0.01"
+                                        min="0"
+                                        name="paiements_membres[<?php echo e($membre['membre_id']); ?>]"
+                                        
+                                        id="input_montant_<?php echo e($membre['membre_id']); ?>"
+                                        class="paiement-input block w-full pl-20 pr-4 py-3 text-lg border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200"
+                                        placeholder="<?php echo e(number_format($membre['montant_du'], 2)); ?>"
+                                        oninput="updateTotal()"
+                                    >
+                                </div>
+                                <div class="mt-2 text-sm text-gray-500">
+                                    <i class="fas fa-info-circle mr-1 text-blue-500"></i>
+                                    Dû cette semaine: <?php echo e(number_format($membre['montant_du'], 2)); ?> USD
+                                    <?php if($soldeDisponibleReel >= $membre['montant_du']): ?>
+                                        | <span class="text-green-600">Solde suffisant: <?php echo e(number_format($soldeDisponibleReel, 2)); ?> USD</span>
+                                    <?php else: ?>
+                                        | <span class="text-orange-600">Solde insuffisant: <?php echo e(number_format($soldeDisponibleReel, 2)); ?> USD</span>
+                                    <?php endif; ?>
+                                </div>
+                                
+                                <!-- Message complément -->
+                                <div id="message_complement_<?php echo e($membre['membre_id']); ?>" 
+                                     class="mt-2 p-2 bg-blue-50 border border-blue-200 rounded-lg hidden">
+                                    <div class="flex items-center">
+                                        <i class="fas fa-wallet text-blue-500 mr-2"></i>
+                                        <span class="text-sm text-blue-700">
+                                            <strong>Mode complément activé:</strong> Si 0 est saisi, tout sera prélevé du compte membre.
+                                        </span>
+                                    </div>
+                                </div>
                             </div>
+
+                            <div class="bg-gray-50 rounded-xl p-4">
+                                <div class="text-sm text-gray-600 mb-3 font-medium">Détails du crédit:</div>
+                                <div class="space-y-2 text-sm">
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-gray-600">Montant accordé:</span>
+                                        <span class="font-semibold text-blue-600"><?php echo e(number_format($membre['montant_accorde'], 2)); ?> USD</span>
+                                    </div>
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-gray-600">Montant total:</span>
+                                        <span class="font-semibold text-purple-600"><?php echo e(number_format($membre['montant_total'], 2)); ?> USD</span>
+                                    </div>
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-gray-600">Remboursement hebdo:</span>
+                                        <span class="font-semibold text-green-600"><?php echo e(number_format($membre['montant_du'], 2)); ?> USD</span>
+                                    </div>
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-gray-600">Solde disponible:</span>
+                                        <span class="font-semibold <?php echo e($soldeDisponibleReel >= $membre['montant_du'] ? 'text-green-600' : 'text-orange-600'); ?>">
+                                            <?php echo e(number_format($soldeDisponibleReel, 2)); ?> USD
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
+        </div>
 
                             <!-- Total des paiements -->
                             <div class="mt-8 p-6 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl">
@@ -473,81 +592,311 @@
         </div>
     </div>
 
-    <script>
-        function updateTotal() {
-            let total = 0;
-            const inputs = document.querySelectorAll('.paiement-input');
-            
-            inputs.forEach(input => {
-                const value = parseFloat(input.value) || 0;
-                total += value;
-            });
-            
-            const totalElement = document.getElementById('totalPaiements');
-            const submitBtn = document.getElementById('submitBtn');
-            
-            totalElement.textContent = total.toFixed(2) + ' USD';
-            
-            // Animation
-            totalElement.style.transform = 'scale(1.1)';
-            setTimeout(() => {
-                totalElement.style.transform = 'scale(1)';
-            }, 300);
-            
-            // Activer/désactiver le bouton
-            submitBtn.disabled = total <= 0;
+<script>
+let modeActuel = 'normal';
+let membresComplement = new Set();
+
+function activerMode(mode) {
+    if (mode === 'normal' && membresComplement.size > 0) {
+        if (!confirm('Passer en mode normal désélectionnera tous les membres en complément. Continuer?')) {
+            return;
         }
-
-        function confirmPayment() {
-            const totalPaiements = parseFloat(document.getElementById('totalPaiements').textContent) || 0;
-            const remboursementAttendu = <?php echo e($groupeSelectionne->remboursement_hebdo_total ?? 0); ?>;
-            
-            if (totalPaiements <= 0) {
-                return false;
+        // Décocher tous les membres
+        document.querySelectorAll('[name="membres_complement[]"]').forEach(cb => {
+            cb.checked = false;
+            const membreId = cb.value;
+            const card = document.getElementById(`membre-${membreId}`);
+            if (card) {
+                card.classList.remove('membre-selectionne');
             }
+        });
+        membresComplement.clear();
+    }
+    
+    modeActuel = mode;
+    document.getElementById('modePaiement').value = mode;
+    
+    const btnNormal = document.getElementById('btnModeNormal');
+    const btnComplement = document.getElementById('btnModeComplement');
+    const explication = document.getElementById('explicationMode');
+    const membres = document.querySelectorAll('.member-card');
+    const inputs = document.querySelectorAll('.paiement-input');
+    const elementsComplement = document.querySelectorAll('.mode-complement-only');
+    
+    if (mode === 'normal') {
+        // Mode normal
+        btnNormal.className = 'px-4 py-2 bg-green-500 text-white rounded-lg font-medium flex items-center';
+        btnComplement.className = 'px-4 py-2 bg-gray-300 text-gray-700 rounded-lg font-medium flex items-center';
+        explication.innerHTML = '<i class="fas fa-info-circle mr-1"></i> Mode normal: Tous les membres paient normalement depuis le compte groupe.';
+        
+        // Cacher les checkboxes de sélection
+        elementsComplement.forEach(el => el.style.display = 'none');
+        
+        // Réinitialiser tous les membres
+        membres.forEach(card => {
+            card.classList.remove('mode-complement');
+            card.classList.remove('membre-selectionne');
+        });
+        
+        // Réinitialiser les valeurs par défaut (montant dû)
+        // inputs.forEach(input => {
+        //     const membreId = input.id.replace('input_montant_', '');
+        //     // Récupérer le montant dû depuis l'attribut placeholder
+        //     const placeholder = input.getAttribute('placeholder');
+        //     const montantDu = parseFloat(placeholder) || 0;
+        //     input.value = montantDu.toFixed(2);
+        //     input.disabled = false;
+        // });
+        
+        // Masquer les messages complément
+        document.querySelectorAll('[id^="message_complement_"]').forEach(el => {
+            el.classList.add('hidden');
+        });
+        
+        // Décocher tous les toggles
+        document.querySelectorAll('[id^="toggle_complement_"]').forEach(toggle => {
+            toggle.checked = false;
+            const label = toggle.nextElementSibling;
+            label.style.backgroundColor = '#d1d5db';
+            label.querySelector('span').style.transform = 'translateX(0)';
+        });
+        
+        membresComplement.clear();
+        
+    } else {
+        // Mode complément
+        btnNormal.className = 'px-4 py-2 bg-gray-300 text-gray-700 rounded-lg font-medium flex items-center';
+        btnComplement.className = 'px-4 py-2 bg-blue-500 text-white rounded-lg font-medium flex items-center';
+        explication.innerHTML = '<i class="fas fa-info-circle mr-1"></i> Mode complément: Seuls les membres sélectionnés seront complétés depuis leur compte. Les autres seront ignorés.';
+        
+        // Afficher les checkboxes de sélection
+        elementsComplement.forEach(el => el.style.display = 'flex');
+        
+        // Activer le mode complément sur tous les membres
+        membres.forEach(card => {
+            card.classList.add('mode-complement');
+        });
+        
+        // Réinitialiser les membres sélectionnés
+        membresComplement.clear();
+        
+        // Décocher toutes les cases
+        document.querySelectorAll('[name="membres_complement[]"]').forEach(cb => {
+            cb.checked = false;
+        });
+    }
+    
+    updateTotal();
+}
 
-            let message = `Êtes-vous sûr de vouloir exécuter les paiements ?\n\n`;
-            message += `📊 Total à collecter: ${totalPaiements.toFixed(2)} USD\n`;
-            message += `💰 Remboursement attendu: ${remboursementAttendu.toFixed(2)} USD\n\n`;
-            
-            if (totalPaiements < remboursementAttendu) {
-                message += `⚠️ Attention: Le total collecté est inférieur au remboursement attendu.\n`;
-                message += `Certains membres n'ont pas payé leur part complète.`;
-            } else {
-                message += `✅ Tous les membres ont payé leur part.`;
-            }
-
-            return confirm(message);
+function toggleMembreComplement(membreId, estSelectionne) {
+    const card = document.getElementById(`membre-${membreId}`);
+    const input = document.getElementById(`input_montant_${membreId}`);
+    const toggle = document.getElementById(`toggle_complement_${membreId}`);
+    const message = document.getElementById(`message_complement_${membreId}`);
+    
+    if (estSelectionne) {
+        // Ajouter à la sélection
+        card.classList.add('membre-selectionne');
+        membresComplement.add(membreId);
+        
+        // Activer automatiquement le toggle complément
+        toggle.checked = true;
+        const label = toggle.nextElementSibling;
+        label.style.backgroundColor = '#10b981';
+        label.querySelector('span').style.transform = 'translateX(1rem)';
+        
+        // Afficher le message
+        message.classList.remove('hidden');
+        
+        // Si le champ est vide ou 0, on met 0 pour forcer le complément
+        if (!input.value || parseFloat(input.value) === 0) {
+            input.value = '0.00';
         }
+        
+        // Activer automatiquement le mode complément si ce n'est pas déjà fait
+        if (modeActuel === 'normal') {
+            activerMode('complement');
+        }
+    } else {
+        // Retirer de la sélection
+        card.classList.remove('membre-selectionne');
+        membresComplement.delete(membreId);
+        
+        // Désactiver le toggle complément
+        toggle.checked = false;
+        const label = toggle.nextElementSibling;
+        label.style.backgroundColor = '#d1d5db';
+        label.querySelector('span').style.transform = 'translateX(0)';
+        
+        // Masquer le message
+        message.classList.add('hidden');
+        
+        // Si plus aucun membre n'est sélectionné, revenir au mode normal
+        if (membresComplement.size === 0) {
+            activerMode('normal');
+        }
+    }
+    
+    updateTotal();
+}
 
-        // Ajouter la confirmation au formulaire
-        document.addEventListener('DOMContentLoaded', function() {
-            const form = document.getElementById('paiementForm');
-            if (form) {
-                form.addEventListener('submit', function(e) {
-                    if (!confirmPayment()) {
-                        e.preventDefault();
-                    }
-                });
+function toggleComplement(membreId, actif) {
+    const input = document.getElementById(`input_montant_${membreId}`);
+    const message = document.getElementById(`message_complement_${membreId}`);
+    
+    if (actif) {
+        // Activer le mode complément pour ce membre
+        const label = document.querySelector(`label[for="toggle_complement_${membreId}"]`);
+        label.style.backgroundColor = '#10b981';
+        label.querySelector('span').style.transform = 'translateX(1rem)';
+        
+        // Afficher le message
+        message.classList.remove('hidden');
+        
+        // Si le champ est vide ou 0, on met 0 pour forcer le complément
+        if (!input.value || parseFloat(input.value) === 0) {
+            input.value = '0.00';
+        }
+    } else {
+        // Désactiver le mode complément pour ce membre
+        const label = document.querySelector(`label[for="toggle_complement_${membreId}"]`);
+        label.style.backgroundColor = '#d1d5db';
+        label.querySelector('span').style.transform = 'translateX(0)';
+        
+        // Masquer le message
+        message.classList.add('hidden');
+        
+        // Remettre le montant dû par défaut
+        // const placeholder = input.getAttribute('placeholder');
+        // const montantDu = parseFloat(placeholder) || 0;
+        // if (montantDu) {
+        //     input.value = montantDu.toFixed(2);
+        // }
+    }
+    
+    updateTotal();
+}
+
+function updateTotal() {
+    let total = 0;
+    const inputs = document.querySelectorAll('.paiement-input');
+    
+    inputs.forEach(input => {
+        if (modeActuel === 'normal' || membresComplement.has(input.id.replace('input_montant_', ''))) {
+            const value = parseFloat(input.value) || 0;
+            total += value;
+        }
+    });
+    
+    const totalElement = document.getElementById('totalPaiements');
+    const submitBtn = document.getElementById('submitBtn');
+    
+    totalElement.textContent = total.toFixed(2) + ' USD';
+    
+    // Animation
+    totalElement.style.transform = 'scale(1.1)';
+    setTimeout(() => {
+        totalElement.style.transform = 'scale(1)';
+    }, 300);
+    
+    // Activer/désactiver le bouton
+    if (modeActuel === 'normal') {
+        // Mode normal: besoin d'un total > 0
+        submitBtn.disabled = total <= 0;
+    } else {
+        // Mode complément: besoin d'au moins un membre sélectionné (peut avoir 0)
+        submitBtn.disabled = membresComplement.size === 0;
+    }
+}
+
+function confirmPayment() {
+    const totalPaiements = parseFloat(document.getElementById('totalPaiements').textContent) || 0;
+    const remboursementAttendu = <?php echo e($groupeSelectionne->remboursement_hebdo_total ?? 0); ?>;
+    
+    if (modeActuel === 'normal' && totalPaiements <= 0) {
+        alert('Veuillez entrer des montants pour les paiements.');
+        return false;
+    }
+    
+    if (modeActuel === 'complement' && membresComplement.size === 0) {
+        alert('Veuillez sélectionner au moins un membre en mode complément.');
+        return false;
+    }
+
+    let message = `Êtes-vous sûr de vouloir exécuter les paiements ?\n\n`;
+    message += `📊 Mode: ${modeActuel === 'normal' ? 'Normal' : 'Complément uniquement'}\n`;
+    
+    if (modeActuel === 'complement') {
+        message += `👥 Membres en complément: ${membresComplement.size}\n`;
+        
+        // Vérifier si des membres ont 0
+        let membresAvecZero = 0;
+        membresComplement.forEach(membreId => {
+            const input = document.getElementById(`input_montant_${membreId}`);
+            if (input && parseFloat(input.value) === 0) {
+                membresAvecZero++;
             }
-            
-            // Initialiser le total
-            updateTotal();
         });
+        
+        if (membresAvecZero > 0) {
+            message += `⚠️ ${membresAvecZero} membre(s) avec 0: tout sera prélevé de leur compte\n`;
+        }
+        
+        message += `ℹ️ Seuls les membres sélectionnés seront traités.\n`;
+        message += `💰 Total collecté: ${totalPaiements.toFixed(2)} USD\n`;
+        message += `📈 Remboursement attendu: ${remboursementAttendu.toFixed(2)} USD`;
+    } else {
+        message += `💰 Total à collecter: ${totalPaiements.toFixed(2)} USD\n`;
+        message += `📈 Remboursement attendu: ${remboursementAttendu.toFixed(2)} USD\n\n`;
+        
+        if (totalPaiements < remboursementAttendu) {
+            message += `⚠️ Attention: Le total collecté est inférieur au remboursement attendu.\n`;
+            message += `Le système complétera depuis les comptes des membres si nécessaire.`;
+        } else {
+            message += `✅ Tous les membres ont payé leur part.`;
+        }
+    }
+    
+    message += `\n\nVoulez-vous continuer?`;
+    
+    return confirm(message);
+}
 
-        // Animation pour les cartes membres
-        document.addEventListener('DOMContentLoaded', function() {
-            const memberCards = document.querySelectorAll('.member-card');
-            memberCards.forEach((card, index) => {
-                card.style.opacity = '0';
-                card.style.transform = 'translateY(20px)';
-                setTimeout(() => {
-                    card.style.transition = 'all 0.5s ease';
-                    card.style.opacity = '1';
-                    card.style.transform = 'translateY(0)';
-                }, index * 100);
-            });
+// Initialisation
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialiser les toggles
+    document.querySelectorAll('[id^="toggle_complement_"]').forEach(toggle => {
+        const label = toggle.nextElementSibling;
+        label.style.backgroundColor = '#d1d5db';
+        label.querySelector('span').style.transition = 'transform 0.2s';
+    });
+    
+    // Ajouter la confirmation au formulaire
+    const form = document.getElementById('paiementForm');
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            if (!confirmPayment()) {
+                e.preventDefault();
+            }
         });
-    </script>
+    }
+    
+    // Initialiser le total
+    updateTotal();
+    
+    // Animation pour les cartes membres
+    const memberCards = document.querySelectorAll('.member-card');
+    memberCards.forEach((card, index) => {
+        card.style.opacity = '0';
+        card.style.transform = 'translateY(20px)';
+        setTimeout(() => {
+            card.style.transition = 'all 0.5s ease';
+            card.style.opacity = '1';
+            card.style.transform = 'translateY(0)';
+        }, index * 100);
+    });
+});
+</script>
 </body>
 </html><?php /**PATH C:\laragon\www\tumainiletusystem2.0\resources\views/paiement-credits-groupe.blade.php ENDPATH**/ ?>

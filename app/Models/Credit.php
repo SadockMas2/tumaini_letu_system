@@ -59,61 +59,61 @@ class Credit extends Model
     }
 
     // Calcul des frais pour crédit groupe
-public static function calculerFraisGroupe($montant)
-{
-    $frais = [
-        50 => ['dossier' => 2, 'alerte' => 4.5, 'carnet' => 2.5, 'caution' => 10],
-        100 => ['dossier' => 4, 'alerte' => 4.5, 'carnet' => 2.5, 'caution' => 20],
-        150 => ['dossier' => 6, 'alerte' => 4.5, 'carnet' => 2.5, 'caution' => 30],
-        200 => ['dossier' => 8, 'alerte' => 4.5, 'carnet' => 2.5, 'caution' => 40],
-        250 => ['dossier' => 10, 'alerte' => 4.5, 'carnet' => 2.5, 'caution' => 50],
-        300 => ['dossier' => 12, 'alerte' => 4.5, 'carnet' => 2.5, 'caution' => 60],
-        350 => ['dossier' => 14, 'alerte' => 4.5, 'carnet' => 2.5, 'caution' => 70],
-        400 => ['dossier' => 16, 'alerte' => 4.5, 'carnet' => 2.5, 'caution' => 80],
-        450 => ['dossier' => 18, 'alerte' => 4.5, 'carnet' => 2.5, 'caution' => 90],
-        500 => ['dossier' => 20, 'alerte' => 4.5, 'carnet' => 2.5, 'caution' => 100],
-    ];
+    public static function calculerFraisGroupe($montant)
+    {
+        $frais = [
+            50 => ['dossier' => 2, 'alerte' => 6, 'carnet' => 3, 'caution' => 10],
+            100 => ['dossier' => 4, 'alerte' => 6, 'carnet' => 3, 'caution' => 20],
+            150 => ['dossier' => 6, 'alerte' => 6, 'carnet' => 3, 'caution' => 30],
+            200 => ['dossier' => 8, 'alerte' => 6, 'carnet' => 3, 'caution' => 40],
+            250 => ['dossier' => 10, 'alerte' => 6, 'carnet' => 3, 'caution' => 50],
+            300 => ['dossier' => 12, 'alerte' => 6, 'carnet' => 3, 'caution' => 60],
+            350 => ['dossier' => 14, 'alerte' => 6, 'carnet' => 3, 'caution' => 70],
+            400 => ['dossier' => 16, 'alerte' => 6, 'carnet' => 3, 'caution' => 80],
+            450 => ['dossier' => 18, 'alerte' => 6, 'carnet' => 3, 'caution' => 90],
+            500 => ['dossier' => 20, 'alerte' => 6, 'carnet' => 3, 'caution' => 100],
+        ];
 
-    $montantArrondi = floor($montant / 50) * 50;
-    return $frais[$montantArrondi] ?? $frais[500];
-}
-
-// Dans la méthode calculerFraisIndividuel
-public static function calculerFraisIndividuel($montant)
-{
-    $frais = [
-        100 => ['dossier' => 4, 'alerte' => 4, 'caution' => 20],
-        200 => ['dossier' => 8, 'alerte' => 4, 'caution' => 40],
-        300 => ['dossier' => 12, 'alerte' => 4, 'caution' => 60],
-        400 => ['dossier' => 16, 'alerte' => 4, 'caution' => 80],
-        500 => ['dossier' => 20, 'alerte' => 4, 'caution' => 100],
-        600 => ['dossier' => 24, 'alerte' => 4, 'caution' => 120],
-        700 => ['dossier' => 28, 'alerte' => 4, 'caution' => 140],
-        800 => ['dossier' => 32, 'alerte' => 4, 'caution' => 160],
-        900 => ['dossier' => 36, 'alerte' => 4, 'caution' => 180],
-        1000 => ['dossier' => 40, 'alerte' => 4, 'caution' => 200],
-        1500 => ['dossier' => 60, 'alerte' => 4, 'caution' => 300],
-        2000 => ['dossier' => 80, 'alerte' => 4, 'caution' => 400],
-        2500 => ['dossier' => 100, 'alerte' => 4, 'caution' => 500],
-        3000 => ['dossier' => 120, 'alerte' => 4, 'caution' => 600],
-        3500 => ['dossier' => 140, 'alerte' => 4, 'caution' => 700],
-        4000 => ['dossier' => 160, 'alerte' => 4, 'caution' => 800],
-        4500 => ['dossier' => 180, 'alerte' => 4, 'caution' => 900],
-        5000 => ['dossier' => 200, 'alerte' => 4, 'caution' => 1000],
-    ];
-    
-    $montantArrondi = floor($montant / 100) * 100;
-    if ($montantArrondi > 5000) $montantArrondi = 5000;
-    
-    $fraisCalcules = $frais[$montantArrondi] ?? $frais[100];
-    
-    // S'assurer que 'carnet' existe (toujours 0 pour individuel)
-    if (!array_key_exists('carnet', $fraisCalcules)) {
-        $fraisCalcules['carnet'] = 0;
+        $montantArrondi = floor($montant / 50) * 50;
+        return $frais[$montantArrondi] ?? $frais[500];
     }
-    
-    return $fraisCalcules;
-}
+
+
+    public static function calculerFraisIndividuel($montant)
+    {
+        $frais = [
+            100 => ['dossier' => 4, 'alerte' => 6, 'caution' => 20],
+            200 => ['dossier' => 8, 'alerte' => 6, 'caution' => 40],
+            300 => ['dossier' => 12, 'alerte' => 6, 'caution' => 60],
+            400 => ['dossier' => 16, 'alerte' => 6, 'caution' => 80],
+            500 => ['dossier' => 20, 'alerte' => 6, 'caution' => 100],
+            600 => ['dossier' => 24, 'alerte' => 6, 'caution' => 120],
+            700 => ['dossier' => 28, 'alerte' => 6, 'caution' => 140],
+            800 => ['dossier' => 32, 'alerte' => 6, 'caution' => 160],
+            900 => ['dossier' => 36, 'alerte' => 6, 'caution' => 180],
+            1000 => ['dossier' => 40, 'alerte' => 6, 'caution' => 200],
+            1500 => ['dossier' => 60, 'alerte' => 6, 'caution' => 300],
+            2000 => ['dossier' => 80, 'alerte' => 6, 'caution' => 400],
+            2500 => ['dossier' => 100, 'alerte' => 6, 'caution' => 500],
+            3000 => ['dossier' => 120, 'alerte' => 6, 'caution' => 600],
+            3500 => ['dossier' => 140, 'alerte' => 6, 'caution' => 700],
+            4000 => ['dossier' => 160, 'alerte' => 6, 'caution' => 800],
+            4500 => ['dossier' => 180, 'alerte' => 6, 'caution' => 900],
+            5000 => ['dossier' => 200, 'alerte' => 6, 'caution' => 1000],
+        ];
+        
+        $montantArrondi = floor($montant / 100) * 100;
+        if ($montantArrondi > 5000) $montantArrondi = 5000;
+        
+        $fraisCalcules = $frais[$montantArrondi] ?? $frais[100];
+        
+        // S'assurer que 'carnet' existe (toujours 0 pour individuel)
+        if (!array_key_exists('carnet', $fraisCalcules)) {
+            $fraisCalcules['carnet'] = 0;
+        }
+        
+        return $fraisCalcules;
+    }
 
     // Calcul du montant total pour crédit groupe
     public static function calculerMontantTotalGroupe($montant)
@@ -152,55 +152,50 @@ public static function calculerFraisIndividuel($montant)
         return $this->frais_dossier + $this->frais_alerte + $this->frais_carnet ;
     }
 
-    // Dans App\Models\Credit.php
-public static function boot()
-{
-    parent::boot();
+    public static function boot()
+    {
+        parent  ::boot();
 
-    static::updated(function ($credit) {
-        // Si le crédit est entièrement remboursé, vérifier le déblocage automatique
-        if ($credit->montant_total <= 0 && $credit->getOriginal('montant_total') > 0) {
-            Mouvement::debloquerCautionAutomatique($credit->compte_id);
-        }
+        static::updated(function ($credit) {
+            // Si le crédit est entièrement remboursé, vérifier le déblocage automatique
+            if ($credit->montant_total <= 0 && $credit->getOriginal('montant_total') > 0) {
+                Mouvement::debloquerCautionAutomatique($credit->compte_id);
+            }
 
-        
-    });
-
-        // Empêche de réduire montant_accorde
-    static::updating(function ($credit) {
-        $original = $credit->getOriginal();
-        
-        // Si on essaie de réduire montant_accorde, annuler
-        if (isset($original['montant_accorde']) && 
-            $credit->montant_accorde < $original['montant_accorde']) {
-            Log::error('Tentative de réduire montant_accorde bloquée', [
-                'credit_id' => $credit->id,
-                'ancien' => $original['montant_accorde'],
-                'nouveau' => $credit->montant_accorde
-            ]);
             
-            // Restaurer la valeur originale
-            $credit->montant_accorde = $original['montant_accorde'];
-        }
-        
-        // S'assurer que montant_total >= montant_accorde
-        if ($credit->montant_total < $credit->montant_accorde) {
-            $credit->montant_total = $credit->montant_accorde;
-        }
-    });
+        });
+
+            // Empêche de réduire montant_accorde
+        static::updating(function ($credit) {
+            $original = $credit->getOriginal();
+            
+            // Si on essaie de réduire montant_accorde, annuler
+            if (isset($original['montant_accorde']) && 
+                $credit->montant_accorde < $original['montant_accorde']) {
+                Log::error('Tentative de réduire montant_accorde bloquée', [
+                    'credit_id' => $credit->id,
+                    'ancien' => $original['montant_accorde'],
+                    'nouveau' => $credit->montant_accorde
+                ]);
+                
+                // Restaurer la valeur originale
+                $credit->montant_accorde = $original['montant_accorde'];
+            }
+            
+            // S'assurer que montant_total >= montant_accorde
+            if ($credit->montant_total < $credit->montant_accorde) {
+                $credit->montant_total = $credit->montant_accorde;
+            }
+        });
 
 
-}
+    }
 
-// Dans App\Models\Credit
 
-/**
- * Relation avec CompteSpecial (via l'historique)
- */
-public function historiqueCompteSpecial()
-{
-    return $this->hasOne(HistoriqueCompteSpecial::class, 'credit_id');
-}
+    public function historiqueCompteSpecial()
+    {
+        return $this->hasOne(HistoriqueCompteSpecial::class, 'credit_id');
+    }
 
     public function agent()
     {
@@ -211,11 +206,11 @@ public function historiqueCompteSpecial()
     {
         return $this->belongsTo(User::class, 'superviseur_id');
     }
-/**
- * Relation avec Mouvement pour les frais
- */
-public function mouvementFrais()
-{
-    return $this->hasOne(Mouvement::class, 'credit_id')->where('type_mouvement', 'frais_payes_credit');
-}
+
+    public function mouvementFrais()
+    {
+        return $this->hasOne(Mouvement::class, 'credit_id')->where('type_mouvement', 'frais_payes_credit');
+    }
+
+
 }

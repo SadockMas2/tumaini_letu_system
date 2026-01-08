@@ -4,6 +4,7 @@ namespace App\Filament\Resources\ComptabiliteResource\Pages;
 
 use App\Filament\Resources\Comptabilites\ComptabiliteResource;
 use App\Models\Caisse;
+use App\Models\EcritureComptable;
 use App\Models\JournalComptable;
 use App\Models\Mouvement;
 use App\Services\ComptabilityService;
@@ -20,6 +21,7 @@ use Filament\Resources\Pages\ManageRecords;
 use Filament\Schemas\Components\Section;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class ManageComptabilite extends ManageRecords
 {
@@ -32,6 +34,58 @@ class ManageComptabilite extends ManageRecords
             ActionGroup::make([
                 // Sous-groupe pour les rapports
                 ActionGroup::make([
+                    Action::make('rapport_classe6_charges')
+    ->label('Rapport Classe 6 (Charges)')
+    ->icon('heroicon-o-exclamation-triangle')
+    ->color('danger')
+    ->schema([
+        DatePicker::make('date_debut')
+            ->label('Date de début')
+            ->default(now()->startOfMonth())
+            ->required(),
+        DatePicker::make('date_fin')
+            ->label('Date de fin')
+            ->default(now()->endOfMonth())
+            ->required(),
+        Select::make('detail_niveau')
+            ->label('Niveau de détail')
+            ->options([
+                'synthese' => 'Synthèse seulement',
+                'par_compte' => 'Par compte',
+                'complet' => 'Complet avec toutes les opérations'
+            ])
+            ->default('synthese'),
+    ])
+    ->action(function (array $data) {
+        try {
+            $comptabilityService = app(ComptabilityService::class);
+            $rapport = $comptabilityService->rapportClasse6Charges(
+                $data['date_debut'],
+                $data['date_fin']
+            );
+            
+            // Export HTML
+            $html = view('pdf.rapport-classe6-charges', [
+                'rapport' => $rapport,
+                'detail_niveau' => $data['detail_niveau']
+            ])->render();
+
+            $filename = 'rapport-classe6-charges-' . $data['date_debut'] . '-a-' . $data['date_fin'] . '.html';
+            
+            return response()->streamDownload(function () use ($html) {
+                echo $html;
+            }, $filename);
+            
+        } catch (\Exception $e) {
+            Notification::make()
+                ->title('Erreur')
+                ->body('Impossible de générer le rapport: ' . $e->getMessage())
+                ->danger()
+                ->send();
+        }
+    })
+    ->modalDescription('Générer un rapport détaillé des charges (Classe 6)'),
+    
                     Action::make('rapport_instantanee_comptabilite')
                         ->label('Rapport Comptabilité Instantané')
                         ->icon('heroicon-o-clock')
@@ -335,289 +389,384 @@ class ManageComptabilite extends ManageRecords
                         }),
 
                     Action::make('operations_comptables')
-                        ->label('Opérations Comptables')
-                        ->icon('heroicon-o-cog-6-tooth')
-                        ->color('primary')
-                        ->schema([
-                            Select::make('type_operation')
-                                ->label('Type d\'Opération')
-                                ->options([
-                                    'paiement_salaire' => 'Paiement Salaire/Charges',
-                                    'depense_diverse' => 'Dépenses Diverses',
-                                ])
-                                ->required()
-                                ->default('paiement_salaire')
-                                ->live()
-                                ->afterStateUpdated(function ($set, $get) {
-                                    $set('compte_numero', null);
-                                    $set('compte_id', null);
-                                    $set('petite_caisse_id', null);
-                                    $set('devise', 'USD');
-                                    
-                                    // Mettre à jour le solde si dépense diverse
-                                    if ($get('type_operation') === 'depense_diverse' && $get('devise_depense')) {
-                                        self::mettreAJourSoldePetiteCaisse($set, $get('devise_depense'));
-                                    }
-                                }),
+    ->label('Opérations Comptables')
+    ->icon('heroicon-o-cog-6-tooth')
+    ->color('primary')
+    ->schema([
+        Select::make('type_operation')
+            ->label('Type d\'Opération')
+            ->options([
+                'paiement_salaire' => 'Paiement Salaire/Charges',
+                'virement' => 'Virement vers Compte', // Nouvelle option identique
+                'depense_diverse' => 'Dépenses Diverses',
+            ])
+            ->required()
+            ->default('paiement_salaire')
+            ->live()
+            ->afterStateUpdated(function ($set, $get) {
+                $set('compte_numero', null);
+                $set('compte_id', null);
+                $set('petite_caisse_id', null);
+                $set('devise', 'USD');
+                
+                // Mettre à jour le solde si dépense diverse
+                if ($get('type_operation') === 'depense_diverse' && $get('devise_depense')) {
+                    self::mettreAJourSoldePetiteCaisse($set, $get('devise_depense'));
+                }
+            }),
 
-                            // Section pour Paiement Salaire/Charges
-                            Section::make('Informations Paiement Salaire')
-                                ->schema([
-                                    TextInput::make('compte_numero')
-                                        ->label('Numéro de Compte à Créditer')
-                                        ->required(fn ($get) => $get('type_operation') === 'paiement_salaire')
-                                        ->placeholder('Ex: C0001 ou GS00001')
-                                        ->live()
-                                        ->afterStateUpdated(function ($set, $state) {
-                                            if ($state) {
-                                                // Rechercher le compte
-                                                $compte = \App\Models\Compte::where('numero_compte', $state)->first();
-                                                if ($compte) {
-                                                    $set('solde_compte_display', number_format($compte->solde, 2) . ' ' . $compte->devise);
-                                                    $set('compte_id', $compte->id);
-                                                    $set('devise', $compte->devise);
-                                                    $set('nom_titulaire', $compte->nom_complet ?? $compte->nom);
-                                                } else {
-                                                    $set('solde_compte_display', 'Compte non trouvé');
-                                                    $set('compte_id', null);
-                                                    $set('nom_titulaire', '');
-                                                }
-                                            }
-                                        })
-                                        ->visible(fn ($get) => $get('type_operation') === 'paiement_salaire'),
-                                    
-                                    TextInput::make('nom_titulaire')
-                                        ->label('Nom du Titulaire')
-                                        ->disabled()
-                                        ->dehydrated(false)
-                                        ->default('')
-                                        ->visible(fn ($get) => $get('type_operation') === 'paiement_salaire'),
-                                    
-                                    TextInput::make('solde_compte_display')
-                                        ->label('Solde Actuel du Compte')
-                                        ->disabled()
-                                        ->dehydrated(false)
-                                        ->default('0.00 USD')
-                                        ->visible(fn ($get) => $get('type_operation') === 'paiement_salaire'),
-                                    
-                                    Select::make('type_charge')
-                                        ->label('Type de Charge')
-                                        ->options([
-                                            'salaire' => 'Salaire',
-                                            'transport' => 'Frais de Transport', 
-                                            'communication' => 'Frais de Communication',
-                                            'prime' => 'Prime',
-                                            'autres' => 'Autres Charges',
-                                        ])
-                                        ->required(fn ($get) => $get('type_operation') === 'paiement_salaire')
-                                        ->default('salaire')
-                                        ->visible(fn ($get) => $get('type_operation') === 'paiement_salaire'),
-                                    
-                                    TextInput::make('periode')
-                                        ->label('Période')
-                                        ->required(fn ($get) => $get('type_operation') === 'paiement_salaire')
-                                        ->placeholder('Ex: Novembre 2024')
-                                        ->visible(fn ($get) => $get('type_operation') === 'paiement_salaire'),
-                                ])
-                                ->visible(fn ($get) => $get('type_operation') === 'paiement_salaire'),
-
-                            // Section pour Dépenses Diverses avec solde en temps réel
-                            Section::make('Informations Dépense')
-                                ->schema([
-                                    Select::make('type_depense')
-                                        ->label('Type de Dépense')
-                                        ->options([
-                                            'frais_bureau' => 'Frais de Bureau',
-                                            'transport' => 'Transport',
-                                            'communication' => 'Communication',
-                                            'entretien' => 'Entretien',
-                                            'fournitures' => 'Fournitures',
-                                            'autres' => 'Autres Dépenses',
-                                        ])
-                                        ->required(fn ($get) => $get('type_operation') === 'depense_diverse')
-                                        ->default('frais_bureau')
-                                        ->visible(fn ($get) => $get('type_operation') === 'depense_diverse'),
-                                    
-                                    Select::make('devise_depense')
-                                        ->label('Devise')
-                                        ->options(['USD' => 'USD', 'CDF' => 'CDF'])
-                                        ->required(fn ($get) => $get('type_operation') === 'depense_diverse')
-                                        ->default('USD')
-                                        ->live()
-                                        ->afterStateUpdated(function ($set, $state) {
-                                            if ($state) {
-                                                self::mettreAJourSoldePetiteCaisse($set, $state);
-                                            }
-                                        })
-                                        ->visible(fn ($get) => $get('type_operation') === 'depense_diverse'),
-                                    
-                                    // Affichage du solde en temps réel
-                                    TextInput::make('solde_petite_caisse_temps_reel')
-                                        ->label('Solde Actuel Petite Caisse')
-                                        ->disabled()
-                                        ->dehydrated(false)
-                                        ->default('0.00 USD')
-                                        ->extraAttributes(['class' => 'bg-yellow-50 border-yellow-200 font-bold'])
-                                        ->visible(fn ($get) => $get('type_operation') === 'depense_diverse'),
-                                ])
-                                ->visible(fn ($get) => $get('type_operation') === 'depense_diverse'),
-
-                            // Champs communs aux deux opérations
-                            TextInput::make('montant')
-                                ->label(fn ($get) => $get('type_operation') === 'paiement_salaire' ? 'Montant à Créditer' : 'Montant')
-                                ->numeric()
-                                ->required()
-                                // ->minValue(0.01)
-                                // ->step(0.01)
-                                ->suffix(function ($get) {
-                                    if ($get('type_operation') === 'paiement_salaire') {
-                                        return $get('devise') ?? 'USD';
-                                    } else {
-                                        return $get('devise_depense') ?? 'USD';
-                                    }
-                                })
-                                ->rules([
-                                    function ($get) {
-                                        return function ($attribute, $value, $fail) use ($get) {
-                                            if ($get('type_operation') === 'depense_diverse') {
-                                                $petiteCaisseId = $get('petite_caisse_id');
-                                                if ($petiteCaisseId) {
-                                                    $petiteCaisse = Caisse::find($petiteCaisseId);
-                                                    if ($petiteCaisse && $value > $petiteCaisse->solde) {
-                                                        $fail("Solde insuffisant dans la petite caisse. Maximum: " . number_format($petiteCaisse->solde, 2) . " {$petiteCaisse->devise}");
-                                                    }
-                                                }
-                                            }
-                                        };
-                                    }
-                                ]),
-                            
-                            TextInput::make('beneficiaire')
-                                ->label('Bénéficiaire')
-                                ->required()
-                                ->placeholder('Nom du bénéficiaire'),
-                            
-                            Textarea::make('description')
-                                ->label('Description')
-                                ->required()
-                                ->placeholder(fn ($get) => $get('type_operation') === 'paiement_salaire' 
-                                    ? 'Description du paiement' 
-                                    : 'Description de la dépense'),
-
-                            Hidden::make('compte_id'),
-                            Hidden::make('devise'),
-                            Hidden::make('petite_caisse_id'),
-                        ])
-                        ->action(function (array $data) {
-                            try {
-                                DB::transaction(function () use ($data) {
-                                    $comptabilityService = app(ComptabilityService::class);
-                                    
-                                    if ($data['type_operation'] === 'paiement_salaire') {
-                                        // Logique pour Paiement Salaire/Charges
-                                        $compte = \App\Models\Compte::find($data['compte_id']);
-                                        
-                                        if (!$compte) {
-                                            throw new \Exception('Compte non trouvé');
-                                        }
-                                        
-                                        // CRÉDITER le compte (DÉPÔT)
-                                        $ancienSolde = $compte->solde;
-                                        $compte->solde += $data['montant'];
-                                        $compte->save();
-                                        
-                                        // Enregistrer le mouvement (type DÉPÔT)
-                                        $mouvement = Mouvement::create([
-                                            'compte_id' => $compte->id,
-                                            'type' => 'depot',
-                                            'type_mouvement' => 'paiement_salaire_charge',
-                                            'montant' => $data['montant'],
-                                            'solde_avant' => $ancienSolde,
-                                            'solde_apres' => $compte->solde,
-                                            'description' => $data['description'] . " - " . $data['type_charge'],
-                                            'nom_deposant' => $data['beneficiaire'],
-                                            'devise' => $data['devise'],
-                                            'operateur_id' => Auth::id(),
-                                            'numero_compte' => $compte->numero_compte,
-                                            'client_nom' => $data['beneficiaire'],
-                                            'date_mouvement' => now()
-                                        ]);
-                                        
-                                        // Enregistrer l'écriture comptable
-                                        $comptabilityService->enregistrerPaiementSalaireCharge(
-                                            $mouvement,
-                                            $compte,
-                                            $data['type_charge'],
-                                            $data['description'],
-                                            $data['beneficiaire']
-                                        );
-                                        
-                                        Notification::make()
-                                            ->title('Paiement enregistré')
-                                            ->body("Paiement de {$data['montant']} {$data['devise']} crédité sur le compte {$compte->numero_compte}. Nouveau solde: {$compte->solde} {$compte->devise}")
-                                            ->success()
-                                            ->send();
-                                        
-                                    } else {
-                                        // Logique pour Dépenses Diverses
-                                        $petiteCaisse = Caisse::find($data['petite_caisse_id']);
-                                        
-                                        if (!$petiteCaisse) {
-                                            throw new \Exception('Petite caisse non trouvée');
-                                        }
-                                        
-                                        if ($data['montant'] > $petiteCaisse->solde) {
-                                            throw new \Exception('Solde insuffisant dans la petite caisse');
-                                        }
-                                        
-                                        // Débiter la petite caisse
-                                        $ancienSolde = $petiteCaisse->solde;
-                                        $petiteCaisse->solde -= $data['montant'];
-                                        $petiteCaisse->save();
-                                        
-                                        // Enregistrer le mouvement
-                                        $mouvement = Mouvement::create([
-                                            'caisse_id' => $petiteCaisse->id,
-                                            'type' => 'retrait',
-                                            'type_mouvement' => 'depense_diverse_comptabilite',
-                                            'montant' => $data['montant'],
-                                            'solde_avant' => $ancienSolde,
-                                            'solde_apres' => $petiteCaisse->solde,
-                                            'description' => $data['description'] . " - " . $data['type_depense'],
-                                            'nom_deposant' => $data['beneficiaire'],
-                                            'devise' => $data['devise_depense'],
-                                            'operateur_id' => Auth::id(),
-                                            'numero_compte' => 'DEPENSE-DIVERSE',
-                                            'client_nom' => $data['beneficiaire'],
-                                            'date_mouvement' => now()
-                                        ]);
-                                        
-                                        // Enregistrer l'écriture comptable
-                                        $comptabilityService->enregistrerDepenseDiverse(
-                                            $petiteCaisse->id,
-                                            $data['montant'],
-                                            $data['devise_depense'],
-                                            self::getCompteChargeDepense($data['type_depense']),
-                                            $data['description'],
-                                            $data['beneficiaire']
-                                        );
-                                        
-                                        Notification::make()
-                                            ->title('Dépense enregistrée')
-                                            ->body("Dépense de {$data['montant']} {$data['devise_depense']} effectuée depuis la petite caisse")
-                                            ->success()
-                                            ->send();
-                                    }
-                                });
-                                
-                            } catch (\Exception $e) {
-                                Notification::make()
-                                    ->title('Erreur')
-                                    ->body($e->getMessage())
-                                    ->danger()
-                                    ->send();
+        // Section pour Paiement Salaire/Charges
+        Section::make('Informations Paiement')
+            ->schema([
+                TextInput::make('compte_numero')
+                    ->label('Numéro de Compte à Créditer')
+                    ->required(fn ($get) => in_array($get('type_operation'), ['paiement_salaire', 'virement']))
+                    ->placeholder('Ex: C0001 ou GS00001')
+                    ->live()
+                    ->afterStateUpdated(function ($set, $state) {
+                        if ($state) {
+                            // Rechercher le compte
+                            $compte = \App\Models\Compte::where('numero_compte', $state)->first();
+                            if ($compte) {
+                                $set('solde_compte_display', number_format($compte->solde, 2) . ' ' . $compte->devise);
+                                $set('compte_id', $compte->id);
+                                $set('devise', $compte->devise);
+                                $set('nom_titulaire', $compte->nom_complet ?? $compte->nom);
+                            } else {
+                                $set('solde_compte_display', 'Compte non trouvé');
+                                $set('compte_id', null);
+                                $set('nom_titulaire', '');
                             }
-                        }),
+                        }
+                    })
+                    ->visible(fn ($get) => in_array($get('type_operation'), ['paiement_salaire', 'virement'])),
+                
+                TextInput::make('nom_titulaire')
+                    ->label('Nom du Titulaire')
+                    ->disabled()
+                    ->dehydrated(false)
+                    ->default('')
+                    ->visible(fn ($get) => in_array($get('type_operation'), ['paiement_salaire', 'virement'])),
+                
+                TextInput::make('solde_compte_display')
+                    ->label('Solde Actuel du Compte')
+                    ->disabled()
+                    ->dehydrated(false)
+                    ->default('0.00 USD')
+                    ->visible(fn ($get) => in_array($get('type_operation'), ['paiement_salaire', 'virement'])),
+                
+                // Pour paiement salaire uniquement
+                Select::make('type_charge')
+                    ->label('Type de Charge')
+                    ->options([
+                        'salaire' => 'Salaire',
+                        'transport' => 'Frais de Transport', 
+                        'communication' => 'Frais de Communication',
+                        'prime' => 'Prime',
+                        'autres' => 'Autres Charges',
+                    ])
+                    ->required(fn ($get) => $get('type_operation') === 'paiement_salaire')
+                    ->default('salaire')
+                    ->visible(fn ($get) => $get('type_operation') === 'paiement_salaire'),
+                
+                // Pour virement uniquement
+                Select::make('motif_virement')
+                    ->label('Motif du Virement')
+                    ->options([
+                        'facture_client' => 'Paiement Facture Client',
+                        'remboursement' => 'Remboursement',
+                        'avance' => 'Avance',
+                        'commission' => 'Commission',
+                        'transfert' => 'Transfert de fonds',
+                        'autres' => 'Autres',
+                    ])
+                    ->required(fn ($get) => $get('type_operation') === 'virement')
+                    ->default('transfert')
+                    ->visible(fn ($get) => $get('type_operation') === 'virement'),
+                
+                // Pour paiement salaire uniquement
+                TextInput::make('periode')
+                    ->label('Période')
+                    ->required(fn ($get) => $get('type_operation') === 'paiement_salaire')
+                    ->placeholder('Ex: Novembre 2024')
+                    ->visible(fn ($get) => $get('type_operation') === 'paiement_salaire'),
+            ])
+            ->visible(fn ($get) => in_array($get('type_operation'), ['paiement_salaire', 'virement'])),
+
+        // Section pour Dépenses Diverses
+        Section::make('Informations Dépense')
+            ->schema([
+                Select::make('type_depense')
+                    ->label('Type de Dépense')
+                    ->options([
+                        'frais_bureau' => 'Frais de Bureau',
+                        'transport' => 'Transport',
+                        'communication' => 'Communication',
+                        'entretien' => 'Entretien',
+                        'fournitures' => 'Fournitures',
+                        'autres' => 'Autres Dépenses',
+                    ])
+                    ->required(fn ($get) => $get('type_operation') === 'depense_diverse')
+                    ->default('frais_bureau')
+                    ->visible(fn ($get) => $get('type_operation') === 'depense_diverse'),
+                
+                Select::make('devise_depense')
+                    ->label('Devise')
+                    ->options(['USD' => 'USD', 'CDF' => 'CDF'])
+                    ->required(fn ($get) => $get('type_operation') === 'depense_diverse')
+                    ->default('USD')
+                    ->live()
+                    ->afterStateUpdated(function ($set, $state) {
+                        if ($state) {
+                            self::mettreAJourSoldePetiteCaisse($set, $state);
+                        }
+                    })
+                    ->visible(fn ($get) => $get('type_operation') === 'depense_diverse'),
+                
+                // Affichage du solde en temps réel
+                TextInput::make('solde_petite_caisse_temps_reel')
+                    ->label('Solde Actuel Petite Caisse')
+                    ->disabled()
+                    ->dehydrated(false)
+                    ->default('0.00 USD')
+                    ->extraAttributes(['class' => 'bg-yellow-50 border-yellow-200 font-bold'])
+                    ->visible(fn ($get) => $get('type_operation') === 'depense_diverse'),
+            ])
+            ->visible(fn ($get) => $get('type_operation') === 'depense_diverse'),
+
+        // Champs communs aux trois opérations
+        TextInput::make('montant')
+            ->label(fn ($get) => match($get('type_operation')) {
+                'paiement_salaire' => 'Montant à Créditer',
+                'virement' => 'Montant du Virement',
+                'depense_diverse' => 'Montant',
+                default => 'Montant'
+            })
+            ->numeric()
+            ->required()
+            ->rules([
+                'required',
+                'numeric',
+                'min:0.01',
+                function ($get) {
+                    return function ($attribute, $value, $fail) use ($get) {
+                        if ($get('type_operation') === 'depense_diverse') {
+                            $petiteCaisseId = $get('petite_caisse_id');
+                            if ($petiteCaisseId) {
+                                $petiteCaisse = Caisse::find($petiteCaisseId);
+                                if ($petiteCaisse && $value > $petiteCaisse->solde) {
+                                    $fail("Solde insuffisant dans la petite caisse. Maximum: " . number_format($petiteCaisse->solde, 2) . " {$petiteCaisse->devise}");
+                                }
+                            }
+                        }
+                    };
+                }
+            ])
+            ->suffix(function ($get) {
+                return match($get('type_operation')) {
+                    'paiement_salaire', 'virement' => $get('devise') ?? 'USD',
+                    'depense_diverse' => $get('devise_depense') ?? 'USD',
+                    default => 'USD'
+                };
+            }),
+        
+        TextInput::make('beneficiaire')
+            ->label('Bénéficiaire')
+            ->required()
+            ->placeholder('Nom du bénéficiaire'),
+        
+        Textarea::make('description')
+            ->label('Description')
+            ->required()
+            ->placeholder(fn ($get) => match($get('type_operation')) {
+                'paiement_salaire' => 'Description du paiement',
+                'virement' => 'Description du virement',
+                'depense_diverse' => 'Description de la dépense',
+                default => 'Description'
+            }),
+
+        Hidden::make('compte_id'),
+        Hidden::make('devise'),
+        Hidden::make('petite_caisse_id'),
+    ])
+    
+   ->action(function (array $data) {
+    try {
+        Log::info('Données reçues:', $data);
+        Log::info('Type opération:', ['type' => $data['type_operation']]);
+        Log::info('Petite caisse ID:', ['id' => $data['petite_caisse_id'] ?? 'non défini']);
+        
+        DB::transaction(function () use ($data) {
+            $comptabilityService = app(ComptabilityService::class);
+            
+            // CORRECTION : Vérifier d'abord le type d'opération
+            if ($data['type_operation'] === 'depense_diverse') {
+                // Logique pour Dépenses Diverses
+                $petiteCaisse = Caisse::find($data['petite_caisse_id']);
+                
+                if (!$petiteCaisse) {
+                    throw new \Exception('Petite caisse non trouvée');
+                }
+                
+                if ($data['montant'] > $petiteCaisse->solde) {
+                    throw new \Exception('Solde insuffisant dans la petite caisse');
+                }
+                
+                // Débiter la petite caisse (physiquement)
+                $ancienSolde = $petiteCaisse->solde;
+                $petiteCaisse->solde -= $data['montant'];
+                $petiteCaisse->save();
+                
+                // Enregistrer le mouvement physique
+                $mouvement = Mouvement::create([
+                    'caisse_id' => $petiteCaisse->id,
+                    'type' => 'retrait',
+                    'type_mouvement' => 'depense_diverse_comptabilite',
+                    'montant' => $data['montant'],
+                    'solde_avant' => $ancienSolde,
+                    'solde_apres' => $petiteCaisse->solde,
+                    'description' => $data['description'] . " - " . $data['type_depense'],
+                    'nom_deposant' => $data['beneficiaire'],
+                    'devise' => $data['devise_depense'],
+                    'operateur_id' => Auth::id(),
+                    'numero_compte' => 'DEPENSE-DIVERSE',
+                    'client_nom' => $data['beneficiaire'],
+                    'date_mouvement' => now()
+                ]);
+                
+                // Créer l'écriture comptable correspondante
+                $journal = JournalComptable::where('type_journal', 'achats')->first();
+                $compteCharge = self::getCompteChargeDepense($data['type_depense']);
+                
+                // Écriture comptable
+                EcritureComptable::create([
+                    'journal_comptable_id' => $journal->id,
+                    'reference_operation' => 'DEP-' . now()->format('YmdHis'),
+                    'type_operation' => 'depense_diverse',
+                    'compte_number' => $compteCharge,
+                    'libelle' => "Dépense diverse: " . $data['description'] . " - " . $data['beneficiaire'],
+                    'montant_debit' => $data['montant'],
+                    'montant_credit' => 0,
+                    'date_ecriture' => now(),
+                    'date_valeur' => now(),
+                    'devise' => $data['devise_depense'],
+                    'statut' => 'comptabilise',
+                    'created_by' => Auth::id(),
+                ]);
+                
+                EcritureComptable::create([
+                    'journal_comptable_id' => $journal->id,
+                    'reference_operation' => 'DEP-' . now()->format('YmdHis'),
+                    'type_operation' => 'depense_diverse',
+                    'compte_number' => '571300', // Compte petite caisse
+                    'libelle' => "Dépense diverse: " . $data['description'] . " - " . $data['beneficiaire'],
+                    'montant_debit' => 0,
+                    'montant_credit' => $data['montant'],
+                    'date_ecriture' => now(),
+                    'date_valeur' => now(),
+                    'devise' => $data['devise_depense'],
+                    'statut' => 'comptabilise',
+                    'created_by' => Auth::id(),
+                ]);
+                
+                Notification::make()
+                    ->title('Dépense enregistrée')
+                    ->body("Dépense de {$data['montant']} {$data['devise_depense']} effectuée depuis la petite caisse")
+                    ->success()
+                    ->send();
+                    
+            } else {
+                // Logique pour paiement salaire et virement (reste inchangé)
+                // ICI SEULEMENT on cherche un compte
+                $compte = \App\Models\Compte::find($data['compte_id']);
+                
+                if (!$compte) {
+                    throw new \Exception('Compte non trouvé');
+                }
+                
+                // CRÉDITER le compte (DÉPÔT) - Logique commune pour paiement salaire et virement
+                $ancienSolde = $compte->solde;
+                $compte->solde += $data['montant'];
+                $compte->save();
+                
+                if ($data['type_operation'] === 'paiement_salaire') {
+                    // Enregistrer le mouvement pour paiement salaire
+                    $mouvement = Mouvement::create([
+                        'compte_id' => $compte->id,
+                        'type' => 'depot',
+                        'type_mouvement' => 'paiement_salaire_charge',
+                        'montant' => $data['montant'],
+                        'solde_avant' => $ancienSolde,
+                        'solde_apres' => $compte->solde,
+                        'description' => $data['description'],
+                        'nom_deposant' => $data['beneficiaire'],
+                        'devise' => $data['devise'],
+                        'operateur_id' => Auth::id(),
+                        'numero_compte' => $compte->numero_compte,
+                        'client_nom' => $data['beneficiaire'],
+                        'date_mouvement' => now()
+                    ]);
+                    
+                    // Enregistrer l'écriture comptable
+                    $comptabilityService->enregistrerPaiementSalaireCharge(
+                        $mouvement,
+                        $compte,
+                        $data['type_charge'],
+                        $data['description'],
+                        $data['beneficiaire']
+                    );
+                    
+                    Notification::make()
+                        ->title('Paiement enregistré')
+                        ->body("Paiement de {$data['montant']} {$data['devise']} crédité sur le compte {$compte->numero_compte}. Nouveau solde: {$compte->solde} {$compte->devise}")
+                        ->success()
+                        ->send();
+                    
+                } elseif ($data['type_operation'] === 'virement') {
+                    // Enregistrer le mouvement pour virement
+                    $mouvement = Mouvement::create([
+                        'compte_id' => $compte->id,
+                        'type' => 'depot',
+                        'type_mouvement' => 'virement_comptabilite',
+                        'montant' => $data['montant'],
+                        'solde_avant' => $ancienSolde,
+                        'solde_apres' => $compte->solde,
+                        'description' => $data['description'],
+                        'nom_deposant' => $data['beneficiaire'],
+                        'devise' => $data['devise'],
+                        'operateur_id' => Auth::id(),
+                        'numero_compte' => $compte->numero_compte,
+                        'client_nom' => $data['beneficiaire'],
+                        'date_mouvement' => now()
+                    ]);
+                    
+                    // Enregistrer l'écriture comptable
+                    $comptabilityService->enregistrerVirement(
+                        $mouvement,
+                        $compte,
+                        $data['motif_virement'] ?? 'transfert',
+                        $data['description'],
+                        $data['beneficiaire']
+                    );
+                    
+                    Notification::make()
+                        ->title('Virement effectué')
+                        ->body("Virement de {$data['montant']} {$data['devise']} crédité sur le compte {$compte->numero_compte}. Nouveau solde: {$compte->solde} {$compte->devise}")
+                        ->success()
+                        ->send();
+                }
+            }
+        });
+        
+    } catch (\Exception $e) {
+        Notification::make()
+            ->title('Erreur')
+            ->body($e->getMessage())
+            ->danger()
+            ->send();
+    }
+})
+    ->modalWidth('3xl'),
 
                     Action::make('gestion_depenses')
                         ->label('Délaistage Petite Caisse')
@@ -653,67 +802,191 @@ class ManageComptabilite extends ManageRecords
                             Hidden::make('petite_caisse_id'),
                         ])
                         ->action(function (array $data) {
-                            try {
-                                DB::transaction(function () use ($data) {
-                                    $comptabilityService = app(ComptabilityService::class);
-                                    
-                                    $petiteCaisse = Caisse::find($data['petite_caisse_id']);
-                                    
-                                    if (!$petiteCaisse) {
-                                        throw new \Exception('Petite caisse non trouvée');
-                                    }
-                                    
-                                    if ($petiteCaisse->solde <= 0) {
-                                        throw new \Exception('Aucun solde à transférer');
-                                    }
-                                    
-                                    $montantTransfert = $petiteCaisse->solde;
-                                    $reference = 'DELAISAGE-PETITE-' . now()->format('Ymd-His');
-                                    
-                                    // Enregistrer le mouvement de sortie
-                                    Mouvement::create([
-                                        'caisse_id' => $petiteCaisse->id,
-                                        'type' => 'retrait',
-                                        'type_mouvement' => 'delaisage_comptabilite',
-                                        'montant' => $montantTransfert,
-                                        'solde_avant' => $petiteCaisse->solde,
-                                        'solde_apres' => 0,
-                                        'description' => $data['motif_delaisage'] . " - Transfert vers comptabilité",
-                                        'nom_deposant' => 'Système Délaistage',
-                                        'devise' => $data['devise_delaisage'],
-                                        'operateur_id' => Auth::id(),
-                                        'numero_compte' => $petiteCaisse->type_caisse,
-                                        'client_nom' => 'Transfert comptabilité',
-                                        'date_mouvement' => now()
-                                    ]);
-                                    
-                                    // Réinitialiser le solde de la petite caisse
-                                    $petiteCaisse->solde = 0;
-                                    $petiteCaisse->save();
-                                    
-                                    // Générer l'écriture comptable
-                                    $comptabilityService->enregistrerDelaisagePetiteCaisse(
-                                        $montantTransfert, 
-                                        $data['devise_delaisage'], 
-                                        $reference, 
-                                        $data['motif_delaisage']
-                                    );
-                                    
-                                    Notification::make()
-                                        ->title('Délaistage réussi')
-                                        ->body("{$montantTransfert} {$data['devise_delaisage']} transférés depuis la petite caisse vers la comptabilité")
-                                        ->success()
-                                        ->send();
-                                });
-                                
-                            } catch (\Exception $e) {
-                                Notification::make()
-                                    ->title('Erreur de délaistage')
-                                    ->body($e->getMessage())
-                                    ->danger()
-                                    ->send();
+    try {
+        DB::transaction(function () use ($data) {
+            $comptabilityService = app(ComptabilityService::class);
+            
+            // MODIFICATION ICI : Vérifier si c'est une dépense diverse avant de chercher un compte
+            if ($data['type_operation'] === 'depense_diverse') {
+                // Logique pour Dépenses Diverses
+                $petiteCaisse = Caisse::find($data['petite_caisse_id']);
+                
+                if (!$petiteCaisse) {
+                    throw new \Exception('Petite caisse non trouvée');
+                }
+                
+                if ($data['montant'] > $petiteCaisse->solde) {
+                    throw new \Exception('Solde insuffisant dans la petite caisse');
+                }
+                
+                // Débiter la petite caisse (physiquement)
+                $ancienSolde = $petiteCaisse->solde;
+                $petiteCaisse->solde -= $data['montant'];
+                $petiteCaisse->save();
+                
+                // Enregistrer le mouvement physique
+                $mouvement = Mouvement::create([
+                    'caisse_id' => $petiteCaisse->id,
+                    'type' => 'retrait',
+                    'type_mouvement' => 'depense_diverse_comptabilite',
+                    'montant' => $data['montant'],
+                    'solde_avant' => $ancienSolde,
+                    'solde_apres' => $petiteCaisse->solde,
+                    'description' => $data['description'] . " - " . $data['type_depense'],
+                    'nom_deposant' => $data['beneficiaire'],
+                    'devise' => $data['devise_depense'],
+                    'operateur_id' => Auth::id(),
+                    'numero_compte' => 'DEPENSE-DIVERSE',
+                    'client_nom' => $data['beneficiaire'],
+                    'date_mouvement' => now()
+                ]);
+                
+                // Créer l'écriture comptable correspondante
+                $journal = JournalComptable::where('type_journal', 'achats')->first();
+                $compteCharge = self::getCompteChargeDepense($data['type_depense']);
+                
+                // Écriture comptable
+                EcritureComptable::create([
+                    'journal_comptable_id' => $journal->id,
+                    'reference_operation' => 'DEP-' . now()->format('YmdHis'),
+                    'type_operation' => 'depense_diverse_comptabilite',
+                    'compte_number' => $compteCharge,
+                    'libelle' => "Dépense diverse: " . $data['description'] . " - " . $data['beneficiaire'],
+                    'montant_debit' => $data['montant'],
+                    'montant_credit' => 0,
+                    'date_ecriture' => now(),
+                    'date_valeur' => now(),
+                    'devise' => $data['devise_depense'],
+                    'statut' => 'comptabilise',
+                    'created_by' => Auth::id(),
+                ]);
+                
+                EcritureComptable::create([
+                    'journal_comptable_id' => $journal->id,
+                    'reference_operation' => 'DEP-' . now()->format('YmdHis'),
+                    'type_operation' => 'depense_diverse_comptabilite',
+                    'compte_number' => '571300', // Compte petite caisse
+                    'libelle' => "Dépense diverse: " . $data['description'] . " - " . $data['beneficiaire'],
+                    'montant_debit' => 0,
+                    'montant_credit' => $data['montant'],
+                    'date_ecriture' => now(),
+                    'date_valeur' => now(),
+                    'devise' => $data['devise_depense'],
+                    'statut' => 'comptabilise',
+                    'created_by' => Auth::id(),
+                ]);
+                
+                Notification::make()
+                    ->title('Dépense enregistrée')
+                    ->body("Dépense de {$data['montant']} {$data['devise_depense']} effectuée depuis la petite caisse")
+                    ->success()
+                    ->send();
+                    
+            } else {
+                // Logique pour paiement salaire et virement (reste inchangé)
+                $compte = \App\Models\Compte::find($data['compte_id']);
+                
+                if (!$compte) {
+                    throw new \Exception('Compte non trouvé');
+                }
+                
+                // CRÉDITER le compte (DÉPÔT) - Logique commune pour paiement salaire et virement
+                $ancienSolde = $compte->solde;
+                $compte->solde += $data['montant'];
+                $compte->save();
+                
+                if ($data['type_operation'] === 'paiement_salaire') {
+                    // Enregistrer le mouvement pour paiement salaire
+                    $mouvement = Mouvement::create([
+                        'compte_id' => $compte->id,
+                        'type' => 'depot',
+                        'type_mouvement' => 'paiement_salaire_charge',
+                        'montant' => $data['montant'],
+                        'solde_avant' => $ancienSolde,
+                        'solde_apres' => $compte->solde,
+                        'description' => $data['description'] . " - " . $data['type_charge'],
+                        'nom_deposant' => $data['beneficiaire'],
+                        'devise' => $data['devise'],
+                        'operateur_id' => Auth::id(),
+                        'numero_compte' => $compte->numero_compte,
+                        'client_nom' => $data['beneficiaire'],
+                        'date_mouvement' => now()
+                    ]);
+                    
+                    // Enregistrer l'écriture comptable
+                    $comptabilityService->enregistrerPaiementSalaireCharge(
+                        $mouvement,
+                        $compte,
+                        $data['type_charge'],
+                        $data['description'],
+                        $data['beneficiaire']
+                    );
+                    
+                    Notification::make()
+                        ->title('Paiement enregistré')
+                        ->body("Paiement de {$data['montant']} {$data['devise']} crédité sur le compte {$compte->numero_compte}. Nouveau solde: {$compte->solde} {$compte->devise}")
+                        ->success()
+                        ->send();
+                    
+                } elseif ($data['type_operation'] === 'virement') {
+
+                     $compte = \App\Models\Compte::find($data['compte_id']);
+    
+                            if (!$compte) {
+                                throw new \Exception('Compte non trouvé');
                             }
-                        })
+                            
+                            // CORRECTION : Récupérer le solde AVANT l'opération
+                            $ancienSolde = $compte->solde;
+                            
+                            // CRÉDITER le compte
+                            $compte->solde += $data['montant'];
+                            $compte->save();
+
+
+                    // Enregistrer le mouvement pour virement
+                    $mouvement = Mouvement::create([
+                        'compte_id' => $compte->id,
+                        'type' => 'depot',
+                        'type_mouvement' => 'virement_comptabilite',
+                        'montant' => $data['montant'],
+                        'solde_avant' => $ancienSolde,
+                        'solde_apres' => $compte->solde,
+                        'description' => $data['description'] . " - Motif: " . ($data['motif_virement'] ?? 'virement'),
+                        'nom_deposant' => $data['beneficiaire'],
+                        'devise' => $data['devise'],
+                        'operateur_id' => Auth::id(),
+                        'numero_compte' => $compte->numero_compte,
+                        'client_nom' => $data['beneficiaire'],
+                        'date_mouvement' => now()
+                    ]);
+                    
+                    // Enregistrer l'écriture comptable
+                    $comptabilityService->enregistrerVirement(
+                        $mouvement,
+                        $compte,
+                        $data['motif_virement'] ?? 'transfert',
+                        $data['description'],
+                        $data['beneficiaire']
+                    );
+                    
+                    Notification::make()
+                        ->title('Virement effectué')
+                        ->body("Virement de {$data['montant']} {$data['devise']} crédité sur le compte {$compte->numero_compte}. Nouveau solde: {$compte->solde} {$compte->devise}")
+                        ->success()
+                        ->send();
+                }
+            }
+        });
+        
+    } catch (\Exception $e) {
+        Notification::make()
+            ->title('Erreur')
+            ->body($e->getMessage())
+            ->danger()
+            ->send();
+    }
+})
                         ->requiresConfirmation()
                         ->modalHeading('Délaistage Petite Caisse')
                         ->modalDescription('Êtes-vous sûr de vouloir transférer le solde de la petite caisse vers la comptabilité ?'),

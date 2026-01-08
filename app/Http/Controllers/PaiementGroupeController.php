@@ -34,33 +34,47 @@ public function processerPaiements(Request $request)
     $request->validate([
         'selected_groupe_id' => 'required|exists:credit_groupes,id',
         'paiements_membres' => 'required|array',
+        'mode_paiement' => 'sometimes|in:normal,complement',
+        'membres_complement' => 'sometimes|array',
     ]);
 
+    $mode = $request->input('mode_paiement', 'normal');
+    $membresComplement = $request->input('membres_complement', []);
+    
     try {
-        DB::transaction(function () use ($request) {
+        DB::transaction(function () use ($request, $mode, $membresComplement) {
             $creditGroupe = CreditGroupe::with(['compte'])->findOrFail($request->selected_groupe_id);
             $datePaiement = now();
             $results = [];
             $totalPaiementGroupe = 0;
 
             foreach ($request->paiements_membres as $membreId => $montantApporte) {
+                // CORRECTION : Remplacer les virgules par des points
+                $montantApporte = str_replace(',', '.', $montantApporte);
                 $montantApporte = floatval($montantApporte);
-                if ($montantApporte > 0) {
-                    // UTILISER LA BONNE MÉTHODE - VERSION EXACTE
+                
+                // En mode complément, ne traiter que les membres sélectionnés
+                if ($mode === 'complement') {
+                    if (!in_array($membreId, $membresComplement)) {
+                        continue; // Ignorer ce membre
+                    }
+                }
+                
+                // Accepter 0 pour les compléments
+                if ($montantApporte >= 0) {
                     $result = $this->traiterPaiementMembreGroupeExact($membreId, $montantApporte, $creditGroupe, $datePaiement);
                     $results[] = $result;
                     $totalPaiementGroupe += $result['montant_preleve_groupe'] ?? 0;
                 }
             }
 
-            // Traiter les paiements par membre
             $this->traiterPaiementsParMembre($creditGroupe, $results, $datePaiement);
 
-            // Stocker les résultats
             session()->flash('paiement_success', true);
             session()->flash('results', $results);
             session()->flash('total_paiement_groupe', $totalPaiementGroupe);
             session()->flash('credit_groupe_nom', $creditGroupe->compte->nom ?? 'Groupe');
+            session()->flash('mode_paiement', $mode);
             
             $totalExcedent = array_sum(array_column($results, 'montant_excedent'));
             session()->flash('total_excedent', $totalExcedent);
@@ -83,29 +97,9 @@ public function processerPaiements(Request $request)
 
 private function traiterPaiementsParMembre($creditGroupe, $results, $datePaiement)
 {
-    $repartition = $creditGroupe->repartition_membres ?? [];
-    $montantTotalApporte = 0;
-    
-    // 1. Calculer le total pour le remboursement
-    foreach ($results as $result) {
-        $membreId = $result['membre_id'] ?? null;
-        $montantApporte = $result['montant_apporte'] ?? 0;
-        $montantDuMembre = $result['montant_du'] ?? 0;
-        
-        if ($membreId && isset($repartition[$membreId])) {
-            // Le montant appliqué au remboursement est le minimum
-            $montantAppliqueAuRemboursement = min($montantApporte, $montantDuMembre);
-            $montantTotalApporte += $montantAppliqueAuRemboursement;
-        }
-    }
-    
-    // 2. Effectuer le paiement du groupe avec le total des remboursements
-    if ($montantTotalApporte > 0) {
-        $this->effectuerPaiementGroupe($creditGroupe, $montantTotalApporte, $datePaiement);
-    }
-    
-    // 3. SUPPRIMER l'appel à distribuerExcedentsMembresExact()
-    // Les excédents sont déjà gérés dans traiterPaiementMembreGroupeExact()
+    // Toujours enregistrer le paiement groupe si des membres ont remboursé
+    // Même si tout a été prélevé des comptes membres
+    $this->enregistrerPaiementGroupeComplet($creditGroupe, $results, $datePaiement);
 }
     /**
      * NOUVELLE MÉTHODE : Distribue les excédents exacts aux membres
@@ -193,6 +187,195 @@ private function traiterPaiementsParMembre($creditGroupe, $results, $datePaiemen
             }
         }
     }
+
+
+
+    /**
+ * Enregistre le paiement groupe même avec 0 prélevé du groupe
+ */
+/**
+ * Enregistre le paiement groupe avec le MONTANT RÉELLEMENT COLLECTÉ
+ */
+private function enregistrerPaiementGroupeComplet($creditGroupe, $results, $datePaiement)
+{
+    $repartition = $creditGroupe->repartition_membres ?? [];
+    $montantEffectivementCollecte = 0;  // Montant réel collecté (prélevé groupe + prélevé membre)
+    $montantTotalRembourse = 0;         // Montant dû total (inclut les déficits)
+    $montantTotalCapital = 0;
+    $montantTotalInterets = 0;
+    
+    foreach ($results as $result) {
+        $membreId = $result['membre_id'] ?? null;
+        if ($membreId && isset($repartition[$membreId])) {
+            $montantDuMembre = $result['montant_du'] ?? 0;
+            $montantPreleveGroupe = $result['montant_preleve_groupe'] ?? 0;
+            $montantPreleveMembre = $result['montant_preleve_membre'] ?? 0;
+            
+            // Montant réellement payé par ce membre
+            $montantEffectifPaye = min($montantPreleveGroupe + $montantPreleveMembre, $montantDuMembre);
+            $montantEffectivementCollecte += $montantEffectifPaye;
+            
+            // Pour le calcul capital/intérêts, on prend le montant dû (même si pas entièrement payé)
+            $montantTotalRembourse += $montantDuMembre;
+            
+            // Calculer la répartition capital/intérêts pour ce membre
+            $detailsMembre = $repartition[$membreId];
+            $montantAccordeMembre = $detailsMembre['montant_accorde'] ?? 0;
+            $montantTotalMembre = $detailsMembre['montant_total'] ?? 0;
+            
+            $capitalHebdoMembre = $montantAccordeMembre / 16;
+            $interetsHebdoMembre = ($montantTotalMembre - $montantAccordeMembre) / 16;
+            
+            // Ajouter proportionnellement au montant effectivement payé
+            // Montant réellement payé par ce membre
+            $montantReelPaye = min($montantPreleveGroupe + $montantPreleveMembre, $montantDuMembre);
+
+            // Répartition proportionnelle
+            $pourcentageDuMontantTotal = $montantDuMembre / $creditGroupe->remboursement_hebdo_total;
+            $partCapitalMembre = ($capitalHebdoMembre / $montantDuMembre) * $montantReelPaye;
+            $partInteretsMembre = ($interetsHebdoMembre / $montantDuMembre) * $montantReelPaye;
+
+            $montantTotalCapital += $partCapitalMembre;
+            $montantTotalInterets += $partInteretsMembre;
+        }
+    }
+    
+    Log::info("=== ENREGISTREMENT PAIEMENT GROUPE ===");
+    Log::info("Montant réellement collecté: {$montantEffectivementCollecte} USD");
+    Log::info("Montant dû total: {$montantTotalRembourse} USD");
+    Log::info("Capital: {$montantTotalCapital} USD");
+    Log::info("Intérêts: {$montantTotalInterets} USD");
+    
+    if ($montantEffectivementCollecte > 0) {
+        // Enregistrer le paiement avec le MONTANT RÉEL COLLECTÉ
+        $paiement = PaiementCredit::create([
+            'credit_id' => null,
+            'credit_groupe_id' => $creditGroupe->id,
+            'compte_id' => $creditGroupe->compte_id,
+            'montant_paye' => $montantEffectivementCollecte, // CORRECTION ICI
+            'date_paiement' => $datePaiement,
+            'type_paiement' => TypePaiement::GROUPE->value,
+            'reference' => 'PAY-GROUPE-' . $creditGroupe->id . '-' . now()->format('YmdHis'),
+            'statut' => 'complet',
+            'capital_rembourse' => $montantTotalCapital,
+            'interets_payes' => $montantTotalInterets
+        ]);
+
+        Log::info("✅ Paiement groupe enregistré: {$montantEffectivementCollecte} USD");
+
+        // Générer les écritures comptables
+        $repartition = [
+            'capital' => $montantTotalCapital,
+            'interets' => $montantTotalInterets,
+            'excédent' => 0
+        ];
+        
+        $this->genererEcritureComptablePaiementGroupe(
+            $creditGroupe->compte, 
+            $creditGroupe, 
+            $montantEffectivementCollecte, // CORRECTION ICI
+            $repartition, 
+            $paiement->reference
+        );
+        
+        // Mettre à jour l'échéancier avec le MONTANT RÉEL
+        $this->mettreAJourEcheancierAvecMontantReel($creditGroupe, $paiement, $montantEffectivementCollecte);
+        
+        return $paiement;
+    }
+    
+    Log::info("⚠️ Aucun montant collecté - Paiement non enregistré");
+    return null;
+}
+
+
+/**
+ * CORRECTION : Met à jour l'échéancier après paiement avec montant réel
+ */
+private function mettreAJourEcheancierAvecMontantReel($creditGroupe, $paiement, $montantReel)
+{
+    // Trouver la prochaine échéance non payée
+    $echeance = DB::table('echeanciers')
+        ->where('credit_groupe_id', $creditGroupe->id)
+        ->where('statut', 'a_venir')
+        ->orderBy('semaine', 'asc')
+        ->first();
+        
+    if ($echeance) {
+        // Si paiement partiel (inférieur au dû hebdo)
+        $montantHebdomadaire = $creditGroupe->remboursement_hebdo_total;
+        
+        if ($montantReel < $montantHebdomadaire) {
+            // Marquer comme partiellement payé
+            DB::table('echeanciers')
+                ->where('id', $echeance->id)
+                ->update([
+                    'statut' => 'partiel',
+                    'date_paiement' => $paiement->date_paiement,
+                    'montant_paye' => $montantReel,
+                    'updated_at' => now()
+                ]);
+            
+            Log::info("⚠️ Échéance marquée comme partiellement payée: {$montantReel}/{$montantHebdomadaire} USD");
+        } else {
+            // Paiement complet
+            DB::table('echeanciers')
+                ->where('id', $echeance->id)
+                ->update([
+                    'statut' => 'paye',
+                    'date_paiement' => $paiement->date_paiement,
+                    'montant_paye' => $montantHebdomadaire,
+                    'updated_at' => now()
+                ]);
+            
+            Log::info("✅ Échéance marquée comme payée: {$montantHebdomadaire} USD");
+        }
+    }
+}
+
+/**
+ * Vérifie le solde réel vs solde affiché
+ */
+private function verifierSoldeGroupe($creditGroupeId)
+{
+    $creditGroupe = CreditGroupe::with('compte')->find($creditGroupeId);
+    
+    if (!$creditGroupe || !$creditGroupe->compte) {
+        return null;
+    }
+    
+    // Vérifier le solde depuis la table
+    $soldeDirect = DB::table('comptes')
+        ->where('id', $creditGroupe->compte->id)
+        ->value('solde');
+    
+    // Vérifier les mouvements
+    $totalDepots = Mouvement::where('compte_id', $creditGroupe->compte->id)
+        ->whereIn('type_mouvement', ['depot', 'recouvrement_credit_groupe'])
+        ->sum('montant');
+    
+    $totalRetraits = Mouvement::where('compte_id', $creditGroupe->compte->id)
+        ->whereIn('type_mouvement', ['paiement_credit_groupe', 'retrait'])
+        ->sum('montant');
+    
+    $soldeCalcule = $totalDepots - $totalRetraits;
+    
+    Log::info('🔍 VÉRIFICATION SOLDE GROUPE', [
+        'groupe_id' => $creditGroupe->id,
+        'solde_direct' => $soldeDirect,
+        'solde_modele' => $creditGroupe->compte->solde,
+        'total_depots' => $totalDepots,
+        'total_retraits' => $totalRetraits,
+        'solde_calcule' => $soldeCalcule,
+        'difference' => $soldeDirect - $creditGroupe->compte->solde
+    ]);
+    
+    return [
+        'direct' => (float) $soldeDirect,
+        'modele' => (float) $creditGroupe->compte->solde,
+        'calcule' => (float) $soldeCalcule
+    ];
+}
 
 private function traiterPaiementMembreGroupeExact($membreId, $montantApporte, $creditGroupe, $datePaiement)
 {
@@ -436,6 +619,15 @@ if ($montantPreleveMembre > 0) {
             'nom_deposant' => 'Système Automatique'
         ]);
     }
+
+    // Avant "=== FIN TRAITEMENT ===", ajoutez :
+Log::info("Résultat final:");
+Log::info("Montant apporté: {$montantApporte} USD");
+Log::info("Montant dû: {$montantDuMembre} USD");
+Log::info("Prélèvement groupe: {$montantPreleveGroupe} USD");
+Log::info("Prélèvement membre: {$montantPreleveMembre} USD");
+Log::info("Excédent: {$montantExcedent} USD");
+Log::info("Total payé: " . ($montantPreleveGroupe + $montantPreleveMembre) . " USD");
     
     // === RÉSUMÉ FINAL ===
     Log::info("=== RÉSUMÉ FINAL ===");

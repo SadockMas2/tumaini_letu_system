@@ -128,16 +128,16 @@ class CompteEpargnesTable
             ->headerActions([
 
                 Action::make('rapport_epargne')
-                  ->label('📊 Rapport Épargne')
-                    ->color('success')
-                    ->icon('heroicon-o-document-chart-bar')
-                    ->url(route('rapport.epargne'))
-                    ->openUrlInNewTab()
-                    ->visible(function () {
-                        /** @var User|null $user */
-                        $user = Auth::user();
-                        return $user && $user->can('view_comptespecial'); // Adaptez la permission
-                    }),
+    ->label('📊 Rapport Épargne')
+    ->color('success')
+    ->icon('heroicon-o-document-chart-bar')
+    ->url(route('rapport.epargne.filtre'))  // <- Pointez vers le formulaire de filtrage
+    ->openUrlInNewTab()
+    ->visible(function () {
+        /** @var User|null $user */
+        $user = Auth::user();
+        return $user && $user->can('view_comptespecial'); // Adaptez la permission
+    }),
                 ExportAction::make()
                     ->exporter(CompteEpargneExporter::class)
                     ->label('Exporter')

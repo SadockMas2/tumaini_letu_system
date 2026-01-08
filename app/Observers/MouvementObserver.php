@@ -38,11 +38,17 @@ class MouvementObserver
             'versement_agent',
             'paiement_groupes', 
             'paiement_credit',
+            'excedent_groupe',
+            'paiement_credit',
             'excedent_groupe_exact',
             'paiement_credit_groupe',
+            'paiement_credit_partiel',
+            'paiement_credit_partiel',
+            'paiement_credit_complet',
             'paiement_individuels',
             'paiement_credit_automatique',
             'complement_paiement_groupe',
+            'frais_adhesion',
             
         ];
         
@@ -195,29 +201,35 @@ class MouvementObserver
     /**
      * FORMAT MESSAGE COMPTE - UTF-8 pour les accents
      */
-    private function formatMessageCompte(Mouvement $mouvement, $compte, array $recipientInfo): string
-    {
-        $genre = $recipientInfo['clientGenre'] === 'Chère' ? 'Chère' : 'Cher';
-        $nom = $this->getNomCourt($recipientInfo['clientName']);
-        $typeOperation = $mouvement->type === 'depot' ? 'dépôt' : 'retrait';
-        
-        $message = sprintf(
-            "%s membre %s, un %s de %s %s a été effectué sur votre compte %s, le %s.  solde : %s %s.\nTUMAINI LETU",
-            $genre,
-            $nom,
-            $typeOperation,
-            number_format($mouvement->montant, 0, ',', ' '),
-            $mouvement->devise,
-            $compte->numero_compte,
-            now()->format('d-m-Y'),
-            number_format($mouvement->solde_apres, 0, ',', ' '),
-            $mouvement->devise
-        );
-        
-        // Assurer l'encodage UTF-8
-        return mb_convert_encoding($message, 'UTF-8', 'auto');
+private function formatMessageCompte(Mouvement $mouvement, $compte, array $recipientInfo): string
+{
+    $genre = $recipientInfo['clientGenre'] === 'Chère' ? 'Chère' : 'Cher';
+    $typeOperation = $mouvement->type === 'depot' ? 'dépôt' : 'retrait';
+    
+    // Construire le message de base
+    $message = sprintf(
+        "%s membre un %s de %s %s a ete effectue sur votre compte %s le %s Solde: %s %s -",
+        $genre,
+        $typeOperation,
+        number_format($mouvement->montant, 0, ',', ' '),
+        $mouvement->devise,
+        $compte->numero_compte,
+        now()->format('d-m-Y'),
+        number_format($mouvement->solde_apres, 0, ',', ' '),
+        $mouvement->devise
+    );
+    
+    // Ajouter la description seulement pour les dépôts
+    if ($mouvement->type === 'depot' && !empty($mouvement->description)) {
+        $message .= " " . $mouvement->description;
     }
     
+    // // Ajouter la signature
+    // $message .= "\nTUMAINI LETU";
+    
+    // Assurer l'encodage UTF-8
+    return mb_convert_encoding($message, 'UTF-8', 'auto');
+}
     /**
      * FORMAT MESSAGE COMPTE ÉPARGNE - UTF-8 pour les accents
      */
@@ -237,7 +249,7 @@ class MouvementObserver
         $solde = $mouvement->solde_apres ?? $compteEpargne->solde;
         
         $message = sprintf(
-            "%s membre %s, un %s de %s %s a été effectué sur votre compte épargne %s, le %s.solde : %s %s.\nTUMAINI LETU ",
+            "%s membre un %s de %s %s a été effectué sur votre compte épargne %s, le %s.solde : %s %s ",
             $genre,
             $nom,
             $typeOperation,

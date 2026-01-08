@@ -13,6 +13,8 @@ class MouvementHelper
         $typesRetrait = [
             'paiement_credit',
             'paiement_credit_groupe',
+            'paiement_credit_partiel',
+            'paiement_credit_complet',
             'frais_payes_credit',
             'frais_payes_credit_groupe',
             'retrait_compte',
@@ -22,6 +24,7 @@ class MouvementHelper
             'frais_gestion',
             'debit_automatique',
             'frais_adhesion',
+            'frais_sms',
             'paiement_credit_automatique',
             'complement_paiement_groupe',
             'achat_carnet_livre',
@@ -42,7 +45,9 @@ class MouvementHelper
             'bonus',
             'distribution_comptabilite',
             'paiement_salaire_charge',
+            'paiement_salaire',
             'versement_agent',
+            'virement_comptabilite',
         ];
         
         // Types NEUTRES (affichage sans signe)
@@ -170,6 +175,7 @@ class MouvementHelper
             // Crédits
             'paiement_credit' => 'Remboursement crédit', // ← Remboursement
             'paiement_credit_groupe' => 'Paiement crédit groupe',
+            'paiement_credit_partiel' => 'Paiement crédit partiel',
             'credit_octroye' => 'Octroi de crédit', // ← Octroi
             'credit_groupe_recu' => 'Crédit groupe reçu',
             'frais_payes_credit' => 'Frais crédit payés',
@@ -194,6 +200,7 @@ class MouvementHelper
             'frais_ouverture_compte' => 'Frais ouverture compte',
             'frais_gestion' => 'Frais de gestion',
             'frais_adhesion' => 'Frais d\'adhésion',
+            'frais_sms' => 'Frais SMS',
             'bonus' => 'Bonus',
             'debit_automatique' => 'Débit automatique',
             'transfert' => 'Transfert',
@@ -204,6 +211,10 @@ class MouvementHelper
             'conversion_devise_entrant' => 'Conversion devise entrante',
             'delaisage_comptabilite' => 'Délaistage comptabilité',
             'paiement_credit_automatique' => 'Paiement crédit automatique',
+           'paiement_salaire' => 'Paiement salaire ',
+            'paiement_salaire_charge' => 'Paiement salaire ',
+               'virement_comptabilite', 'Virement comptabilité',
+
         ];
         
         return $traductions[$typeMouvement] ?? ucfirst(str_replace('_', ' ', $typeMouvement));

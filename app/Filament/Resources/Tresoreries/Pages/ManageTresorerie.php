@@ -41,12 +41,67 @@ class ManageTresorerie extends ManageRecords
 {
     protected static string $resource = TresorerieResource::class;
 
+     protected $listeners = [
+        'confirmOperation' => 'handleOperationConfirmation',
+        'cancelOperation' => 'handleOperationCancellation',
+    ];
+
+
     protected function getHeaderActions(): array
     {
         return [
 
             ActionGroup::make([
-
+// Ajoutez cette action dans votre ActionGroup
+Action::make('final_confirmation')
+    ->label('Confirmation Finale')
+    ->icon('heroicon-o-check-circle')
+    ->color('danger')
+    ->hidden() // Cachée par défaut, appelée via URL
+    ->action(function (array $data) {
+        self::executerOperationFinale($data);
+    })
+    ->requiresConfirmation()
+    ->modalHeading('⚠️ DERNIÈRE CONFIRMATION REQUISE')
+    ->modalSubmitActionLabel('✅ OUI, exécuter l\'opération')
+    ->modalCancelActionLabel('❌ Non, annuler')
+    ->modalWidth('lg')
+    ->modalContent(function (?array $data = null) {
+        if (!$data) {
+            // Décoder les données depuis l'URL
+            $encodedData = request()->input('data');
+            if ($encodedData) {
+                $data = json_decode(base64_decode($encodedData), true);
+            }
+        }
+        
+        if (!$data) {
+            return '<div class="p-4 text-center text-red-600">Données d\'opération non trouvées</div>';
+        }
+        
+        // Préparer le récapitulatif
+        $type = self::getTypeOperationLabel($data['type_operation'] ?? '');
+        $montant = number_format($data['montant'] ?? 0, 2);
+        $devise = $data['devise'] ?? 'USD';
+        $clientNom = $data['client_nom_complet'] ?? 
+                    $data['client_nom_complet_adhesion'] ?? 
+                    $data['client_nom_complet_sms'] ?? 
+                    $data['client_epargne_nom_complet'] ??
+                    'N/A';
+        $compteNumero = $data['compte_numero'] ?? 
+                       $data['compte_numero_adhesion'] ?? 
+                       $data['compte_numero_sms'] ?? 
+                       $data['compte_epargne_numero'] ?? 
+                       'N/A';
+        $description = $data['description'] ?? 'Aucune description';
+        $operateur = auth::user()->name;
+        $date = now()->format('d/m/Y H:i:s');
+        
+        return view('filament.operations.final-confirmation', compact(
+            'type', 'montant', 'devise', 'clientNom', 'compteNumero', 
+            'description', 'operateur', 'date', 'data'
+        ));
+    }),
                 
 Action::make('rapport_instantanee')
     ->label('Rapport Instantané')
@@ -541,101 +596,55 @@ Section::make('Montants à Convertir')
     ->modalHeading('Délaistage Trésorerie (Grandes Caisses)') // ← MODIFICATION
     ->modalDescription('Êtes-vous sûr de vouloir transférer les soldes des GRANDES caisses vers la comptabilité ?'), // ← MODIFICATION
 
-            Action::make('operation_tresorerie')
-                ->label('Nouvelle Opération')
-                ->icon('heroicon-o-plus-circle')
-                ->color('primary')
-                ->schema(self::getOperationFormSchema())
-                ->action(function (array $data) {
-                    try {
-                        DB::transaction(function () use ($data) {
-                            switch ($data['type_operation']) {
-                                case 'depot_compte':
-                                    self::depotVersCompte($data);
-                                    break;
-                                case 'retrait_compte':
-                                    self::retraitDepuisCompte($data);
-                                    break;
-                                case 'paiement_credit':
-                                    self::paiementCredit($data);
-                                    break;
-                                case 'versement_agent':
-                                    self::versementAgentCollecteur($data);
-                                    break;
-                                case 'transfert_caisse':
-                                    self::transfertEntreCaisses($data);
-                                    break;
-                             
-                                case 'achat_carnet_livre': // S'ASSURER QUE CE CASE EXISTE
-                                self::achatCarnetLivre($data);
-                                break;
-
-                                case 'retrait_epargne': // NOUVEAU
-                                self::retraitDepuisCompteEpargne($data);
-                                break;
-
-                                  case 'frais_adhesion': // NOUVEAU
-                                self::prelevementFraisAdhesion($data);
-                                break;
-                            }
-
-                            // Notifier la comptabilité
-                            self::notifierComptabilite($data);
-                        });
-
-                        Notification::make()
-                            ->title('Opération réussie')
-                            ->success()
-                            ->send();
-                            
-                    } catch (\Exception $e) {
-                        Notification::make()
-                            ->title('Erreur')
-                            ->body($e->getMessage())
-                            ->danger()
-                            ->send();
-                    }
-                }),
-            
-            // Actions\CreateAction::make()
-            //     ->label('Nouvelle Caisse')
-            //     ->icon('heroicon-o-plus'),
-            
-            // Action::make('rapport_journalier')
-            //     ->label('Rapport Journalier')
-            //     ->icon('heroicon-o-document-chart-bar')
-            //     ->color('info')
-            //     ->action(function () {
-            //         try {
-            //             $rapport = app(TresorerieService::class)->genererRapportFinJournee();
+                Action::make('operation_tresorerie')
+                    ->label('Nouvelle Opération')
+                    ->icon('heroicon-o-plus-circle')
+                    ->color('primary')
+                    ->schema($this->getOperationFormSchema()) // $this au lieu de self::
+                    ->modalHeading('Nouvelle Opération de Trésorerie')
+                    ->modalDescription('Remplissez les détails de l\'opération')
+                    ->modalWidth('4xl')
+                    ->action(function (array $data) {
+                        // Exécuter directement après double confirmation
+                        return $this->executerAvecDoubleVerification($data); // $this au lieu de self::
+                    })
+                    ->requiresConfirmation()
+                    ->modalHeading('Première vérification')
+                    ->modalDescription('Vérifiez les informations avant de continuer')
+                    ->modalSubmitActionLabel('✅ Continuer vers confirmation finale')
+                    ->modalCancelActionLabel('❌ Annuler')
+                    ->modalContent(function (?array $data = null) {
+                        // Afficher le récapitulatif
+                        if (!$data) {
+                            return view('filament.operations.loading');
+                        }
                         
-            //             Notification::make()
-            //                 ->title('Rapport généré')
-            //                 ->body('Rapport journalier créé avec succès')
-            //                 ->success()
-            //                 ->send();
-                            
-            //         } catch (\Exception $e) {
-            //             Notification::make()
-            //                 ->title('Erreur')
-            //                 ->body('Erreur: ' . $e->getMessage())
-            //                 ->danger()
-            //                 ->send();
-            //         }
-            //     })
-            //     ->requiresConfirmation()
-            //     ->modalHeading('Générer Rapport Journalier')
-            //     ->modalDescription('Êtes-vous sûr de vouloir générer le rapport de fin de journée ?')
-            //     ->visible(fn () => Auth::user()->can('view_compte')),
-
-
+                        $type = $this->getTypeOperationLabel($data['type_operation'] ?? ''); // $this au lieu de self::
+                        $montant = number_format($data['montant'] ?? 0, 2);
+                        $devise = $data['devise'] ?? 'USD';
+                        $clientNom = $data['client_nom_complet'] ?? 
+                                    $data['client_nom_complet_adhesion'] ?? 
+                                    $data['client_nom_complet_sms'] ?? 
+                                    $data['client_epargne_nom_complet'] ??
+                                    'N/A';
+                        $compteNumero = $data['compte_numero'] ?? 
+                                       $data['compte_numero_adhesion'] ?? 
+                                       $data['compte_numero_sms'] ?? 
+                                       $data['compte_epargne_numero'] ?? 
+                                       'N/A';
+                        $description = $data['description'] ?? 'Aucune description';
+                        
+                        return view('filament.operations.confirmation', compact(
+                            'type', 'montant', 'devise', 'clientNom', 'compteNumero', 'description', 'data'
+                        ));
+                    }),
             ])
               ->label('Actions caisse')
             ->icon('heroicon-o-cog-6-tooth')
             ->color('primary')
             ->button(),
 
-            // Dans getHeaderActions() - ajoutez ces nouvelles actions
+           
 
         ];
     }
@@ -656,6 +665,7 @@ Section::make('Montants à Convertir')
                             'transfert_caisse' => 'Transfert entre Caisses',
                             'achat_carnet_livre' => 'Achat Carnet et Livres',
                             'frais_adhesion' => 'Frais d\'Adhésion',
+                            'frais_sms' => 'Frais SMS',
                           
                           
                         ])
@@ -1223,7 +1233,7 @@ Section::make('Montants à Convertir')
                                 if ($state) {
                                     $compte = Compte::where('numero_compte', $state)->first();
                                     if ($compte) {
-                                        $nomComplet = self::getNomCompletClient($compte);
+                                        $nomComplet = self ::getNomCompletClient($compte);
                                         $set('client_nom_complet_adhesion', $nomComplet);
                                         $set('solde_total_display_adhesion', number_format($compte->solde, 2) . ' ' . $compte->devise);
                                         $set('solde_disponible_display_adhesion', number_format(Mouvement::getSoldeDisponible($compte->id), 2) . ' ' . $compte->devise);
@@ -1311,10 +1321,121 @@ Section::make('Montants à Convertir')
                         return $get('type_operation') === 'frais_adhesion';
                     }),
 
+                    // Section pour les frais de SMS Alerte - NOUVELLE SECTION
+Section::make('Frais de SMS Alerte')
+    ->schema([
+        TextInput::make('compte_numero_sms')
+            ->label('Numéro de Compte Membre')
+            ->required(function ($get) {
+                return $get('type_operation') === 'frais_sms';
+            })
+            ->live()
+            ->afterStateUpdated(function ($set, $state) {
+                if ($state) {
+                    $compte = Compte::where('numero_compte', $state)->first();
+                    if ($compte) {
+                        $nomComplet = self::getNomCompletClient($compte);
+                        $set('client_nom_complet_sms', $nomComplet);
+                        $set('solde_total_display_sms', number_format($compte->solde, 2) . ' ' . $compte->devise);
+                        $set('solde_disponible_display_sms', number_format(Mouvement::getSoldeDisponible($compte->id), 2) . ' ' . $compte->devise);
+                        $set('devise', $compte->devise);
+                        $set('compte_id_sms', $compte->id);
+                    } else {
+                        $set('client_nom_complet_sms', 'Compte non trouvé');
+                        $set('solde_total_display_sms', '0.00 USD');
+                        $set('solde_disponible_display_sms', '0.00 USD');
+                        $set('compte_id_sms', null);
+                    }
+                }
+            })
+            ->placeholder('Saisir le numéro de compte')
+            ->visible(function ($get) {
+                return $get('type_operation') === 'frais_sms';
+            }),
+
+        TextInput::make('client_nom_complet_sms')
+            ->label('Nom du Client')
+            ->disabled()
+            ->dehydrated(false)
+            ->default('')
+            ->visible(function ($get) {
+                return $get('type_operation') === 'frais_sms' && $get('compte_numero_sms');
+            }),
+
+        Grid::make(2)
+            ->schema([
+                TextInput::make('solde_total_display_sms')
+                    ->label('Solde Total')
+                    ->disabled()
+                    ->dehydrated(false)
+                    ->default('0.00 USD'),
+                
+                TextInput::make('solde_disponible_display_sms')
+                    ->label('Solde Disponible')
+                    ->disabled()
+                    ->dehydrated(false)
+                    ->default('0.00 USD'),
+            ])
+            ->visible(function ($get) {
+                return $get('type_operation') === 'frais_sms' && $get('compte_numero_sms');
+            }),
+
+        TextInput::make('montant_frais_sms')
+            ->label('Montant des Frais de SMS')
+            ->numeric()
+            ->required(function ($get) {
+                return $get('type_operation') === 'frais_sms';
+            })
+            ->minValue(0.01)
+            ->step(0.01)
+            ->default(0.10) // Montant par défaut (ex: 0.10$ par SMS)
+            ->live()
+            ->afterStateUpdated(function ($set, $state, $get) {
+                if ($state) {
+                    $compteId = $get('compte_id_sms');
+                    if ($compteId) {
+                        $soldeDisponible = Mouvement::getSoldeDisponible($compteId);
+                        if ($state > $soldeDisponible) {
+                            $set('validation_frais_sms', 'Solde disponible insuffisant');
+                        } else {
+                            $set('validation_frais_sms', '');
+                        }
+                    }
+                }
+            })
+            ->visible(function ($get) {
+                return $get('type_operation') === 'frais_sms';
+            }),
+
+        TextInput::make('validation_frais_sms')
+            ->label('Validation')
+            ->disabled()
+            ->dehydrated(false)
+            ->extraAttributes(['class' => 'text-danger-600 font-medium'])
+            ->visible(function ($get) {
+                return $get('type_operation') === 'frais_sms' && !empty($get('validation_frais_sms'));
+            }),
+
+        Hidden::make('compte_id_sms'),
+    ])
+    ->visible(function ($get) {
+        return $get('type_operation') === 'frais_sms';
+    }),
+
            // Section pour les détails de l'opération 
 // Section pour les détails de l'opération - CORRIGÉE
 Section::make('Détails de l\'Opération')
     ->schema([
+
+        TextInput::make('nom_client_sms')
+    ->label('Nom du Client')
+    ->required(function ($get) {
+        return $get('type_operation') === 'frais_sms';
+    })
+    ->placeholder('Saisir le nom du client')
+    ->visible(function ($get) {
+        return $get('type_operation') === 'frais_sms';
+    }),
 
         // CHAMP POUR LE NOM DU CLIENT (visible pour frais d'adhésion)
         TextInput::make('nom_client_adhesion')
@@ -1363,6 +1484,16 @@ Section::make('Détails de l\'Opération')
                         // Validations existantes pour autres opérations
                         if ($typeOperation === 'retrait_compte') {
                             $compteId = $get('compte_id');
+                            if ($compteId) {
+                                $soldeDisponible = Mouvement::getSoldeDisponible($compteId);
+                                if ($value > $soldeDisponible) {
+                                    $fail("Solde disponible insuffisant. Maximum: " . number_format($soldeDisponible, 2) . " USD");
+                                }
+                            }
+                        }
+
+                        if ($typeOperation === 'frais_sms') {
+                            $compteId = $get('compte_id_sms');
                             if ($compteId) {
                                 $soldeDisponible = Mouvement::getSoldeDisponible($compteId);
                                 if ($value > $soldeDisponible) {
@@ -1431,7 +1562,7 @@ Section::make('Détails de l\'Opération')
                 return in_array($get('type_operation'), ['retrait_compte', 'paiement_credit', 'retrait_epargne', 'frais_adhesion']);
             })
             ->placeholder('Saisir le nom de la personne qui retire')
-            ->default('TUMAINI LETU FINANCE') // Valeur par défaut
+            // ->default('TUMAINI LETU FINANCE') // Valeur par défaut
             ->visible(function ($get) {
                 $typeOperation = $get('type_operation');
                 // Cacher pour frais d'adhésion, montrer pour les autres
@@ -1467,6 +1598,12 @@ Section::make('Détails de l\'Opération')
 
         Hidden::make('devise')
             ->default('USD'),
+        
+         Hidden::make('nom_retirant_sms')
+        ->default('TUMAINI LETU FINANCE')
+        ->visible(function ($get) {
+            return $get('type_operation') === 'frais_sms';
+        }),
 
         // CHAMP CACHÉ pour l'opérateur (utilisateur connecté)
         Hidden::make('operateur_id')
@@ -2662,4 +2799,343 @@ private static function crediterCompteSpecialAdhesion($montant, $devise, $compte
         // Notification à la comptabilité
         // Vous pouvez implémenter cette fonction selon vos besoins
     }
+
+    private static function prelevementFraisSMS(array $data)
+{
+    $compte = Compte::find($data['compte_id_sms']);
+    
+    if (!$compte) {
+        throw new \Exception('Compte non trouvé');
+    }
+
+    // Validation du solde disponible
+    $soldeDisponible = Mouvement::getSoldeDisponible($compte->id);
+    if ($data['montant'] > $soldeDisponible) {
+        throw new \Exception('Solde disponible insuffisant pour les frais de SMS');
+    }
+
+    DB::transaction(function () use ($data, $compte) {
+        // Débiter le compte membre
+        $ancienSolde = $compte->solde;
+        $compte->solde -= $data['montant'];
+        $compte->save();
+
+        // Enregistrer le mouvement (sans affecter la caisse)
+        $mouvement = Mouvement::create([
+            'compte_id' => $compte->id,
+            'type' => 'retrait',
+            'type_mouvement' => 'frais_sms',
+            'montant' => $data['montant'],
+            'solde_avant' => $ancienSolde,
+            'solde_apres' => $compte->solde,
+            'description' => $data['description'] ?? "Frais de SMS Alerte - TUMAINI LETU FINANCE",
+            'nom_deposant' => 'TUMAINI LETU FINANCE', // Nom fixe
+            'devise' => $data['devise'],
+            'operateur_id' => Auth::id(),
+            'numero_compte' => $compte->numero_compte,
+            'client_nom' => $data['client_nom_complet_sms'] ?? self::getNomCompletClient($compte),
+            'date_mouvement' => now()
+        ]);
+
+        // Créditer le compte spécial
+        self::crediterCompteSpecialSMS($data['montant'], $data['devise'], $compte, $data);
+
+        // Générer l'écriture comptable
+        self::genererEcritureComptableFraisSMS($mouvement, $compte, $data);
+
+        Notification::make()
+            ->title('Frais de SMS prélevés')
+            ->body("Frais de SMS de {$data['montant']} {$data['devise']} prélevés du compte {$compte->numero_compte}")
+            ->success()
+            ->send();
+    });
+}
+
+private static function genererEcritureComptableFraisSMS($mouvement, $compte, $data)
+{
+    $journal = JournalComptable::where('type_journal', 'caisse')->first();
+    
+    if (!$journal) {
+        throw new \Exception('Journal de caisse non trouvé');
+    }
+
+    $reference = 'FRA-SMS-' . now()->format('Ymd-His');
+
+    // Débit: Compte frais de SMS (compte de produits)
+    EcritureComptable::create([
+        'journal_comptable_id' => $journal->id,
+        'reference_operation' => $reference,
+        'type_operation' => 'frais_sms',
+        'compte_number' => '701200', // Compte produits - frais de SMS
+        'libelle' => "Frais de SMS Alerte - {$compte->numero_compte} - {$data['description']}",
+        'montant_debit' => $data['montant'],
+        'montant_credit' => 0,
+        'date_ecriture' => now(),
+        'date_valeur' => now(),
+        'devise' => $data['devise'],
+        'statut' => 'comptabilise',
+        'created_by' => Auth::id(),
+    ]);
+
+    // Crédit: Compte du membre
+    EcritureComptable::create([
+        'journal_comptable_id' => $journal->id,
+        'reference_operation' => $reference,
+        'type_operation' => 'frais_sms',
+        'compte_number' => '411000', // Compte membres
+        'libelle' => "Frais de SMS Alerte - {$compte->numero_compte} - {$data['description']}",
+        'montant_debit' => 0,
+        'montant_credit' => $data['montant'],
+        'date_ecriture' => now(),
+        'date_valeur' => now(),
+        'devise' => $data['devise'],
+        'statut' => 'comptabilise',
+        'created_by' => Auth::id(),
+    ]);
+}
+
+private static function crediterCompteSpecialSMS($montant, $devise, $compte, $data)
+{
+    // Trouver ou créer le compte spécial pour les frais de SMS
+    $compteSpecial = \App\Models\CompteSpecial::where('nom', 'like', '%sms%')
+        ->where('devise', $devise)
+        ->first();
+
+    if (!$compteSpecial) {
+        $compteSpecial = \App\Models\CompteSpecial::create([
+            'nom' => 'Compte Frais de SMS',
+            'solde' => 0,
+            'devise' => $devise
+        ]);
+    }
+
+    // Créditer le compte spécial
+    $ancienSoldeSpecial = $compteSpecial->solde;
+    $compteSpecial->solde += $montant;
+    $compteSpecial->save();
+
+    // Enregistrer dans l'historique du compte spécial
+    \App\Models\HistoriqueCompteSpecial::create([
+        'client_nom' => $data['nom_client_sms'] ?? $data['client_nom_complet_sms'] ?? self::getNomCompletClient($compte),
+        'montant' => $montant,
+        'devise' => $devise,
+        'description' => $data['description'] ?? "Frais de SMS Alerte - Compte: {$compte->numero_compte} - TUMAINI LETU FINANCE",
+        'created_at' => now(),
+        'updated_at' => now()
+    ]);
+
+    return $compteSpecial;
+}
+
+
+/**
+ * Méthode pour obtenir le libellé d'un type d'opération
+ */
+private static function getTypeOperationLabel(string $type): string
+{
+    $types = [
+        'depot_compte' => 'Dépôt vers Compte Membre',
+        'retrait_compte' => 'Retrait depuis Compte Courant',
+        'retrait_epargne' => 'Retrait depuis Compte Épargne',
+        'paiement_credit' => 'Paiement de Crédit',
+        'versement_agent' => 'Versement Agent Collecteur',
+        'transfert_caisse' => 'Transfert entre Caisses',
+        'achat_carnet_livre' => 'Achat Carnet et Livres',
+        'frais_adhesion' => 'Frais d\'Adhésion',
+        'frais_sms' => 'Frais SMS',
+    ];
+    
+    return $types[$type] ?? $type;
+}
+
+
+
+  private function executerAvecDoubleVerification(array $data): void
+    {
+        try {
+            // Récupérer les informations du client
+            $compteId = $data['compte_id_adhesion'] ?? $data['compte_id_sms'] ?? $data['compte_id'] ?? null;
+            $clientNom = 'N/A';
+            
+            if ($compteId) {
+                $compte = Compte::find($compteId);
+                if ($compte) {
+                    $clientNom = $this->getNomCompletClient($compte); // $this au lieu de self::
+                }
+            }
+
+            // Préparer le récapitulatif détaillé
+            $type = $this->getTypeOperationLabel($data['type_operation'] ?? ''); // $this au lieu de self::
+            $montant = number_format($data['montant'] ?? 0, 2);
+            $devise = $data['devise'] ?? 'USD';
+            
+            // Récupérer le numéro de compte
+            $compteNumero = $data['compte_numero'] ?? 
+                           $data['compte_numero_adhesion'] ?? 
+                           $data['compte_numero_sms'] ?? 
+                           $data['compte_epargne_numero'] ?? 
+                           'N/A';
+            
+            $description = $data['description'] ?? 'Aucune description';
+            $operateur = auth::user()->name;
+            $date = now()->format('d/m/Y H:i:s');
+
+            // Créer un message texte formaté pour la notification
+            $detailsMessage = "📋 RÉCAPITULATIF DÉTAILLÉ\n\n" .
+                             "────────────────────────────\n" .
+                             "Type d'Opération: {$type}\n" .
+                             "Montant: {$montant} {$devise}\n" .
+                             "Client: {$clientNom}\n" .
+                             "Compte: {$compteNumero}\n" .
+                             "Description: {$description}\n" .
+                             "Opérateur: {$operateur}\n" .
+                             "Date/Heure: {$date}\n\n" .
+                             "⚠️ DERNIÈRE CONFIRMATION REQUISE\n" .
+                             "────────────────────────────\n" .
+                             "❌ Cette action est IRRÉVERSIBLE !\n" .
+                             "Êtes-vous ABSOLUMENT certain de vouloir exécuter cette opération ?";
+
+            // Stocker les données temporairement dans la session pour les actions
+            session()->put('pending_operation_data', $data);
+            session()->put('pending_operation_time', now());
+
+            // Afficher une notification de confirmation finale avec les détails
+            $notification = Notification::make()
+                ->title('⚠️ DERNIÈRE CONFIRMATION REQUISE')
+                ->body($detailsMessage)
+                ->warning()
+                ->persistent()
+                ->actions([
+                    Action::make('confirmer_execution')
+                        ->label('✅ OUI, exécuter l\'opération')
+                        ->color('danger')
+                        ->markAsRead()
+                        ->close()
+                        ->dispatch('confirmOperation', ['action' => 'confirm']),
+                        
+                    Action::make('annuler_execution')
+                        ->label('❌ Non, annuler')
+                        ->color('gray')
+                        ->markAsRead()
+                        ->close()
+                        ->dispatch('cancelOperation', ['action' => 'cancel']),
+                ]);
+            
+            $notification->send();
+                
+        } catch (\Exception $e) {
+            Notification::make()
+                ->title('❌ Erreur')
+                ->body($e->getMessage())
+                ->danger()
+                ->send();
+        }
+    }
+
+/**
+ * Méthode pour gérer la confirmation d'opération via événement
+ */
+public function handleOperationConfirmation($data = null): void
+    {
+        try {
+            // Récupérer les données de la session
+            $storedData = session()->get('pending_operation_data');
+            $operationTime = session()->get('pending_operation_time');
+            
+            // Vérifier si les données sont toujours valides (moins de 5 minutes)
+            if (!$storedData || !$operationTime || now()->diffInMinutes($operationTime) > 5) {
+                Notification::make()
+                    ->title('Session expirée')
+                    ->body('La session de confirmation a expiré. Veuillez recommencer.')
+                    ->warning()
+                    ->send();
+                return;
+            }
+            
+            // Nettoyer la session
+            session()->forget(['pending_operation_data', 'pending_operation_time']);
+            
+            // Exécuter l'opération
+            $this->executerOperationFinale($storedData); // $this au lieu de self::
+            
+        } catch (\Exception $e) {
+            Notification::make()
+                ->title('❌ Erreur lors de la confirmation')
+                ->body($e->getMessage())
+                ->danger()
+                ->send();
+        }
+    }
+
+
+/**
+ * Méthode pour gérer l'annulation d'opération via événement
+ */
+ public function handleOperationCancellation($data = null): void
+    {
+        session()->forget(['pending_operation_data', 'pending_operation_time']);
+        
+        Notification::make()
+            ->title('Opération annulée')
+            ->body('L\'opération a été annulée par l\'utilisateur')
+            ->success()
+            ->send();
+    }
+
+
+/**
+ * Méthode pour exécuter l'opération finale après double vérification
+ */
+private function executerOperationFinale(array $data): void
+    {
+        try {
+            DB::transaction(function () use ($data) {
+                switch ($data['type_operation']) {
+                    case 'depot_compte':
+                        $this->depotVersCompte($data); // $this au lieu de self::
+                        break;
+                    case 'retrait_compte':
+                        $this->retraitDepuisCompte($data); // $this au lieu de self::
+                        break;
+                    case 'paiement_credit':
+                        $this->paiementCredit($data); // $this au lieu de self::
+                        break;
+                    case 'versement_agent':
+                        $this->versementAgentCollecteur($data); // $this au lieu de self::
+                        break;
+                    case 'transfert_caisse':
+                        $this->transfertEntreCaisses($data); // $this au lieu de self::
+                        break;
+                    case 'achat_carnet_livre':
+                        $this->achatCarnetLivre($data); // $this au lieu de self::
+                        break;
+                    case 'retrait_epargne':
+                        $this->retraitDepuisCompteEpargne($data); // $this au lieu de self::
+                        break;
+                    case 'frais_adhesion':
+                        $this->prelevementFraisAdhesion($data); // $this au lieu de self::
+                        break;
+                    case 'frais_sms':
+                        $this->prelevementFraisSMS($data); // $this au lieu de self::
+                        break;
+                }
+
+                $this->notifierComptabilite($data); // $this au lieu de self::
+            });
+
+            Notification::make()
+                ->title('✅ Opération réussie')
+                ->body('L\'opération a été exécutée avec succès')
+                ->success()
+                ->send();
+                
+        } catch (\Exception $e) {
+            Notification::make()
+                ->title('❌ Erreur lors de l\'exécution')
+                ->body($e->getMessage())
+                ->danger()
+                ->send();
+        }
+    }
+
 }

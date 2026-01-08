@@ -292,16 +292,16 @@ class CreditGroupe extends Model
     public static function calculerFraisGroupe($montantTotalGroupe)
     {
         $frais = [
-            50 => ['dossier' => 2, 'alerte' => 4.5, 'carnet' => 2.5, 'caution' => 10],
-            100 => ['dossier' => 4, 'alerte' => 4.5, 'carnet' => 2.5, 'caution' => 20],
-            150 => ['dossier' => 6, 'alerte' => 4.5, 'carnet' => 2.5, 'caution' => 30],
-            200 => ['dossier' => 8, 'alerte' => 4.5, 'carnet' => 2.5, 'caution' => 40],
-            250 => ['dossier' => 10, 'alerte' => 4.5, 'carnet' => 2.5, 'caution' => 50],
-            300 => ['dossier' => 12, 'alerte' => 4.5, 'carnet' => 2.5, 'caution' => 60],
-            350 => ['dossier' => 14, 'alerte' => 4.5, 'carnet' => 2.5, 'caution' => 70],
-            400 => ['dossier' => 16, 'alerte' => 4.5, 'carnet' => 2.5, 'caution' => 80],
-            450 => ['dossier' => 18, 'alerte' => 4.5, 'carnet' => 2.5, 'caution' => 90],
-            500 => ['dossier' => 20, 'alerte' => 4.5, 'carnet' => 2.5, 'caution' => 100],
+            50 => ['dossier' => 2, 'alerte' => 6, 'carnet' => 3, 'caution' => 10],
+            100 => ['dossier' => 4, 'alerte' => 6, 'carnet' => 3, 'caution' => 20],
+            150 => ['dossier' => 6, 'alerte' => 6, 'carnet' => 3, 'caution' => 30],
+            200 => ['dossier' => 8, 'alerte' => 6, 'carnet' => 3, 'caution' => 40],
+            250 => ['dossier' => 10, 'alerte' => 6, 'carnet' => 3, 'caution' => 50],
+            300 => ['dossier' => 12, 'alerte' => 6, 'carnet' => 3, 'caution' => 60],
+            350 => ['dossier' => 14, 'alerte' => 6, 'carnet' => 3, 'caution' => 70],
+            400 => ['dossier' => 16, 'alerte' => 6, 'carnet' => 3, 'caution' => 80],
+            450 => ['dossier' => 18, 'alerte' => 6, 'carnet' => 3, 'caution' => 90],
+            500 => ['dossier' => 20, 'alerte' => 6, 'carnet' => 3, 'caution' => 100],
         ];
 
         $montantArrondi = floor($montantTotalGroupe / 50) * 50;

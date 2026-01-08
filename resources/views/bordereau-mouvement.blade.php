@@ -145,14 +145,15 @@
             display: flex;
             justify-content: space-between;
             margin-top: 15px;
-            padding-top: 10px;
-            border-top: 1px solid #eee;
+            padding-top: 20px;
+            border-top: 5px solid #eee;
         }
         
         .signature {
             width: 48%;
             text-align: center;
-            padding-top: 5px;
+            margin-top: 15px;
+            padding-top: 20px;
             border-top: 1px solid #000;
             font-size: 9px;
         }
@@ -294,19 +295,19 @@
                     <span>{{ $mouvement->client_nom }}</span>
                 </div>
                 
-                <div class="content-line">
+                {{-- <div class="content-line">
                     <strong>Solde après opération :</strong>
                     <span  class ="{{ $mouvement->devise === 'USD' ? 'devise-usd' : 'devise-cdf' }}"style="color: #000">
                         {{ number_format($mouvement->solde_apres, 2, ',', ' ') }} {{ $mouvement->devise }}
                     </span>
-                </div>
+                </div> --}}
 
-                <div class="content-line">
+                {{-- <div class="content-line">
                     <strong>Devise :</strong>
                     <span class="{{ $mouvement->devise === 'USD' ? 'devise-usd' : 'devise-cdf' }}" style="color: #000">
                         {{ $mouvement->devise }}
                     </span>
-                </div>
+                </div> --}}
 
                 <div class="separator"></div>
 
@@ -446,7 +447,7 @@
                     <span>{{ $mouvement->client_nom }}</span>
                 </div>
                 
-                <div class="content-line">
+                {{-- <div class="content-line">
                     <strong>Solde après opération :</strong>
                     <span class="{{ $mouvement->devise === 'USD' ? 'devise-usd' : 'devise-cdf' }}"style="color: #000">
                         {{ number_format($mouvement->solde_apres, 2, ',', ' ') }} {{ $mouvement->devise }}
@@ -458,7 +459,7 @@
                     <span class="{{ $mouvement->devise === 'USD' ? 'devise-usd' : 'devise-cdf' }}"style="color: #000">
                         {{ $mouvement->devise }}
                     </span>
-                </div>
+                </div> --}}
 
                 <div class="separator"></div>
 

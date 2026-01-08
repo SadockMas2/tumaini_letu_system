@@ -39,6 +39,11 @@ class JournalComptable extends Model
         return $this->belongsTo(User::class, 'responsable_id');
     }
 
+     public function ecritures_comptables(): HasMany
+    {
+        return $this->hasMany(EcritureComptable::class, 'journal_comptable_id');
+    }
+
     public function ecritures(): HasMany
     {
         return $this->hasMany(EcritureComptable::class);

@@ -45,6 +45,16 @@ class EcritureComptable extends Model
         return $this->belongsTo(JournalComptable::class, 'journal_comptable_id');
     }
 
+      public function journal_comptable(): BelongsTo
+    {
+        return $this->belongsTo(JournalComptable::class, 'journal_comptable_id');
+    }
+
+     public function createdBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
     public function sourceable()
 {
     return $this->morphTo();
@@ -73,13 +83,13 @@ class EcritureComptable extends Model
         parent::boot();
 
         static::creating(function ($model) {
-            if (auth()->check()) {
+            if (auth::check()) {
                 $model->created_by = Auth::id();
             }
         });
 
         static::updating(function ($model) {
-            if (auth()->check()) {
+            if (auth::check()) {
                 $model->updated_by = Auth::id();
             }
         });
